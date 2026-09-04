@@ -1,0 +1,27 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: auth-service
+  datasource:
+    url: jdbc:oracle:thin:@//${ORACLE_HOST:localhost}:${ORACLE_PORT:1521}/${ORACLE_SERVICE:FREEPDB1}
+    username: ${FEM_AUTH_DB_USER:fem_auth}
+    password: ${FEM_AUTH_DB_PASSWORD:change-me}
+    driver-class-name: oracle.jdbc.OracleDriver
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+
+jwt:
+  secret: ${JWT_SECRET:change-me-in-.env}
+  access-token-ttl-minutes: 15
+  refresh-token-ttl-days: 7
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

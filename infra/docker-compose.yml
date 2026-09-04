@@ -1,0 +1,173 @@
+name: family-expense-manager
+
+networks:
+  fem-network:
+    driver: bridge
+
+volumes:
+  oracle-data:
+
+services:
+  oracle-db:
+    image: gvenzl/oracle-free:23-slim
+    container_name: fem-oracle-db
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD}
+      APP_USER: ${FEM_AUTH_DB_USER}
+      APP_USER_PASSWORD: ${FEM_AUTH_DB_PASSWORD}
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./oracle/init:/container-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    networks:
+      - fem-network
+
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: fem-kafka
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - fem-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: fem-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fem-network
+
+  eureka-server:
+    build:
+      context: ../backend
+      dockerfile: eureka-server/Dockerfile
+    container_name: fem-eureka-server
+    ports:
+      - "8761:8761"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - fem-network
+
+  api-gateway:
+    build:
+      context: ../backend
+      dockerfile: api-gateway/Dockerfile
+    container_name: fem-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka/
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - fem-network
+
+  auth-service:
+    build:
+      context: ../backend
+      dockerfile: auth-service/Dockerfile
+    container_name: fem-auth-service
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka/
+      ORACLE_HOST: oracle-db
+      ORACLE_PORT: 1521
+      ORACLE_SERVICE: ${ORACLE_SERVICE}
+      FEM_AUTH_DB_USER: ${FEM_AUTH_DB_USER}
+      FEM_AUTH_DB_PASSWORD: ${FEM_AUTH_DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      oracle-db:
+        condition: service_healthy
+    networks:
+      - fem-network
+
+  expense-service:
+    build:
+      context: ../backend
+      dockerfile: expense-service/Dockerfile
+    container_name: fem-expense-service
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka/
+      ORACLE_HOST: oracle-db
+      ORACLE_PORT: 1521
+      ORACLE_SERVICE: ${ORACLE_SERVICE}
+      FEM_EXPENSE_DB_USER: ${FEM_EXPENSE_DB_USER}
+      FEM_EXPENSE_DB_PASSWORD: ${FEM_EXPENSE_DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      oracle-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - fem-network
+
+  notification-service:
+    build:
+      context: ../backend
+      dockerfile: notification-service/Dockerfile
+    container_name: fem-notification-service
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka/
+      ORACLE_HOST: oracle-db
+      ORACLE_PORT: 1521
+      ORACLE_SERVICE: ${ORACLE_SERVICE}
+      FEM_NOTIFY_DB_USER: ${FEM_NOTIFY_DB_USER}
+      FEM_NOTIFY_DB_PASSWORD: ${FEM_NOTIFY_DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      oracle-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - fem-network
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: fem-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - fem-network
