@@ -5,10 +5,10 @@ spring:
   application:
     name: notification-service
   datasource:
-    url: jdbc:oracle:thin:@//${ORACLE_HOST:localhost}:${ORACLE_PORT:1521}/${ORACLE_SERVICE:FREEPDB1}
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/fem_notify?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: ${FEM_NOTIFY_DB_USER:fem_notify}
     password: ${FEM_NOTIFY_DB_PASSWORD:change-me}
-    driver-class-name: oracle.jdbc.OracleDriver
+    driver-class-name: com.mysql.cj.jdbc.Driver
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:

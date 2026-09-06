@@ -1,0 +1,4 @@
+D:\workspace_new\family-expense-manager\backend\api-gateway\src\main\java\com\family\expensemanager\gateway\ApiGatewayApplication.java
+D:\workspace_new\family-expense-manager\backend\api-gateway\src\main\java\com\family\expensemanager\gateway\config\CorsConfig.java
+D:\workspace_new\family-expense-manager\backend\api-gateway\src\main\java\com\family\expensemanager\gateway\config\GatewayRoutesConfig.java
+D:\workspace_new\family-expense-manager\backend\api-gateway\src\main\java\com\family\expensemanager\gateway\filter\JwtGatewayFilter.java

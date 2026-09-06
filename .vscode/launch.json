@@ -1,0 +1,45 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Attach: eureka-server",
+            "request": "attach",
+            "hostName": "localhost",
+            "port": 5005,
+            "projectName": "eureka-server"
+        },
+        {
+            "type": "java",
+            "name": "Attach: api-gateway",
+            "request": "attach",
+            "hostName": "localhost",
+            "port": 5006,
+            "projectName": "api-gateway"
+        },
+        {
+            "type": "java",
+            "name": "Attach: auth-service",
+            "request": "attach",
+            "hostName": "localhost",
+            "port": 5007,
+            "projectName": "auth-service"
+        },
+        {
+            "type": "java",
+            "name": "Attach: expense-service",
+            "request": "attach",
+            "hostName": "localhost",
+            "port": 5008,
+            "projectName": "expense-service"
+        },
+        {
+            "type": "java",
+            "name": "Attach: notification-service",
+            "request": "attach",
+            "hostName": "localhost",
+            "port": 5009,
+            "projectName": "notification-service"
+        }
+    ]
+}

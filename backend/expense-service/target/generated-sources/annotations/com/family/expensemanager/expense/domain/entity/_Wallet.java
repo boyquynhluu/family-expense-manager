@@ -1,0 +1,242 @@
+package com.family.expensemanager.expense.domain.entity;
+
+/** */
+@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-06T14:09:12.518+0700")
+@org.seasar.doma.EntityTypeImplementation
+public final class _Wallet extends org.seasar.doma.jdbc.entity.AbstractEntityType<com.family.expensemanager.expense.domain.entity.Wallet> {
+
+    static {
+        org.seasar.doma.internal.Artifact.validateVersion("2.61.0");
+    }
+
+    private static final _Wallet __singleton = new _Wallet();
+
+    private final org.seasar.doma.jdbc.entity.NamingType __namingType = null;
+
+    private final org.seasar.doma.jdbc.id.BuiltinIdentityIdGenerator __idGenerator = new org.seasar.doma.jdbc.id.BuiltinIdentityIdGenerator();
+
+    private final java.util.function.Supplier<org.seasar.doma.jdbc.entity.NullEntityListener<com.family.expensemanager.expense.domain.entity.Wallet>> __listenerSupplier;
+
+    private final boolean __immutable;
+
+    private final String __catalogName;
+
+    private final String __schemaName;
+
+    private final String __tableName;
+
+    private final boolean __isQuoteRequired;
+
+    private final String __name;
+
+    private final java.util.List<org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?>> __idPropertyTypes;
+
+    private final java.util.List<org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?>> __entityPropertyTypes;
+
+    private final java.util.Map<String, org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?>> __entityPropertyTypeMap;
+
+    @SuppressWarnings("unused")
+    private final java.util.Map<String, org.seasar.doma.jdbc.entity.EmbeddedPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?>> __embeddedPropertyTypeMap;
+
+    private _Wallet() {
+        __listenerSupplier = org.seasar.doma.internal.jdbc.entity.NullEntityListenerSuppliers.of();
+        __immutable = false;
+        __name = "Wallet";
+        __catalogName = "";
+        __schemaName = "";
+        __tableName = "WALLETS";
+        __isQuoteRequired = false;
+        java.util.List<org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?>> __idList = new java.util.ArrayList<>();
+        java.util.List<org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?>> __list = new java.util.ArrayList<>(5);
+        java.util.Map<String, org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?>> __map = new java.util.LinkedHashMap<>(5);
+        java.util.Map<String, org.seasar.doma.jdbc.entity.EmbeddedPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?>> __embeddedMap = new java.util.LinkedHashMap<>(5);
+        initializeMaps(__map, __embeddedMap);
+        initializeIdList(__map, __idList);
+        initializeList(__map, __list);
+        __idPropertyTypes = java.util.Collections.unmodifiableList(__idList);
+        __entityPropertyTypes = java.util.Collections.unmodifiableList(__list);
+        __entityPropertyTypeMap = java.util.Collections.unmodifiableMap(__map);
+        __embeddedPropertyTypeMap = java.util.Collections.unmodifiableMap(__embeddedMap);
+    }
+
+    private void initializeMaps(java.util.Map<String, org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?>> __map, java.util.Map<String, org.seasar.doma.jdbc.entity.EmbeddedPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?>> __embeddedMap) {
+        __map.put("id", new org.seasar.doma.jdbc.entity.GeneratedIdPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, java.lang.Long, java.lang.Long>(com.family.expensemanager.expense.domain.entity.Wallet.class, org.seasar.doma.internal.jdbc.scalar.BasicScalarSuppliers.ofLong(), "id", "", __namingType, false, __idGenerator));
+        __map.put("familyId", new org.seasar.doma.jdbc.entity.DefaultPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, java.lang.Long, java.lang.Long>(com.family.expensemanager.expense.domain.entity.Wallet.class, org.seasar.doma.internal.jdbc.scalar.BasicScalarSuppliers.ofLong(), "familyId", "family_id", __namingType, true, true, false));
+        __map.put("name", new org.seasar.doma.jdbc.entity.DefaultPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, java.lang.String, java.lang.String>(com.family.expensemanager.expense.domain.entity.Wallet.class, org.seasar.doma.internal.jdbc.scalar.BasicScalarSuppliers.ofString(), "name", "", __namingType, true, true, false));
+        __map.put("currency", new org.seasar.doma.jdbc.entity.DefaultPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, java.lang.String, java.lang.String>(com.family.expensemanager.expense.domain.entity.Wallet.class, org.seasar.doma.internal.jdbc.scalar.BasicScalarSuppliers.ofString(), "currency", "", __namingType, true, true, false));
+        __map.put("initialBalance", new org.seasar.doma.jdbc.entity.DefaultPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, java.math.BigDecimal, java.math.BigDecimal>(com.family.expensemanager.expense.domain.entity.Wallet.class, org.seasar.doma.internal.jdbc.scalar.BasicScalarSuppliers.ofBigDecimal(), "initialBalance", "initial_balance", __namingType, true, true, false));
+    }
+
+    private void initializeIdList(java.util.Map<String, org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?>> __map, java.util.List<org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?>> __idList) {
+        __idList.add(__map.get("id"));
+    }
+
+    private void initializeList(java.util.Map<String, org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?>> __map, java.util.List<org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?>> __list) {
+        __list.addAll(__map.values());
+    }
+
+    @Override
+    public org.seasar.doma.jdbc.entity.NamingType getNamingType() {
+        return __namingType;
+    }
+
+    @Override
+    public boolean isImmutable() {
+        return __immutable;
+    }
+
+    @Override
+    public String getName() {
+        return __name;
+    }
+
+    @Override
+    public String getCatalogName() {
+        return __catalogName;
+    }
+
+    @Override
+    public String getSchemaName() {
+        return __schemaName;
+    }
+
+    @Override
+    @Deprecated
+    public String getTableName() {
+        return getTableName(org.seasar.doma.internal.jdbc.entity.TableNames.namingFunction);
+    }
+
+    @Override
+    public String getTableName(java.util.function.BiFunction<org.seasar.doma.jdbc.entity.NamingType, String, String> namingFunction) {
+        if (__tableName.isEmpty()) {
+            return namingFunction.apply(__namingType, __name);
+        }
+        return __tableName;
+    }
+
+    @Override
+    public boolean isQuoteRequired() {
+        return __isQuoteRequired;
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    @Override
+    public void preInsert(com.family.expensemanager.expense.domain.entity.Wallet entity, org.seasar.doma.jdbc.entity.PreInsertContext<com.family.expensemanager.expense.domain.entity.Wallet> context) {
+        Class __listenerClass = org.seasar.doma.jdbc.entity.NullEntityListener.class;
+        org.seasar.doma.jdbc.entity.NullEntityListener __listener = context.getConfig().getEntityListenerProvider().get(__listenerClass, __listenerSupplier);
+        __listener.preInsert(entity, context);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    @Override
+    public void preUpdate(com.family.expensemanager.expense.domain.entity.Wallet entity, org.seasar.doma.jdbc.entity.PreUpdateContext<com.family.expensemanager.expense.domain.entity.Wallet> context) {
+        Class __listenerClass = org.seasar.doma.jdbc.entity.NullEntityListener.class;
+        org.seasar.doma.jdbc.entity.NullEntityListener __listener = context.getConfig().getEntityListenerProvider().get(__listenerClass, __listenerSupplier);
+        __listener.preUpdate(entity, context);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    @Override
+    public void preDelete(com.family.expensemanager.expense.domain.entity.Wallet entity, org.seasar.doma.jdbc.entity.PreDeleteContext<com.family.expensemanager.expense.domain.entity.Wallet> context) {
+        Class __listenerClass = org.seasar.doma.jdbc.entity.NullEntityListener.class;
+        org.seasar.doma.jdbc.entity.NullEntityListener __listener = context.getConfig().getEntityListenerProvider().get(__listenerClass, __listenerSupplier);
+        __listener.preDelete(entity, context);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    @Override
+    public void postInsert(com.family.expensemanager.expense.domain.entity.Wallet entity, org.seasar.doma.jdbc.entity.PostInsertContext<com.family.expensemanager.expense.domain.entity.Wallet> context) {
+        Class __listenerClass = org.seasar.doma.jdbc.entity.NullEntityListener.class;
+        org.seasar.doma.jdbc.entity.NullEntityListener __listener = context.getConfig().getEntityListenerProvider().get(__listenerClass, __listenerSupplier);
+        __listener.postInsert(entity, context);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    @Override
+    public void postUpdate(com.family.expensemanager.expense.domain.entity.Wallet entity, org.seasar.doma.jdbc.entity.PostUpdateContext<com.family.expensemanager.expense.domain.entity.Wallet> context) {
+        Class __listenerClass = org.seasar.doma.jdbc.entity.NullEntityListener.class;
+        org.seasar.doma.jdbc.entity.NullEntityListener __listener = context.getConfig().getEntityListenerProvider().get(__listenerClass, __listenerSupplier);
+        __listener.postUpdate(entity, context);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    @Override
+    public void postDelete(com.family.expensemanager.expense.domain.entity.Wallet entity, org.seasar.doma.jdbc.entity.PostDeleteContext<com.family.expensemanager.expense.domain.entity.Wallet> context) {
+        Class __listenerClass = org.seasar.doma.jdbc.entity.NullEntityListener.class;
+        org.seasar.doma.jdbc.entity.NullEntityListener __listener = context.getConfig().getEntityListenerProvider().get(__listenerClass, __listenerSupplier);
+        __listener.postDelete(entity, context);
+    }
+
+    @Override
+    public java.util.List<org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?>> getEntityPropertyTypes() {
+        return __entityPropertyTypes;
+    }
+
+    @Override
+    public org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?> getEntityPropertyType(String __name) {
+        return __entityPropertyTypeMap.get(__name);
+    }
+
+    @Override
+    public java.util.List<org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?>> getIdPropertyTypes() {
+        return __idPropertyTypes;
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public org.seasar.doma.jdbc.entity.GeneratedIdPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?, ?> getGeneratedIdPropertyType() {
+        return (org.seasar.doma.jdbc.entity.GeneratedIdPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?, ?>)__entityPropertyTypeMap.get("id");
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public org.seasar.doma.jdbc.entity.VersionPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?, ?> getVersionPropertyType() {
+        return (org.seasar.doma.jdbc.entity.VersionPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?, ?>)__entityPropertyTypeMap.get("null");
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public org.seasar.doma.jdbc.entity.TenantIdPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?, ?> getTenantIdPropertyType() {
+        return (org.seasar.doma.jdbc.entity.TenantIdPropertyType<com.family.expensemanager.expense.domain.entity.Wallet, ?, ?>)__entityPropertyTypeMap.get("null");
+    }
+
+    @Override
+    public com.family.expensemanager.expense.domain.entity.Wallet newEntity(java.util.Map<String, org.seasar.doma.jdbc.entity.Property<com.family.expensemanager.expense.domain.entity.Wallet, ?>> __args) {
+        com.family.expensemanager.expense.domain.entity.Wallet entity = new com.family.expensemanager.expense.domain.entity.Wallet();
+        if (__args.get("id") != null) __args.get("id").save(entity);
+        if (__args.get("familyId") != null) __args.get("familyId").save(entity);
+        if (__args.get("name") != null) __args.get("name").save(entity);
+        if (__args.get("currency") != null) __args.get("currency").save(entity);
+        if (__args.get("initialBalance") != null) __args.get("initialBalance").save(entity);
+        return entity;
+    }
+
+    @Override
+    public Class<com.family.expensemanager.expense.domain.entity.Wallet> getEntityClass() {
+        return com.family.expensemanager.expense.domain.entity.Wallet.class;
+    }
+
+    @Override
+    public com.family.expensemanager.expense.domain.entity.Wallet getOriginalStates(com.family.expensemanager.expense.domain.entity.Wallet __entity) {
+        return null;
+    }
+
+    @Override
+    public void saveCurrentStates(com.family.expensemanager.expense.domain.entity.Wallet __entity) {
+    }
+
+    /**
+     * @return the singleton
+     */
+    public static _Wallet getSingletonInternal() {
+        return __singleton;
+    }
+
+    /**
+     * @return the new instance
+     */
+    public static _Wallet newInstance() {
+        return new _Wallet();
+    }
+
+}
