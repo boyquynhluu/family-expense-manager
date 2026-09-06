@@ -17,13 +17,43 @@
 
     <dependencies>
         <dependency>
-            <groupId>com.family.expensemanager</groupId>
-            <artifactId>common</artifactId>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
         </dependency>
 
         <dependency>
+            <groupId>com.family.expensemanager</groupId>
+            <artifactId>common</artifactId>
+            <!-- api-gateway only uses JwtUtil + OpenApiConfig from common, both plain
+                 (no Spring Security types). JwtAuthenticationFilter/CurrentUser — the
+                 2 classes in common that DO use Spring Security — are never referenced
+                 here (the gateway's own JwtGatewayFilter is a plain servlet Filter).
+                 Exclude the starter so Boot doesn't auto-configure default HTTP Basic
+                 security (which would 401 every request, including public auth routes)
+                 for a service with no SecurityConfig of its own. -->
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-security</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-gateway</artifactId>
+            <artifactId>spring-cloud-starter-gateway-mvc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.cloud</groupId>
@@ -51,7 +81,7 @@
 
         <dependency>
             <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
         </dependency>
     </dependencies>
 

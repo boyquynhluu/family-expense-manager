@@ -5,10 +5,10 @@ spring:
   application:
     name: expense-service
   datasource:
-    url: jdbc:oracle:thin:@//${ORACLE_HOST:localhost}:${ORACLE_PORT:1521}/${ORACLE_SERVICE:FREEPDB1}
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/fem_expense?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: ${FEM_EXPENSE_DB_USER:fem_expense}
     password: ${FEM_EXPENSE_DB_PASSWORD:change-me}
-    driver-class-name: oracle.jdbc.OracleDriver
+    driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
       host: ${REDIS_HOST:localhost}
