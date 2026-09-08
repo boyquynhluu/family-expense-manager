@@ -1,5 +1,22 @@
 package com.family.expensemanager.auth.service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.Base64;
+import java.util.HexFormat;
+import java.util.Map;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.family.expensemanager.auth.dao.FamilyDao;
 import com.family.expensemanager.auth.dao.RefreshTokenDao;
 import com.family.expensemanager.auth.dao.UserDao;
@@ -8,27 +25,20 @@ import com.family.expensemanager.auth.domain.entity.RefreshToken;
 import com.family.expensemanager.auth.domain.entity.User;
 import com.family.expensemanager.auth.dto.AuthResponse;
 import com.family.expensemanager.auth.dto.LoginRequest;
+import com.family.expensemanager.auth.dto.MessageResponse;
 import com.family.expensemanager.auth.dto.RefreshRequest;
 import com.family.expensemanager.auth.dto.RegisterRequest;
+import com.family.expensemanager.common.event.UserVerificationEvent;
+import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.UnauthorizedException;
 import com.family.expensemanager.common.security.JwtUtil;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.util.Base64;
-import java.util.HexFormat;
-import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Transactional
+@Slf4j(topic = "AuthService")
 public class AuthService {
 
     private static final String ROLE_OWNER = "OWNER";
@@ -38,27 +48,32 @@ public class AuthService {
     private final RefreshTokenDao refreshTokenDao;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final ApplicationEventPublisher eventPublisher;
     private final long accessTokenTtlMillis;
     private final Duration refreshTokenTtl;
+    private final Duration verificationTokenTtl;
 
     public AuthService(FamilyDao familyDao,
                         UserDao userDao,
                         RefreshTokenDao refreshTokenDao,
                         PasswordEncoder passwordEncoder,
                         JwtUtil jwtUtil,
+                        ApplicationEventPublisher eventPublisher,
                         @Value("${jwt.access-token-ttl-minutes}") long accessTokenTtlMinutes,
-                        @Value("${jwt.refresh-token-ttl-days}") long refreshTokenTtlDays) {
+                        @Value("${jwt.refresh-token-ttl-days}") long refreshTokenTtlDays,
+                        @Value("${auth.verification-token-ttl-hours}") long verificationTokenTtlHours) {
         this.familyDao = familyDao;
         this.userDao = userDao;
         this.refreshTokenDao = refreshTokenDao;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
+        this.eventPublisher = eventPublisher;
         this.accessTokenTtlMillis = Duration.ofMinutes(accessTokenTtlMinutes).toMillis();
         this.refreshTokenTtl = Duration.ofDays(refreshTokenTtlDays);
+        this.verificationTokenTtl = Duration.ofHours(verificationTokenTtlHours);
     }
 
-    @Transactional
-    public AuthResponse register(RegisterRequest request) {
+    public MessageResponse register(RegisterRequest request) {
         userDao.selectByEmail(request.email()).ifPresent(u -> {
             throw new ConflictException("Email đã được đăng ký: " + request.email());
         });
@@ -68,31 +83,55 @@ public class AuthService {
         family.setCreatedAt(LocalDateTime.now());
         familyDao.insert(family);
 
+        String verificationToken = generateOpaqueToken();
+
         User user = new User();
         user.setFamilyId(family.getId());
         user.setEmail(request.email());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setDisplayName(request.displayName());
         user.setRole(ROLE_OWNER);
-        user.setActive(true);
+        user.setActive(false);
+        user.setVerificationToken(verificationToken);
+        user.setVerificationTokenExpiresAt(LocalDateTime.now().plus(verificationTokenTtl));
         userDao.insert(user);
 
-        return issueTokens(user);
+        eventPublisher.publishEvent(new UserVerificationEvent(
+                user.getId(), user.getEmail(), user.getDisplayName(), verificationToken, Instant.now()));
+
+        return new MessageResponse("Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.");
     }
 
-    @Transactional
+    public void verifyEmail(String token) {
+        User user = userDao.selectByVerificationToken(token)
+                .orElseThrow(() -> new BadRequestException("Token xác thực không hợp lệ"));
+
+        if (user.getVerificationTokenExpiresAt() == null
+                || user.getVerificationTokenExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new BadRequestException("Token xác thực đã hết hạn");
+        }
+
+        user.setActive(true);
+        user.setVerificationToken(null);
+        user.setVerificationTokenExpiresAt(null);
+        userDao.update(user);
+    }
+
     public AuthResponse login(LoginRequest request) {
         User user = userDao.selectByEmail(request.email())
                 .orElseThrow(() -> new UnauthorizedException("Email hoặc mật khẩu không đúng"));
 
-        if (!Boolean.TRUE.equals(user.getActive()) || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new UnauthorizedException("Email hoặc mật khẩu không đúng");
+        }
+
+        if (!Boolean.TRUE.equals(user.getActive())) {
+            throw new UnauthorizedException("Tài khoản chưa được xác thực email. Vui lòng kiểm tra hộp thư.");
         }
 
         return issueTokens(user);
     }
 
-    @Transactional
     public AuthResponse refresh(RefreshRequest request) {
         String tokenHash = sha256(request.refreshToken());
         RefreshToken stored = refreshTokenDao.selectByTokenHash(tokenHash)

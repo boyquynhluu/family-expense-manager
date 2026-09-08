@@ -1,7 +1,7 @@
 package com.family.expensemanager.auth.dao;
 
 /** */
-@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-05T22:41:40.739+0700")
+@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-06T23:15:00.433+0700")
 @org.seasar.doma.DaoImplementation
 public class UserDaoImpl implements com.family.expensemanager.auth.dao.UserDao, org.seasar.doma.jdbc.ConfigProvider {
 
@@ -11,9 +11,13 @@ public class UserDaoImpl implements com.family.expensemanager.auth.dao.UserDao, 
 
     private static final java.lang.reflect.Method __method0 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.auth.dao.UserDao.class, "insert", com.family.expensemanager.auth.domain.entity.User.class);
 
-    private static final java.lang.reflect.Method __method1 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.auth.dao.UserDao.class, "selectByEmail", java.lang.String.class);
+    private static final java.lang.reflect.Method __method1 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.auth.dao.UserDao.class, "update", com.family.expensemanager.auth.domain.entity.User.class);
 
-    private static final java.lang.reflect.Method __method2 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.auth.dao.UserDao.class, "selectById", java.lang.Long.class);
+    private static final java.lang.reflect.Method __method2 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.auth.dao.UserDao.class, "selectByEmail", java.lang.String.class);
+
+    private static final java.lang.reflect.Method __method3 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.auth.dao.UserDao.class, "selectById", java.lang.Long.class);
+
+    private static final java.lang.reflect.Method __method4 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.auth.dao.UserDao.class, "selectByVerificationToken", java.lang.String.class);
 
     private final org.seasar.doma.internal.jdbc.dao.DaoImplSupport __support;
 
@@ -61,11 +65,44 @@ public class UserDaoImpl implements com.family.expensemanager.auth.dao.UserDao, 
     }
 
     @Override
+    public int update(com.family.expensemanager.auth.domain.entity.User user) {
+        __support.entering("com.family.expensemanager.auth.dao.UserDaoImpl", "update", user);
+        try {
+            if (user == null) {
+                throw new org.seasar.doma.DomaNullPointerException("user");
+            }
+            org.seasar.doma.jdbc.query.AutoUpdateQuery<com.family.expensemanager.auth.domain.entity.User> __query = __support.getQueryImplementors().createAutoUpdateQuery(__method1, com.family.expensemanager.auth.domain.entity._User.getSingletonInternal());
+            __query.setMethod(__method1);
+            __query.setConfig(__support.getConfig());
+            __query.setEntity(user);
+            __query.setCallerClassName("com.family.expensemanager.auth.dao.UserDaoImpl");
+            __query.setCallerMethodName("update");
+            __query.setQueryTimeout(-1);
+            __query.setSqlLogType(org.seasar.doma.jdbc.SqlLogType.FORMATTED);
+            __query.setNullExcluded(false);
+            __query.setVersionIgnored(false);
+            __query.setIncludedPropertyNames();
+            __query.setExcludedPropertyNames();
+            __query.setUnchangedPropertyIncluded(false);
+            __query.setOptimisticLockExceptionSuppressed(false);
+            __query.prepare();
+            org.seasar.doma.jdbc.command.UpdateCommand __command = __support.getCommandImplementors().createUpdateCommand(__method1, __query);
+            int __result = __command.execute();
+            __query.complete();
+            __support.exiting("com.family.expensemanager.auth.dao.UserDaoImpl", "update", __result);
+            return __result;
+        } catch (java.lang.RuntimeException __e) {
+            __support.throwing("com.family.expensemanager.auth.dao.UserDaoImpl", "update", __e);
+            throw __e;
+        }
+    }
+
+    @Override
     public java.util.Optional<com.family.expensemanager.auth.domain.entity.User> selectByEmail(java.lang.String email) {
         __support.entering("com.family.expensemanager.auth.dao.UserDaoImpl", "selectByEmail", email);
         try {
-            org.seasar.doma.jdbc.query.SqlFileSelectQuery __query = __support.getQueryImplementors().createSqlFileSelectQuery(__method1);
-            __query.setMethod(__method1);
+            org.seasar.doma.jdbc.query.SqlFileSelectQuery __query = __support.getQueryImplementors().createSqlFileSelectQuery(__method2);
+            __query.setMethod(__method2);
             __query.setConfig(__support.getConfig());
             __query.setSqlFilePath("META-INF/com/family/expensemanager/auth/dao/UserDao/selectByEmail.sql");
             __query.setEntityType(com.family.expensemanager.auth.domain.entity._User.getSingletonInternal());
@@ -80,7 +117,7 @@ public class UserDaoImpl implements com.family.expensemanager.auth.dao.UserDao, 
             __query.setFetchSize(-1);
             __query.setSqlLogType(org.seasar.doma.jdbc.SqlLogType.FORMATTED);
             __query.prepare();
-            org.seasar.doma.jdbc.command.SelectCommand<java.util.Optional<com.family.expensemanager.auth.domain.entity.User>> __command = __support.getCommandImplementors().createSelectCommand(__method1, __query, new org.seasar.doma.internal.jdbc.command.OptionalEntitySingleResultHandler<com.family.expensemanager.auth.domain.entity.User>(com.family.expensemanager.auth.domain.entity._User.getSingletonInternal()));
+            org.seasar.doma.jdbc.command.SelectCommand<java.util.Optional<com.family.expensemanager.auth.domain.entity.User>> __command = __support.getCommandImplementors().createSelectCommand(__method2, __query, new org.seasar.doma.internal.jdbc.command.OptionalEntitySingleResultHandler<com.family.expensemanager.auth.domain.entity.User>(com.family.expensemanager.auth.domain.entity._User.getSingletonInternal()));
             java.util.Optional<com.family.expensemanager.auth.domain.entity.User> __result = __command.execute();
             __query.complete();
             __support.exiting("com.family.expensemanager.auth.dao.UserDaoImpl", "selectByEmail", __result);
@@ -95,8 +132,8 @@ public class UserDaoImpl implements com.family.expensemanager.auth.dao.UserDao, 
     public java.util.Optional<com.family.expensemanager.auth.domain.entity.User> selectById(java.lang.Long id) {
         __support.entering("com.family.expensemanager.auth.dao.UserDaoImpl", "selectById", id);
         try {
-            org.seasar.doma.jdbc.query.SqlFileSelectQuery __query = __support.getQueryImplementors().createSqlFileSelectQuery(__method2);
-            __query.setMethod(__method2);
+            org.seasar.doma.jdbc.query.SqlFileSelectQuery __query = __support.getQueryImplementors().createSqlFileSelectQuery(__method3);
+            __query.setMethod(__method3);
             __query.setConfig(__support.getConfig());
             __query.setSqlFilePath("META-INF/com/family/expensemanager/auth/dao/UserDao/selectById.sql");
             __query.setEntityType(com.family.expensemanager.auth.domain.entity._User.getSingletonInternal());
@@ -111,13 +148,44 @@ public class UserDaoImpl implements com.family.expensemanager.auth.dao.UserDao, 
             __query.setFetchSize(-1);
             __query.setSqlLogType(org.seasar.doma.jdbc.SqlLogType.FORMATTED);
             __query.prepare();
-            org.seasar.doma.jdbc.command.SelectCommand<java.util.Optional<com.family.expensemanager.auth.domain.entity.User>> __command = __support.getCommandImplementors().createSelectCommand(__method2, __query, new org.seasar.doma.internal.jdbc.command.OptionalEntitySingleResultHandler<com.family.expensemanager.auth.domain.entity.User>(com.family.expensemanager.auth.domain.entity._User.getSingletonInternal()));
+            org.seasar.doma.jdbc.command.SelectCommand<java.util.Optional<com.family.expensemanager.auth.domain.entity.User>> __command = __support.getCommandImplementors().createSelectCommand(__method3, __query, new org.seasar.doma.internal.jdbc.command.OptionalEntitySingleResultHandler<com.family.expensemanager.auth.domain.entity.User>(com.family.expensemanager.auth.domain.entity._User.getSingletonInternal()));
             java.util.Optional<com.family.expensemanager.auth.domain.entity.User> __result = __command.execute();
             __query.complete();
             __support.exiting("com.family.expensemanager.auth.dao.UserDaoImpl", "selectById", __result);
             return __result;
         } catch (java.lang.RuntimeException __e) {
             __support.throwing("com.family.expensemanager.auth.dao.UserDaoImpl", "selectById", __e);
+            throw __e;
+        }
+    }
+
+    @Override
+    public java.util.Optional<com.family.expensemanager.auth.domain.entity.User> selectByVerificationToken(java.lang.String verificationToken) {
+        __support.entering("com.family.expensemanager.auth.dao.UserDaoImpl", "selectByVerificationToken", verificationToken);
+        try {
+            org.seasar.doma.jdbc.query.SqlFileSelectQuery __query = __support.getQueryImplementors().createSqlFileSelectQuery(__method4);
+            __query.setMethod(__method4);
+            __query.setConfig(__support.getConfig());
+            __query.setSqlFilePath("META-INF/com/family/expensemanager/auth/dao/UserDao/selectByVerificationToken.sql");
+            __query.setEntityType(com.family.expensemanager.auth.domain.entity._User.getSingletonInternal());
+            __query.addParameter("verificationToken", java.lang.String.class, verificationToken);
+            __query.setCallerClassName("com.family.expensemanager.auth.dao.UserDaoImpl");
+            __query.setCallerMethodName("selectByVerificationToken");
+            __query.setResultEnsured(false);
+            __query.setResultMappingEnsured(false);
+            __query.setFetchType(org.seasar.doma.FetchType.LAZY);
+            __query.setQueryTimeout(-1);
+            __query.setMaxRows(-1);
+            __query.setFetchSize(-1);
+            __query.setSqlLogType(org.seasar.doma.jdbc.SqlLogType.FORMATTED);
+            __query.prepare();
+            org.seasar.doma.jdbc.command.SelectCommand<java.util.Optional<com.family.expensemanager.auth.domain.entity.User>> __command = __support.getCommandImplementors().createSelectCommand(__method4, __query, new org.seasar.doma.internal.jdbc.command.OptionalEntitySingleResultHandler<com.family.expensemanager.auth.domain.entity.User>(com.family.expensemanager.auth.domain.entity._User.getSingletonInternal()));
+            java.util.Optional<com.family.expensemanager.auth.domain.entity.User> __result = __command.execute();
+            __query.complete();
+            __support.exiting("com.family.expensemanager.auth.dao.UserDaoImpl", "selectByVerificationToken", __result);
+            return __result;
+        } catch (java.lang.RuntimeException __e) {
+            __support.throwing("com.family.expensemanager.auth.dao.UserDaoImpl", "selectByVerificationToken", __e);
             throw __e;
         }
     }

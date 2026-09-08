@@ -3,6 +3,7 @@ D:\workspace_new\family-expense-manager\backend\common\src\main\java\com\family\
 D:\workspace_new\family-expense-manager\backend\common\src\main\java\com\family\expensemanager\common\dto\ApiResponse.java
 D:\workspace_new\family-expense-manager\backend\common\src\main\java\com\family\expensemanager\common\dto\ErrorResponse.java
 D:\workspace_new\family-expense-manager\backend\common\src\main\java\com\family\expensemanager\common\event\ExpenseEvent.java
+D:\workspace_new\family-expense-manager\backend\common\src\main\java\com\family\expensemanager\common\event\UserVerificationEvent.java
 D:\workspace_new\family-expense-manager\backend\common\src\main\java\com\family\expensemanager\common\exception\ApiException.java
 D:\workspace_new\family-expense-manager\backend\common\src\main\java\com\family\expensemanager\common\exception\BadRequestException.java
 D:\workspace_new\family-expense-manager\backend\common\src\main\java\com\family\expensemanager\common\exception\ConflictException.java

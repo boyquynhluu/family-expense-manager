@@ -1,7 +1,7 @@
 package com.family.expensemanager.auth.dao;
 
 /** */
-@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-05T22:41:40.719+0700")
+@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-06T23:15:00.390+0700")
 @org.seasar.doma.DaoImplementation
 public class RefreshTokenDaoImpl implements com.family.expensemanager.auth.dao.RefreshTokenDao, org.seasar.doma.jdbc.ConfigProvider {
 

@@ -13,7 +13,6 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e) {
-    console.log("Register user");
     e.preventDefault();
     setError("");
     setLoading(true);
