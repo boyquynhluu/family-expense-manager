@@ -1,7 +1,7 @@
 package com.family.expensemanager.auth.domain.entity;
 
 /** */
-@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-06T14:09:04.165+0700")
+@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-07T22:22:26.690+0700")
 @org.seasar.doma.EntityTypeImplementation
 public final class _RefreshToken extends org.seasar.doma.jdbc.entity.AbstractEntityType<com.family.expensemanager.auth.domain.entity.RefreshToken> {
 

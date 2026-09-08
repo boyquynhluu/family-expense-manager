@@ -31,7 +31,8 @@ public class JwtGatewayFilter extends OncePerRequestFilter implements Ordered {
     private static final List<String> PUBLIC_PATHS = List.of(
             "/api/auth/register",
             "/api/auth/login",
-            "/api/auth/refresh");
+            "/api/auth/refresh",
+            "/api/auth/verify");
 
     private final JwtUtil jwtUtil;
 

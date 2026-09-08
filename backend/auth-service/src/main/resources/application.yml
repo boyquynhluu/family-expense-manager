@@ -9,6 +9,11 @@ spring:
     username: ${FEM_AUTH_DB_USER:fem_auth}
     password: ${FEM_AUTH_DB_PASSWORD:change-me}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
 eureka:
   client:
@@ -19,6 +24,13 @@ jwt:
   secret: ${JWT_SECRET:change-me-in-.env}
   access-token-ttl-minutes: 15
   refresh-token-ttl-days: 7
+
+auth:
+  verification-token-ttl-hours: 24
+
+kafka:
+  topic:
+    user-verification: user-verification
 
 management:
   endpoints:

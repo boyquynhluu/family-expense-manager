@@ -5,5 +5,6 @@ D:\workspace_new\family-expense-manager\backend\notification-service\src\main\ja
 D:\workspace_new\family-expense-manager\backend\notification-service\src\main\java\com\family\expensemanager\notification\domain\entity\Notification.java
 D:\workspace_new\family-expense-manager\backend\notification-service\src\main\java\com\family\expensemanager\notification\dto\NotificationResponse.java
 D:\workspace_new\family-expense-manager\backend\notification-service\src\main\java\com\family\expensemanager\notification\messaging\ExpenseEventListener.java
+D:\workspace_new\family-expense-manager\backend\notification-service\src\main\java\com\family\expensemanager\notification\messaging\UserVerificationEventListener.java
 D:\workspace_new\family-expense-manager\backend\notification-service\src\main\java\com\family\expensemanager\notification\NotificationServiceApplication.java
 D:\workspace_new\family-expense-manager\backend\notification-service\src\main\java\com\family\expensemanager\notification\service\NotificationService.java

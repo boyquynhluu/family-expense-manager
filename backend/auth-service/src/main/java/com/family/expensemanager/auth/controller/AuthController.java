@@ -2,14 +2,17 @@ package com.family.expensemanager.auth.controller;
 
 import com.family.expensemanager.auth.dto.AuthResponse;
 import com.family.expensemanager.auth.dto.LoginRequest;
+import com.family.expensemanager.auth.dto.MessageResponse;
 import com.family.expensemanager.auth.dto.RefreshRequest;
 import com.family.expensemanager.auth.dto.RegisterRequest;
 import com.family.expensemanager.auth.service.AuthService;
 import com.family.expensemanager.common.dto.ApiResponse;
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -28,8 +31,14 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ApiResponse<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
+    public ApiResponse<MessageResponse> register(@Valid @RequestBody RegisterRequest request) {
         return ApiResponse.ok(authService.register(request));
+    }
+
+    @GetMapping("/verify")
+    public ApiResponse<MessageResponse> verify(@RequestParam String token) {
+        authService.verifyEmail(token);
+        return ApiResponse.ok(new MessageResponse("Xác thực email thành công. Bạn có thể đăng nhập."));
     }
 
     @PostMapping("/login")

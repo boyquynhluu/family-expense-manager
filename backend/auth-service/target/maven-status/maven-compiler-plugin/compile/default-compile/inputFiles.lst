@@ -10,6 +10,8 @@ D:\workspace_new\family-expense-manager\backend\auth-service\src\main\java\com\f
 D:\workspace_new\family-expense-manager\backend\auth-service\src\main\java\com\family\expensemanager\auth\domain\entity\User.java
 D:\workspace_new\family-expense-manager\backend\auth-service\src\main\java\com\family\expensemanager\auth\dto\AuthResponse.java
 D:\workspace_new\family-expense-manager\backend\auth-service\src\main\java\com\family\expensemanager\auth\dto\LoginRequest.java
+D:\workspace_new\family-expense-manager\backend\auth-service\src\main\java\com\family\expensemanager\auth\dto\MessageResponse.java
 D:\workspace_new\family-expense-manager\backend\auth-service\src\main\java\com\family\expensemanager\auth\dto\RefreshRequest.java
 D:\workspace_new\family-expense-manager\backend\auth-service\src\main\java\com\family\expensemanager\auth\dto\RegisterRequest.java
+D:\workspace_new\family-expense-manager\backend\auth-service\src\main\java\com\family\expensemanager\auth\messaging\UserVerificationEventPublisher.java
 D:\workspace_new\family-expense-manager\backend\auth-service\src\main\java\com\family\expensemanager\auth\service\AuthService.java
