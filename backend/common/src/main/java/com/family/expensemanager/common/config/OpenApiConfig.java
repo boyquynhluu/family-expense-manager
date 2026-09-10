@@ -1,13 +1,17 @@
 package com.family.expensemanager.common.config;
 
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import io.swagger.v3.oas.models.servers.Server;
 
 /**
  * Shared Swagger/OpenAPI setup: exposes each service's title from
@@ -23,12 +27,19 @@ public class OpenApiConfig {
     private static final String BEARER_SCHEME_NAME = "bearerAuth";
 
     @Bean
-    public OpenAPI openApi(@Value("${spring.application.name}") String serviceName) {
+    public OpenAPI openApi(
+        @Value("${spring.application.name}") String serviceName,
+        @Value("${server.port:8080}") String port) {
+
         return new OpenAPI()
                 .info(new Info()
                         .title(serviceName)
                         .version("v1")
                         .description("Family Expense Manager - " + serviceName))
+                .servers(List.of(
+                    new Server().url("http://localhost:" + port).description("Local Environment"),
+                    new Server().url("https://api.yourdomain.com").description("Production Environment")
+                ))
                 .addSecurityItem(new SecurityRequirement().addList(BEARER_SCHEME_NAME))
                 .components(new Components()
                         .addSecuritySchemes(BEARER_SCHEME_NAME, new SecurityScheme()

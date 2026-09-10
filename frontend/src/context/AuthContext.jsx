@@ -38,8 +38,10 @@ export function AuthProvider({ children }) {
 
   async function register(familyName, email, password, displayName) {
     const res = await client.post("/auth/register", { familyName, email, password, displayName });
-    const { accessToken: token, refreshToken } = res.data.data;
-    persistTokens(token, refreshToken);
+    // Backend no longer logs the user in on register — the account stays inactive
+    // until they click the verification link emailed to them (see auth-service
+    // AuthService.register()). Just hand back the confirmation message.
+    return res.data.data.message;
   }
 
   function logout() {

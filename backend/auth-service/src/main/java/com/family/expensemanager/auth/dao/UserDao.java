@@ -1,12 +1,13 @@
 package com.family.expensemanager.auth.dao;
 
-import com.family.expensemanager.auth.domain.entity.User;
+import java.util.Optional;
+
 import org.seasar.doma.Dao;
 import org.seasar.doma.Insert;
 import org.seasar.doma.Select;
 import org.seasar.doma.Update;
 
-import java.util.Optional;
+import com.family.expensemanager.auth.domain.entity.User;
 
 @Dao
 public interface UserDao {

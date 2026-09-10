@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import { useAuth } from "../hooks/useAuth";
 
 export default function Register() {
@@ -17,8 +18,11 @@ export default function Register() {
     setError("");
     setLoading(true);
     try {
-      await register(familyName, email, password, displayName);
-      navigate("/");
+      const message = await register(familyName, email, password, displayName);
+      toast.success(message || "Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.", {
+        duration: 6000,
+      });
+      navigate("/login");
     } catch (err) {
       setError(err.response?.data?.message || "Đăng ký thất bại");
     } finally {
