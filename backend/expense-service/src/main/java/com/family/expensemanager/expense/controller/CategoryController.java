@@ -14,23 +14,26 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 @RestController
 @RequestMapping("/api/expenses/categories")
+@RequiredArgsConstructor
+@Slf4j(topic = "CategoryController")
 public class CategoryController {
 
     private final CategoryService categoryService;
 
-    public CategoryController(CategoryService categoryService) {
-        this.categoryService = categoryService;
-    }
-
     @PostMapping
     public ApiResponse<CategoryResponse> create(@Valid @RequestBody CreateCategoryRequest request) {
+        log.info("create - start");
         return ApiResponse.ok(categoryService.create(CurrentUser.familyId(), request));
     }
 
     @GetMapping
     public ApiResponse<List<CategoryResponse>> list() {
+        log.info("list - start");
         return ApiResponse.ok(categoryService.listByFamily(CurrentUser.familyId()));
     }
 }

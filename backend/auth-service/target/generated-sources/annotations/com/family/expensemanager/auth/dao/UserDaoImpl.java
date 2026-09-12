@@ -1,7 +1,7 @@
 package com.family.expensemanager.auth.dao;
 
 /** */
-@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-08T22:20:01.742+0700")
+@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-11T22:49:07.507+0700")
 @org.seasar.doma.DaoImplementation
 public class UserDaoImpl implements com.family.expensemanager.auth.dao.UserDao, org.seasar.doma.jdbc.ConfigProvider {
 
@@ -18,6 +18,8 @@ public class UserDaoImpl implements com.family.expensemanager.auth.dao.UserDao, 
     private static final java.lang.reflect.Method __method3 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.auth.dao.UserDao.class, "selectById", java.lang.Long.class);
 
     private static final java.lang.reflect.Method __method4 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.auth.dao.UserDao.class, "selectByVerificationToken", java.lang.String.class);
+
+    private static final java.lang.reflect.Method __method5 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.auth.dao.UserDao.class, "selectByProviderAndProviderId", java.lang.String.class, java.lang.String.class);
 
     private final org.seasar.doma.internal.jdbc.dao.DaoImplSupport __support;
 
@@ -186,6 +188,38 @@ public class UserDaoImpl implements com.family.expensemanager.auth.dao.UserDao, 
             return __result;
         } catch (java.lang.RuntimeException __e) {
             __support.throwing("com.family.expensemanager.auth.dao.UserDaoImpl", "selectByVerificationToken", __e);
+            throw __e;
+        }
+    }
+
+    @Override
+    public java.util.Optional<com.family.expensemanager.auth.domain.entity.User> selectByProviderAndProviderId(java.lang.String provider, java.lang.String providerId) {
+        __support.entering("com.family.expensemanager.auth.dao.UserDaoImpl", "selectByProviderAndProviderId", provider, providerId);
+        try {
+            org.seasar.doma.jdbc.query.SqlFileSelectQuery __query = __support.getQueryImplementors().createSqlFileSelectQuery(__method5);
+            __query.setMethod(__method5);
+            __query.setConfig(__support.getConfig());
+            __query.setSqlFilePath("META-INF/com/family/expensemanager/auth/dao/UserDao/selectByProviderAndProviderId.sql");
+            __query.setEntityType(com.family.expensemanager.auth.domain.entity._User.getSingletonInternal());
+            __query.addParameter("provider", java.lang.String.class, provider);
+            __query.addParameter("providerId", java.lang.String.class, providerId);
+            __query.setCallerClassName("com.family.expensemanager.auth.dao.UserDaoImpl");
+            __query.setCallerMethodName("selectByProviderAndProviderId");
+            __query.setResultEnsured(false);
+            __query.setResultMappingEnsured(false);
+            __query.setFetchType(org.seasar.doma.FetchType.LAZY);
+            __query.setQueryTimeout(-1);
+            __query.setMaxRows(-1);
+            __query.setFetchSize(-1);
+            __query.setSqlLogType(org.seasar.doma.jdbc.SqlLogType.FORMATTED);
+            __query.prepare();
+            org.seasar.doma.jdbc.command.SelectCommand<java.util.Optional<com.family.expensemanager.auth.domain.entity.User>> __command = __support.getCommandImplementors().createSelectCommand(__method5, __query, new org.seasar.doma.internal.jdbc.command.OptionalEntitySingleResultHandler<com.family.expensemanager.auth.domain.entity.User>(com.family.expensemanager.auth.domain.entity._User.getSingletonInternal()));
+            java.util.Optional<com.family.expensemanager.auth.domain.entity.User> __result = __command.execute();
+            __query.complete();
+            __support.exiting("com.family.expensemanager.auth.dao.UserDaoImpl", "selectByProviderAndProviderId", __result);
+            return __result;
+        } catch (java.lang.RuntimeException __e) {
+            __support.throwing("com.family.expensemanager.auth.dao.UserDaoImpl", "selectByProviderAndProviderId", __e);
             throw __e;
         }
     }

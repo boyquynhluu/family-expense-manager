@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import client from "../api/client";
+import { EditIcon, TrashIcon } from "../components/AppIcons";
+import { formatCurrency } from "../utils/format";
 
 const emptyForm = {
   walletId: "",
@@ -99,87 +101,129 @@ export default function Transactions() {
 
   return (
     <div>
-      <h1>Giao dịch</h1>
-      <form className="inline-form" onSubmit={handleSubmit}>
-        <select value={form.walletId} onChange={(e) => updateField("walletId", e.target.value)} required>
-          {wallets.map((w) => (
-            <option key={w.id} value={w.id}>
-              {w.name}
-            </option>
-          ))}
-        </select>
-        <select value={form.categoryId} onChange={(e) => updateField("categoryId", e.target.value)} required>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <select value={form.type} onChange={(e) => updateField("type", e.target.value)}>
-          <option value="EXPENSE">Chi tiêu</option>
-          <option value="INCOME">Thu nhập</option>
-        </select>
-        <input
-          type="number"
-          step="0.01"
-          placeholder="Số tiền"
-          value={form.amount}
-          onChange={(e) => updateField("amount", e.target.value)}
-          required
-        />
-        <input
-          type="datetime-local"
-          value={form.occurredAt}
-          onChange={(e) => updateField("occurredAt", e.target.value)}
-          required
-        />
-        <input placeholder="Ghi chú" value={form.note} onChange={(e) => updateField("note", e.target.value)} />
-        <button type="submit">{editingId ? "Cập nhật" : "Thêm giao dịch"}</button>
-        {editingId && (
-          <button type="button" onClick={cancelEdit}>
-            Huỷ
-          </button>
-        )}
-      </form>
-      {error && <p className="error-text">{error}</p>}
-      <table>
-        <thead>
-          <tr>
-            <th>Thời gian</th>
-            <th>Ví</th>
-            <th>Danh mục</th>
-            <th>Loại</th>
-            <th>Số tiền</th>
-            <th>Ghi chú</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {transactions.map((t) => (
-            <tr key={t.id}>
-              <td>{t.occurredAt.replace("T", " ")}</td>
-              <td>{walletName(t.walletId)}</td>
-              <td>{categoryName(t.categoryId)}</td>
-              <td>{t.type === "EXPENSE" ? "Chi tiêu" : "Thu nhập"}</td>
-              <td>{t.amount}</td>
-              <td>{t.note}</td>
-              <td className="row-actions">
-                <button type="button" onClick={() => startEdit(t)}>
-                  Sửa
-                </button>
-                <button type="button" onClick={() => handleDelete(t.id)}>
-                  Xoá
-                </button>
-              </td>
-            </tr>
-          ))}
-          {transactions.length === 0 && (
-            <tr>
-              <td colSpan={7}>Chưa có giao dịch nào</td>
-            </tr>
+      <div className="page-header">
+        <div>
+          <h1>Giao dịch</h1>
+          <p className="page-header-subtitle">Ghi lại các khoản thu/chi hằng ngày</p>
+        </div>
+      </div>
+
+      <div className="section-card">
+        <h2>{editingId ? "Cập nhật giao dịch" : "Thêm giao dịch mới"}</h2>
+        <form className="inline-form" onSubmit={handleSubmit}>
+          <label className="field">
+            Ví
+            <select value={form.walletId} onChange={(e) => updateField("walletId", e.target.value)} required>
+              {wallets.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            Danh mục
+            <select value={form.categoryId} onChange={(e) => updateField("categoryId", e.target.value)} required>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            Loại
+            <select value={form.type} onChange={(e) => updateField("type", e.target.value)}>
+              <option value="EXPENSE">Chi tiêu</option>
+              <option value="INCOME">Thu nhập</option>
+            </select>
+          </label>
+          <label className="field">
+            Số tiền
+            <input
+              type="number"
+              step="0.01"
+              placeholder="0"
+              value={form.amount}
+              onChange={(e) => updateField("amount", e.target.value)}
+              required
+            />
+          </label>
+          <label className="field">
+            Thời gian
+            <input
+              type="datetime-local"
+              value={form.occurredAt}
+              onChange={(e) => updateField("occurredAt", e.target.value)}
+              required
+            />
+          </label>
+          <label className="field">
+            Ghi chú
+            <input placeholder="Tuỳ chọn" value={form.note} onChange={(e) => updateField("note", e.target.value)} />
+          </label>
+          <button type="submit">{editingId ? "Cập nhật" : "Thêm giao dịch"}</button>
+          {editingId && (
+            <button type="button" className="btn-secondary" onClick={cancelEdit}>
+              Huỷ
+            </button>
           )}
-        </tbody>
-      </table>
+        </form>
+        {error && <p className="error-text">{error}</p>}
+      </div>
+
+      <div className="section-card">
+        <h2>Lịch sử giao dịch</h2>
+        {transactions.length === 0 ? (
+          <p className="empty-state">Chưa có giao dịch nào</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Thời gian</th>
+                <th>Ví</th>
+                <th>Danh mục</th>
+                <th>Loại</th>
+                <th>Số tiền</th>
+                <th>Ghi chú</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {transactions.map((t) => (
+                <tr key={t.id}>
+                  <td>{t.occurredAt.replace("T", " ")}</td>
+                  <td>{walletName(t.walletId)}</td>
+                  <td>{categoryName(t.categoryId)}</td>
+                  <td>
+                    <span className={`badge ${t.type === "EXPENSE" ? "badge-expense" : "badge-income"}`}>
+                      {t.type === "EXPENSE" ? "Chi tiêu" : "Thu nhập"}
+                    </span>
+                  </td>
+                  <td className={t.type === "EXPENSE" ? "amount-expense" : "amount-income"}>
+                    {t.type === "EXPENSE" ? "-" : "+"}
+                    {formatCurrency(t.amount)}
+                  </td>
+                  <td>{t.note}</td>
+                  <td className="row-actions">
+                    <button type="button" className="icon-btn" onClick={() => startEdit(t)} aria-label="Sửa">
+                      <EditIcon />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-btn icon-btn-danger"
+                      onClick={() => handleDelete(t.id)}
+                      aria-label="Xoá"
+                    >
+                      <TrashIcon />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }

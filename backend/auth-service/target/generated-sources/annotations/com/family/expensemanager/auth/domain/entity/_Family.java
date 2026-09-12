@@ -1,7 +1,7 @@
 package com.family.expensemanager.auth.domain.entity;
 
 /** */
-@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-07T22:22:26.625+0700")
+@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-11T22:49:07.237+0700")
 @org.seasar.doma.EntityTypeImplementation
 public final class _Family extends org.seasar.doma.jdbc.entity.AbstractEntityType<com.family.expensemanager.auth.domain.entity.Family> {
 

@@ -9,19 +9,20 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 @Service
+@RequiredArgsConstructor
+@Slf4j(topic = "BudgetService")
 public class BudgetService {
 
     private final BudgetDao budgetDao;
     private final CategoryService categoryService;
 
-    public BudgetService(BudgetDao budgetDao, CategoryService categoryService) {
-        this.budgetDao = budgetDao;
-        this.categoryService = categoryService;
-    }
-
     @Transactional
     public BudgetResponse create(Long familyId, CreateBudgetRequest request) {
+        log.info("create - start, familyId={}, categoryId={}", familyId, request.categoryId());
         categoryService.requireOwnedByFamily(request.categoryId(), familyId);
 
         Budget budget = new Budget();
@@ -34,6 +35,7 @@ public class BudgetService {
     }
 
     public List<BudgetResponse> listByFamily(Long familyId) {
+        log.info("listByFamily - start, familyId={}", familyId);
         return budgetDao.selectByFamilyId(familyId).stream().map(BudgetResponse::from).toList();
     }
 }

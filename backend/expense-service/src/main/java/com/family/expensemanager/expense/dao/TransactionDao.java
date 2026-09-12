@@ -34,4 +34,7 @@ public interface TransactionDao {
 
     @Select
     BigDecimal sumAmountByFamilyPeriodAndType(Long familyId, String periodMonth, String type);
+
+    @Select
+    BigDecimal sumAmountByWalletAndType(Long walletId, String type);
 }

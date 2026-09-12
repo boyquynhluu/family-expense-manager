@@ -15,6 +15,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * Base path matches the gateway route predicate {@code Path=/api/auth/**} exactly
  * (that route has no StripPrefix filter), so the same paths work both directly
@@ -22,32 +25,34 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/auth")
+@RequiredArgsConstructor
+@Slf4j(topic = "AuthController")
 public class AuthController {
 
     private final AuthService authService;
 
-    public AuthController(AuthService authService) {
-        this.authService = authService;
-    }
-
     @PostMapping("/register")
     public ApiResponse<MessageResponse> register(@Valid @RequestBody RegisterRequest request) {
+        log.info("register - start, email={}", request.email());
         return ApiResponse.ok(authService.register(request));
     }
 
     @GetMapping("/verify")
     public ApiResponse<MessageResponse> verify(@RequestParam String token) {
+        log.info("verify - start");
         authService.verifyEmail(token);
         return ApiResponse.ok(new MessageResponse("Xác thực email thành công. Bạn có thể đăng nhập."));
     }
 
     @PostMapping("/login")
     public ApiResponse<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
+        log.info("login - start, email={}", request.email());
         return ApiResponse.ok(authService.login(request));
     }
 
     @PostMapping("/refresh")
     public ApiResponse<AuthResponse> refresh(@Valid @RequestBody RefreshRequest request) {
+        log.info("refresh - start");
         return ApiResponse.ok(authService.refresh(request));
     }
 }

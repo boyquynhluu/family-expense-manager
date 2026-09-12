@@ -8,21 +8,21 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * Consumes {@code expense-events}. Per README "Hợp đồng Kafka", this service only
  * acts on {@link ExpenseEvent#BUDGET_EXCEEDED} at this stage — {@code EXPENSE_CREATED}
  * events are ignored.
  */
 @Component
+@RequiredArgsConstructor
+@Slf4j(topic = "ExpenseEventListener")
 public class ExpenseEventListener {
 
     private final NotificationDao notificationDao;
     private final ObjectMapper objectMapper;
-
-    public ExpenseEventListener(NotificationDao notificationDao, ObjectMapper objectMapper) {
-        this.notificationDao = notificationDao;
-        this.objectMapper = objectMapper;
-    }
 
     @KafkaListener(topics = "${kafka.topic.expense-events}")
     public void onExpenseEvent(ExpenseEvent event) {
@@ -48,6 +48,7 @@ public class ExpenseEventListener {
         try {
             return objectMapper.writeValueAsString(event);
         } catch (JsonProcessingException e) {
+            log.error("Không serialize được ExpenseEvent: {}", event, e);
             throw new IllegalStateException("Không serialize được ExpenseEvent", e);
         }
     }

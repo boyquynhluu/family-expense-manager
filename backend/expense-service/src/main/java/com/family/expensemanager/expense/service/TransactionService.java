@@ -22,7 +22,12 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 @Service
+@RequiredArgsConstructor
+@Slf4j(topic = "TransactionService")
 public class TransactionService {
 
     private static final String TYPE_EXPENSE = "EXPENSE";
@@ -34,22 +39,9 @@ public class TransactionService {
     private final ApplicationEventPublisher eventPublisher;
     private final CacheManager cacheManager;
 
-    public TransactionService(TransactionDao transactionDao,
-                               BudgetDao budgetDao,
-                               WalletService walletService,
-                               CategoryService categoryService,
-                               ApplicationEventPublisher eventPublisher,
-                               CacheManager cacheManager) {
-        this.transactionDao = transactionDao;
-        this.budgetDao = budgetDao;
-        this.walletService = walletService;
-        this.categoryService = categoryService;
-        this.eventPublisher = eventPublisher;
-        this.cacheManager = cacheManager;
-    }
-
     @Transactional
     public TransactionResponse create(Long familyId, Long userId, TransactionRequest request) {
+        log.info("create - start, familyId={}, userId={}", familyId, userId);
         Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
         Category category = categoryService.requireOwnedByFamily(request.categoryId(), familyId);
 
@@ -83,15 +75,18 @@ public class TransactionService {
     }
 
     public List<TransactionResponse> listByFamily(Long familyId) {
+        log.info("listByFamily - start, familyId={}", familyId);
         return transactionDao.selectByFamilyId(familyId).stream().map(TransactionResponse::from).toList();
     }
 
     public TransactionResponse get(Long familyId, Long transactionId) {
+        log.info("get - start, familyId={}, transactionId={}", familyId, transactionId);
         return TransactionResponse.from(requireOwnedByFamily(transactionId, familyId));
     }
 
     @Transactional
     public TransactionResponse update(Long familyId, Long transactionId, TransactionRequest request) {
+        log.info("update - start, familyId={}, transactionId={}", familyId, transactionId);
         Transaction transaction = requireOwnedByFamily(transactionId, familyId);
         Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
         Category category = categoryService.requireOwnedByFamily(request.categoryId(), familyId);
@@ -117,6 +112,7 @@ public class TransactionService {
 
     @Transactional
     public void delete(Long familyId, Long transactionId) {
+        log.info("delete - start, familyId={}, transactionId={}", familyId, transactionId);
         Transaction transaction = requireOwnedByFamily(transactionId, familyId);
         transactionDao.delete(transaction);
         evictCaches(familyId, periodMonthOf(transaction.getOccurredAt()));
@@ -124,6 +120,7 @@ public class TransactionService {
 
     private void checkBudgetCrossing(Long familyId, Long userId, Transaction transaction, Long categoryId,
                                       String periodMonth, BigDecimal totalBefore) {
+        log.info("checkBudgetCrossing - start, familyId={}, categoryId={}, periodMonth={}", familyId, categoryId, periodMonth);
         Optional<Budget> budget = budgetDao.selectByCategoryAndPeriod(categoryId, periodMonth);
         budget.ifPresent(b -> {
             BigDecimal totalAfter = totalBefore.add(transaction.getAmount());
@@ -136,6 +133,7 @@ public class TransactionService {
     }
 
     private Transaction requireOwnedByFamily(Long transactionId, Long familyId) {
+        log.info("requireOwnedByFamily - start, transactionId={}, familyId={}", transactionId, familyId);
         Transaction transaction = transactionDao.selectById(transactionId)
                 .orElseThrow(() -> new NotFoundException("Giao dịch không tồn tại: " + transactionId));
         if (!transaction.getFamilyId().equals(familyId)) {
@@ -145,6 +143,7 @@ public class TransactionService {
     }
 
     private void evictCaches(Long familyId, String periodMonth) {
+        log.info("evictCaches - start, familyId={}, periodMonth={}", familyId, periodMonth);
         String key = familyId + ":" + periodMonth;
         Cache summaryCache = cacheManager.getCache("expense:summary");
         Cache reportCache = cacheManager.getCache("expense:report:category");
@@ -157,6 +156,7 @@ public class TransactionService {
     }
 
     private String periodMonthOf(LocalDateTime occurredAt) {
+        log.info("periodMonthOf - start");
         return occurredAt.toLocalDate().toString().substring(0, 7);
     }
 }

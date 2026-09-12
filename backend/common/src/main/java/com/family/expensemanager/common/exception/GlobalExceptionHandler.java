@@ -11,12 +11,16 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import java.time.Instant;
 import java.util.stream.Collectors;
 
+import lombok.extern.slf4j.Slf4j;
+
 /** Shared error-response mapping so every service returns the same {@link ErrorResponse} shape. */
 @RestControllerAdvice
+@Slf4j(topic = "GlobalExceptionHandler")
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ErrorResponse> handleApiException(ApiException ex, HttpServletRequest request) {
+        log.warn("ApiException tại {}: {}", request.getRequestURI(), ex.getMessage());
         return build(ex.getStatus(), ex.getMessage(), request);
     }
 
@@ -25,11 +29,13 @@ public class GlobalExceptionHandler {
         String message = ex.getBindingResult().getFieldErrors().stream()
                 .map(f -> f.getField() + ": " + f.getDefaultMessage())
                 .collect(Collectors.joining(", "));
+        log.warn("Lỗi validation tại {}: {}", request.getRequestURI(), message);
         return build(HttpStatus.BAD_REQUEST, message, request);
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex, HttpServletRequest request) {
+        log.error("Lỗi không xác định tại {}", request.getRequestURI(), ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage(), request);
     }
 

@@ -1,9 +1,19 @@
 import { useEffect, useState } from "react";
 import client from "../api/client";
+import { AlertIcon } from "../components/AppIcons";
+import { formatCurrency } from "../utils/format";
 
 function currentYearMonth() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function statusOf(spent, limit) {
+  if (limit <= 0) return "safe";
+  const percent = (spent / limit) * 100;
+  if (percent >= 100) return "danger";
+  if (percent >= 80) return "warning";
+  return "safe";
 }
 
 export default function Budgets() {
@@ -12,6 +22,7 @@ export default function Budgets() {
   const [categoryId, setCategoryId] = useState("");
   const [periodMonth, setPeriodMonth] = useState(currentYearMonth());
   const [limitAmount, setLimitAmount] = useState("");
+  const [spentByMonth, setSpentByMonth] = useState({});
   const [error, setError] = useState("");
 
   function load() {
@@ -26,6 +37,24 @@ export default function Budgets() {
   }
 
   useEffect(load, []);
+
+  // Budgets can span different months, so fetch the actual-spend report once per
+  // distinct month that appears in the budget list (reuses the Dashboard's endpoint).
+  useEffect(() => {
+    const months = [...new Set(budgets.map((b) => b.periodMonth))];
+    months
+      .filter((month) => !(month in spentByMonth))
+      .forEach((month) => {
+        client.get("/expenses/reports/category", { params: { yearMonth: month } }).then((res) => {
+          const byCategory = {};
+          res.data.data.forEach((row) => {
+            byCategory[row.categoryId] = row.total;
+          });
+          setSpentByMonth((prev) => ({ ...prev, [month]: byCategory }));
+        });
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [budgets]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -49,54 +78,87 @@ export default function Budgets() {
 
   return (
     <div>
-      <h1>Ngân sách</h1>
-      {categories.length === 0 ? (
-        <p>Cần tạo ít nhất 1 danh mục chi tiêu trước khi đặt ngân sách.</p>
-      ) : (
-        <form className="inline-form" onSubmit={handleSubmit}>
-          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <input type="month" value={periodMonth} onChange={(e) => setPeriodMonth(e.target.value)} required />
-          <input
-            type="number"
-            step="0.01"
-            placeholder="Hạn mức"
-            value={limitAmount}
-            onChange={(e) => setLimitAmount(e.target.value)}
-            required
-          />
-          <button type="submit">Đặt ngân sách</button>
-        </form>
-      )}
-      {error && <p className="error-text">{error}</p>}
-      <table>
-        <thead>
-          <tr>
-            <th>Danh mục</th>
-            <th>Tháng</th>
-            <th>Hạn mức</th>
-          </tr>
-        </thead>
-        <tbody>
-          {budgets.map((b) => (
-            <tr key={b.id}>
-              <td>{categoryName(b.categoryId)}</td>
-              <td>{b.periodMonth}</td>
-              <td>{b.limitAmount}</td>
-            </tr>
-          ))}
-          {budgets.length === 0 && (
-            <tr>
-              <td colSpan={3}>Chưa có ngân sách nào</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+      <div className="page-header">
+        <div>
+          <h1>Ngân sách</h1>
+          <p className="page-header-subtitle">Đặt hạn mức chi tiêu theo danh mục cho từng tháng</p>
+        </div>
+      </div>
+
+      <div className="section-card">
+        <h2>Đặt ngân sách mới</h2>
+        {categories.length === 0 ? (
+          <p className="empty-state">Cần tạo ít nhất 1 danh mục chi tiêu trước khi đặt ngân sách.</p>
+        ) : (
+          <form className="inline-form" onSubmit={handleSubmit}>
+            <label className="field">
+              Danh mục
+              <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              Tháng
+              <input type="month" value={periodMonth} onChange={(e) => setPeriodMonth(e.target.value)} required />
+            </label>
+            <label className="field">
+              Hạn mức
+              <input
+                type="number"
+                step="0.01"
+                placeholder="0"
+                value={limitAmount}
+                onChange={(e) => setLimitAmount(e.target.value)}
+                required
+              />
+            </label>
+            <button type="submit">Đặt ngân sách</button>
+          </form>
+        )}
+        {error && <p className="error-text">{error}</p>}
+      </div>
+
+      <div className="section-card">
+        <h2>Danh sách ngân sách</h2>
+        {budgets.length === 0 ? (
+          <p className="empty-state">Chưa có ngân sách nào</p>
+        ) : (
+          <div className="category-breakdown">
+            {budgets.map((b) => {
+              const spent = spentByMonth[b.periodMonth]?.[b.categoryId] ?? 0;
+              const status = statusOf(spent, b.limitAmount);
+              const percent = b.limitAmount > 0 ? (spent / b.limitAmount) * 100 : 0;
+              return (
+                <div className="category-row" key={b.id}>
+                  <div className="category-row-header">
+                    <span className="category-row-name">
+                      {categoryName(b.categoryId)}
+                      <span className="budget-month">{b.periodMonth}</span>
+                    </span>
+                    <span className="category-row-amount">
+                      <span className={`badge budget-badge-${status}`}>
+                        {status === "danger" && <AlertIcon />}
+                        {status === "danger" ? "Vượt ngân sách" : status === "warning" ? "Gần đạt hạn mức" : "An toàn"}
+                      </span>
+                      {formatCurrency(spent)} / {formatCurrency(b.limitAmount)}
+                    </span>
+                  </div>
+                  <div className="category-bar-track">
+                    <div
+                      className={`category-bar-fill budget-bar-${status}`}
+                      style={{ width: `${Math.min(percent, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

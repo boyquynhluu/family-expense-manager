@@ -15,12 +15,15 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * Consumes {@code user-verification} events published by auth-service right after
  * registration, and emails the user an HTML verification link back to the gateway's
  * {@code GET /api/auth/verify?token=...} endpoint.
  */
 @Component
+@Slf4j(topic = "UserVerificationEventListener")
 public class UserVerificationEventListener {
 
     private static final String TEMPLATE_PATH = "mail-templates/verification-email.html";
@@ -66,6 +69,7 @@ public class UserVerificationEventListener {
             return StreamUtils.copyToString(
                     new ClassPathResource(TEMPLATE_PATH).getInputStream(), StandardCharsets.UTF_8);
         } catch (IOException e) {
+            log.error("Không đọc được template {}", TEMPLATE_PATH, e);
             throw new UncheckedIOException("Không đọc được template " + TEMPLATE_PATH, e);
         }
     }

@@ -7,30 +7,41 @@ import com.family.expensemanager.expense.dto.WalletResponse;
 import com.family.expensemanager.expense.service.WalletService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 @RestController
 @RequestMapping("/api/expenses/wallets")
+@RequiredArgsConstructor
+@Slf4j(topic = "WalletController")
 public class WalletController {
 
     private final WalletService walletService;
 
-    public WalletController(WalletService walletService) {
-        this.walletService = walletService;
-    }
-
     @PostMapping
     public ApiResponse<WalletResponse> create(@Valid @RequestBody CreateWalletRequest request) {
+        log.info("create - start");
         return ApiResponse.ok(walletService.create(CurrentUser.familyId(), request));
     }
 
     @GetMapping
     public ApiResponse<List<WalletResponse>> list() {
+        log.info("list - start");
         return ApiResponse.ok(walletService.listByFamily(CurrentUser.familyId()));
+    }
+
+    @PutMapping("/{id}")
+    public ApiResponse<WalletResponse> update(@PathVariable Long id, @Valid @RequestBody CreateWalletRequest request) {
+        log.info("update - start, id={}", id);
+        return ApiResponse.ok(walletService.update(id, CurrentUser.familyId(), request));
     }
 }

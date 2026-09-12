@@ -26,4 +26,7 @@ public interface UserDao {
 
     @Select
     Optional<User> selectByVerificationToken(String verificationToken);
+
+    @Select
+    Optional<User> selectByProviderAndProviderId(String provider, String providerId);
 }
