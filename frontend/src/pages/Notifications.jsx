@@ -13,7 +13,13 @@ export default function Notifications() {
       .catch((err) => setError(err.response?.data?.message || "Không tải được thông báo"));
   }
 
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+    // Polling instead of a persistent connection keeps this simple and matches the
+    // rest of the app's request/response style — good enough at this app's scale.
+    const interval = setInterval(load, 15_000);
+    return () => clearInterval(interval);
+  }, []);
 
   async function markAsRead(id) {
     setNotifications((list) => list.map((n) => (n.id === id ? { ...n, isRead: true } : n)));

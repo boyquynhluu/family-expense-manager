@@ -551,6 +551,19 @@ select:focus {
   color: #fff;
 }
 
+.nav-badge {
+  margin-left: auto;
+  background: #dc2626;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0.2rem 0.4rem;
+  border-radius: 999px;
+  min-width: 1.1rem;
+  text-align: center;
+}
+
 .logout-btn {
   display: flex;
   align-items: center;

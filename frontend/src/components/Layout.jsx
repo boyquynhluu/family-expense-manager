@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { useUnreadNotifications } from "../hooks/useUnreadNotifications";
 import { BellIcon, GridIcon, LogoutIcon, PieChartIcon, ReceiptIcon, TagIcon, UserIcon, WalletIcon } from "./AppIcons";
 
 const links = [
@@ -14,6 +15,7 @@ const links = [
 
 export default function Layout() {
   const { logout } = useAuth();
+  const unreadCount = useUnreadNotifications();
 
   return (
     <div className="app-shell">
@@ -30,6 +32,9 @@ export default function Layout() {
                 <NavLink to={link.to} end={link.to === "/"}>
                   <Icon />
                   {link.label}
+                  {link.to === "/notifications" && unreadCount > 0 && (
+                    <span className="nav-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
+                  )}
                 </NavLink>
               </li>
             );
