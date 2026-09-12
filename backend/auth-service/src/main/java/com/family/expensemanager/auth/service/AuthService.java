@@ -259,7 +259,6 @@ public class AuthService {
         return userDao.selectByFamilyId(familyId).stream().map(UserProfileResponse::from).toList();
     }
 
-    @Transactional
     @PreAuthorize("hasRole('OWNER')")
     public void removeMember(Long familyId, Long callerUserId, Long targetUserId) {
         log.info("removeMember - start, familyId={}, targetUserId={}", familyId, targetUserId);
