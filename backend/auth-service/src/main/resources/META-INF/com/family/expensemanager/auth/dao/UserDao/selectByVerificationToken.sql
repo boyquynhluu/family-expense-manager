@@ -9,7 +9,11 @@ SELECT
     verification_token,
     verification_token_expires_at,
     provider,
-    provider_id
+    provider_id,
+    reset_password_token,
+    reset_password_token_expires_at,
+    is_system_admin,
+    relationship
 FROM
     USERS
 WHERE

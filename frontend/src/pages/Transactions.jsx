@@ -176,65 +176,75 @@ export default function Transactions() {
 
       <div className="section-card">
         <h2>{editingId ? "Cập nhật giao dịch" : "Thêm giao dịch mới"}</h2>
-        <form className="inline-form" onSubmit={handleSubmit}>
-          <label className="field">
-            Ví
-            <select value={form.walletId} onChange={(e) => updateField("walletId", e.target.value)} required>
-              {wallets.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            Danh mục
-            <select value={form.categoryId} onChange={(e) => updateField("categoryId", e.target.value)} required>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            Loại
-            <select value={form.type} onChange={(e) => updateField("type", e.target.value)}>
-              <option value="EXPENSE">Chi tiêu</option>
-              <option value="INCOME">Thu nhập</option>
-            </select>
-          </label>
-          <label className="field">
-            Số tiền
-            <input
-              type="number"
-              step="0.01"
-              placeholder="0"
-              value={form.amount}
-              onChange={(e) => updateField("amount", e.target.value)}
-              required
-            />
-          </label>
-          <label className="field">
-            Thời gian
-            <input
-              type="datetime-local"
-              value={form.occurredAt}
-              onChange={(e) => updateField("occurredAt", e.target.value)}
-              required
-            />
-          </label>
-          <label className="field">
-            Ghi chú
-            <input placeholder="Tuỳ chọn" value={form.note} onChange={(e) => updateField("note", e.target.value)} />
-          </label>
-          <button type="submit">{editingId ? "Cập nhật" : "Thêm giao dịch"}</button>
-          {editingId && (
-            <button type="button" className="btn-secondary" onClick={cancelEdit}>
-              Huỷ
-            </button>
-          )}
-        </form>
+        {wallets.length === 0 || categories.length === 0 ? (
+          <p className="empty-state">
+            {wallets.length === 0 && categories.length === 0
+              ? "Cần tạo ít nhất 1 ví và 1 danh mục trước khi ghi giao dịch."
+              : wallets.length === 0
+                ? "Cần tạo ít nhất 1 ví trước khi ghi giao dịch."
+                : "Cần tạo ít nhất 1 danh mục trước khi ghi giao dịch."}
+          </p>
+        ) : (
+          <form className="inline-form" onSubmit={handleSubmit}>
+            <label className="field">
+              Ví
+              <select value={form.walletId} onChange={(e) => updateField("walletId", e.target.value)} required>
+                {wallets.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              Danh mục
+              <select value={form.categoryId} onChange={(e) => updateField("categoryId", e.target.value)} required>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              Loại
+              <select value={form.type} onChange={(e) => updateField("type", e.target.value)}>
+                <option value="EXPENSE">Chi tiêu</option>
+                <option value="INCOME">Thu nhập</option>
+              </select>
+            </label>
+            <label className="field">
+              Số tiền
+              <input
+                type="number"
+                step="0.01"
+                placeholder="0"
+                value={form.amount}
+                onChange={(e) => updateField("amount", e.target.value)}
+                required
+              />
+            </label>
+            <label className="field">
+              Thời gian
+              <input
+                type="datetime-local"
+                value={form.occurredAt}
+                onChange={(e) => updateField("occurredAt", e.target.value)}
+                required
+              />
+            </label>
+            <label className="field">
+              Ghi chú
+              <input placeholder="Tuỳ chọn" value={form.note} onChange={(e) => updateField("note", e.target.value)} />
+            </label>
+            <button type="submit">{editingId ? "Cập nhật" : "Thêm giao dịch"}</button>
+            {editingId && (
+              <button type="button" className="btn-secondary" onClick={cancelEdit}>
+                Huỷ
+              </button>
+            )}
+          </form>
+        )}
         {error && <p className="error-text">{error}</p>}
       </div>
 

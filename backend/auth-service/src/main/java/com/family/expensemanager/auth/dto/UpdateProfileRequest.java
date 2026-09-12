@@ -2,5 +2,5 @@ package com.family.expensemanager.auth.dto;
 
 import jakarta.validation.constraints.NotBlank;
 
-public record UpdateProfileRequest(@NotBlank String displayName) {
+public record UpdateProfileRequest(@NotBlank String displayName, String relationship) {
 }

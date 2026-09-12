@@ -27,6 +27,10 @@ public final class CurrentUser {
         return claims().get(JwtUtil.CLAIM_ROLE, String.class);
     }
 
+    public static boolean isSystemAdmin() {
+        return Boolean.TRUE.equals(claims().get(JwtUtil.CLAIM_IS_SYSTEM_ADMIN, Boolean.class));
+    }
+
     private static Claims claims() {
         return (Claims) authentication().getDetails();
     }

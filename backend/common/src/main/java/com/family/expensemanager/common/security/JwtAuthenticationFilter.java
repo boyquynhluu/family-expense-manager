@@ -13,6 +13,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import lombok.RequiredArgsConstructor;
@@ -39,9 +40,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 Claims claims = jwtUtil.parseClaims(token);
                 String role = claims.get(JwtUtil.CLAIM_ROLE, String.class);
-                List<GrantedAuthority> authorities = role == null
-                        ? List.of()
-                        : List.of(new SimpleGrantedAuthority("ROLE_" + role));
+                Boolean isSystemAdmin = claims.get(JwtUtil.CLAIM_IS_SYSTEM_ADMIN, Boolean.class);
+
+                List<GrantedAuthority> authorities = new ArrayList<>();
+                if (role != null) {
+                    authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
+                }
+                if (Boolean.TRUE.equals(isSystemAdmin)) {
+                    authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
+                }
 
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(claims.getSubject(), null, authorities);

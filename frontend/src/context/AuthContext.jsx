@@ -62,6 +62,8 @@ export function AuthProvider({ children }) {
       familyId: claims?.familyId ?? null,
       role: claims?.role ?? null,
       userId: claims?.sub ?? null,
+      displayName: claims?.displayName ?? null,
+      isSystemAdmin: claims?.isSystemAdmin ?? false,
       login,
       loginWithTokens,
       register,

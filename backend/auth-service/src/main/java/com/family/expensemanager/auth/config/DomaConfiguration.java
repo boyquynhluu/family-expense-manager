@@ -2,6 +2,8 @@ package com.family.expensemanager.auth.config;
 
 import com.family.expensemanager.auth.dao.FamilyDao;
 import com.family.expensemanager.auth.dao.FamilyDaoImpl;
+import com.family.expensemanager.auth.dao.FamilyInviteDao;
+import com.family.expensemanager.auth.dao.FamilyInviteDaoImpl;
 import com.family.expensemanager.auth.dao.RefreshTokenDao;
 import com.family.expensemanager.auth.dao.RefreshTokenDaoImpl;
 import com.family.expensemanager.auth.dao.UserDao;
@@ -35,5 +37,10 @@ public class DomaConfiguration {
     @Bean
     public RefreshTokenDao refreshTokenDao(Config domaConfig) {
         return new RefreshTokenDaoImpl(domaConfig);
+    }
+
+    @Bean
+    public FamilyInviteDao familyInviteDao(Config domaConfig) {
+        return new FamilyInviteDaoImpl(domaConfig);
     }
 }

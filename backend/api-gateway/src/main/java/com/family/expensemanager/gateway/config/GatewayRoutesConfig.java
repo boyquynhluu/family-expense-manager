@@ -65,6 +65,16 @@ public class GatewayRoutesConfig {
                 .build();
     }
 
+    // Admin endpoints (AdminController) live in auth-service under /api/admin/**, a
+    // separate path prefix from /api/auth/** — needs its own route.
+    @Bean
+    public RouterFunction<ServerResponse> authServiceAdminRoute() {
+        return route("auth-service-admin")
+                .route(path("/api/admin/**"), http())
+                .filter(lb("auth-service"))
+                .build();
+    }
+
     @Bean
     public RouterFunction<ServerResponse> expenseServiceRoute() {
         return route("expense-service")
