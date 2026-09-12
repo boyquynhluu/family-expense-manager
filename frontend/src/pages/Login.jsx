@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import { oauth2AuthorizationUrl } from "../api/client";
 import { EyeIcon, EyeOffIcon, FacebookIcon, GithubIcon, GoogleIcon, KeyIcon, MailIcon } from "../components/AuthIcons";
 import { useAuth } from "../hooks/useAuth";
@@ -14,6 +15,14 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState(location.state?.oauth2Error ? "Đăng nhập bằng mạng xã hội thất bại" : "");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (location.state?.passwordResetSuccess) {
+      toast.success("Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.");
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -48,7 +57,7 @@ export default function Login() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email@vidu.com"
+              placeholder="Email@gmail.com"
               aria-label="Email"
               required
             />
@@ -84,9 +93,9 @@ export default function Login() {
               </span>
               Ghi nhớ đăng nhập
             </label>
-            <button type="button" className="auth-forgot" title="Tính năng đang phát triển">
+            <Link to="/forgot-password" className="auth-forgot">
               Quên mật khẩu?
-            </button>
+            </Link>
           </div>
 
           <button type="submit" className="auth-submit" disabled={loading}>

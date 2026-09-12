@@ -6,6 +6,7 @@ import com.family.expensemanager.expense.dto.CreateWalletRequest;
 import com.family.expensemanager.expense.dto.WalletResponse;
 import com.family.expensemanager.expense.service.WalletService;
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -43,5 +44,12 @@ public class WalletController {
     public ApiResponse<WalletResponse> update(@PathVariable Long id, @Valid @RequestBody CreateWalletRequest request) {
         log.info("update - start, id={}", id);
         return ApiResponse.ok(walletService.update(id, CurrentUser.familyId(), request));
+    }
+
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> delete(@PathVariable Long id) {
+        log.info("delete - start, id={}", id);
+        walletService.delete(id, CurrentUser.familyId());
+        return ApiResponse.ok();
     }
 }

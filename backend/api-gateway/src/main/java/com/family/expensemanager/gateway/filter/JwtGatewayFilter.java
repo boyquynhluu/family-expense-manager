@@ -37,7 +37,9 @@ public class JwtGatewayFilter extends OncePerRequestFilter implements Ordered {
             "/api/auth/register",
             "/api/auth/login",
             "/api/auth/refresh",
-            "/api/auth/verify");
+            "/api/auth/verify",
+            "/api/auth/forgot-password",
+            "/api/auth/reset-password");
 
     private final JwtUtil jwtUtil;
 
@@ -77,6 +79,10 @@ public class JwtGatewayFilter extends OncePerRequestFilter implements Ordered {
         return PUBLIC_PATHS.contains(path)
                 || path.startsWith("/api/auth/oauth2/")
                 || path.startsWith("/api/auth/login/oauth2/")
+                // Viewing/accepting a family invite needs no prior login — only sending one
+                // (POST /api/auth/invite, no path segment after it) requires auth.
+                || path.matches("^/api/auth/invite/[^/]+$")
+                || path.matches("^/api/auth/invite/[^/]+/accept$")
                 || path.endsWith("/v3/api-docs")
                 || path.contains("/v3/api-docs/")
                 || path.startsWith("/swagger-ui")

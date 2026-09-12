@@ -9,28 +9,43 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.family.expensemanager.auth.dao.FamilyDao;
+import com.family.expensemanager.auth.dao.FamilyInviteDao;
 import com.family.expensemanager.auth.dao.RefreshTokenDao;
 import com.family.expensemanager.auth.dao.UserDao;
 import com.family.expensemanager.auth.domain.entity.Family;
+import com.family.expensemanager.auth.domain.entity.FamilyInvite;
 import com.family.expensemanager.auth.domain.entity.RefreshToken;
 import com.family.expensemanager.auth.domain.entity.User;
+import com.family.expensemanager.auth.dto.AcceptInviteRequest;
 import com.family.expensemanager.auth.dto.AuthResponse;
+import com.family.expensemanager.auth.dto.ChangePasswordRequest;
+import com.family.expensemanager.auth.dto.ForgotPasswordRequest;
+import com.family.expensemanager.auth.dto.InviteDetailsResponse;
+import com.family.expensemanager.auth.dto.InviteMemberRequest;
 import com.family.expensemanager.auth.dto.LoginRequest;
 import com.family.expensemanager.auth.dto.MessageResponse;
 import com.family.expensemanager.auth.dto.RefreshRequest;
 import com.family.expensemanager.auth.dto.RegisterRequest;
+import com.family.expensemanager.auth.dto.ResetPasswordRequest;
+import com.family.expensemanager.auth.dto.UpdateProfileRequest;
+import com.family.expensemanager.auth.dto.UserProfileResponse;
+import com.family.expensemanager.common.event.FamilyInviteEvent;
+import com.family.expensemanager.common.event.PasswordResetEvent;
 import com.family.expensemanager.common.event.UserVerificationEvent;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ConflictException;
+import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.common.exception.UnauthorizedException;
 import com.family.expensemanager.common.security.JwtUtil;
 
@@ -42,36 +57,46 @@ import lombok.extern.slf4j.Slf4j;
 public class AuthService {
 
     private static final String ROLE_OWNER = "OWNER";
+    private static final String ROLE_MEMBER = "MEMBER";
     private static final String PROVIDER_LOCAL = "LOCAL";
 
     private final FamilyDao familyDao;
     private final UserDao userDao;
     private final RefreshTokenDao refreshTokenDao;
+    private final FamilyInviteDao familyInviteDao;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final ApplicationEventPublisher eventPublisher;
     private final long accessTokenTtlMillis;
     private final Duration refreshTokenTtl;
     private final Duration verificationTokenTtl;
+    private final Duration resetPasswordTokenTtl;
+    private final Duration inviteTokenTtl;
 
     public AuthService(FamilyDao familyDao,
                         UserDao userDao,
                         RefreshTokenDao refreshTokenDao,
+                        FamilyInviteDao familyInviteDao,
                         PasswordEncoder passwordEncoder,
                         JwtUtil jwtUtil,
                         ApplicationEventPublisher eventPublisher,
                         @Value("${jwt.access-token-ttl-minutes}") long accessTokenTtlMinutes,
                         @Value("${jwt.refresh-token-ttl-days}") long refreshTokenTtlDays,
-                        @Value("${auth.verification-token-ttl-hours}") long verificationTokenTtlHours) {
+                        @Value("${auth.verification-token-ttl-hours}") long verificationTokenTtlHours,
+                        @Value("${auth.reset-password-token-ttl-hours}") long resetPasswordTokenTtlHours,
+                        @Value("${auth.invite-token-ttl-hours}") long inviteTokenTtlHours) {
         this.familyDao = familyDao;
         this.userDao = userDao;
         this.refreshTokenDao = refreshTokenDao;
+        this.familyInviteDao = familyInviteDao;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.eventPublisher = eventPublisher;
         this.accessTokenTtlMillis = Duration.ofMinutes(accessTokenTtlMinutes).toMillis();
         this.refreshTokenTtl = Duration.ofDays(refreshTokenTtlDays);
         this.verificationTokenTtl = Duration.ofHours(verificationTokenTtlHours);
+        this.resetPasswordTokenTtl = Duration.ofHours(resetPasswordTokenTtlHours);
+        this.inviteTokenTtl = Duration.ofHours(inviteTokenTtlHours);
     }
 
     public MessageResponse register(RegisterRequest request) {
@@ -159,6 +184,148 @@ public class AuthService {
         refreshTokenDao.update(stored);
 
         return issueTokens(user);
+    }
+
+    /**
+     * Always returns a generic success message, whether or not the email is registered
+     * — revealing that would let an attacker enumerate which emails have accounts.
+     */
+    public MessageResponse forgotPassword(ForgotPasswordRequest request) {
+        log.info("forgotPassword - start, email={}", request.email());
+        userDao.selectByEmail(request.email()).ifPresent(user -> {
+            String resetToken = generateOpaqueToken();
+            user.setResetPasswordToken(resetToken);
+            user.setResetPasswordTokenExpiresAt(LocalDateTime.now().plus(resetPasswordTokenTtl));
+            userDao.update(user);
+
+            eventPublisher.publishEvent(new PasswordResetEvent(
+                    user.getId(), user.getEmail(), user.getDisplayName(), resetToken, Instant.now()));
+        });
+        return new MessageResponse("Nếu email tồn tại trong hệ thống, chúng tôi đã gửi link đặt lại mật khẩu.");
+    }
+
+    public void resetPassword(ResetPasswordRequest request) {
+        log.info("resetPassword - start");
+        User user = userDao.selectByResetPasswordToken(request.token())
+                .orElseThrow(() -> new BadRequestException("Token đặt lại mật khẩu không hợp lệ"));
+
+        if (user.getResetPasswordTokenExpiresAt() == null
+                || user.getResetPasswordTokenExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new BadRequestException("Token đặt lại mật khẩu đã hết hạn");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        user.setResetPasswordToken(null);
+        user.setResetPasswordTokenExpiresAt(null);
+        userDao.update(user);
+    }
+
+    public UserProfileResponse getProfile(Long userId) {
+        log.info("getProfile - start, userId={}", userId);
+        User user = userDao.selectById(userId)
+                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+        return UserProfileResponse.from(user);
+    }
+
+    public UserProfileResponse updateProfile(Long userId, UpdateProfileRequest request) {
+        log.info("updateProfile - start, userId={}", userId);
+        User user = userDao.selectById(userId)
+                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+        user.setDisplayName(request.displayName());
+        userDao.update(user);
+        return UserProfileResponse.from(user);
+    }
+
+    public void changePassword(Long userId, ChangePasswordRequest request) {
+        log.info("changePassword - start, userId={}", userId);
+        User user = userDao.selectById(userId)
+                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+
+        if (user.getPasswordHash() == null) {
+            throw new BadRequestException(
+                    "Tài khoản này đăng nhập qua " + user.getProvider() + ", không có mật khẩu để đổi.");
+        }
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+            throw new UnauthorizedException("Mật khẩu hiện tại không đúng");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        userDao.update(user);
+    }
+
+    public List<UserProfileResponse> getFamilyMembers(Long familyId) {
+        log.info("getFamilyMembers - start, familyId={}", familyId);
+        return userDao.selectByFamilyId(familyId).stream().map(UserProfileResponse::from).toList();
+    }
+
+    @PreAuthorize("hasRole('OWNER')")
+    public MessageResponse inviteMember(Long familyId, Long inviterUserId, InviteMemberRequest request) {
+        log.info("inviteMember - start, familyId={}, email={}", familyId, request.email());
+        userDao.selectByEmail(request.email()).ifPresent(u -> {
+            throw new ConflictException("Email đã có tài khoản trong hệ thống: " + request.email());
+        });
+
+        Family family = familyDao.selectById(familyId)
+                .orElseThrow(() -> new NotFoundException("Gia đình không tồn tại: " + familyId));
+        User inviter = userDao.selectById(inviterUserId)
+                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+
+        String token = generateOpaqueToken();
+        FamilyInvite invite = new FamilyInvite();
+        invite.setFamilyId(familyId);
+        invite.setEmail(request.email());
+        invite.setToken(token);
+        invite.setInvitedByUserId(inviterUserId);
+        invite.setExpiresAt(LocalDateTime.now().plus(inviteTokenTtl));
+        invite.setCreatedAt(LocalDateTime.now());
+        familyInviteDao.insert(invite);
+
+        eventPublisher.publishEvent(new FamilyInviteEvent(
+                familyId, family.getName(), request.email(), inviter.getDisplayName(), token, Instant.now()));
+
+        return new MessageResponse("Đã gửi lời mời đến " + request.email());
+    }
+
+    public InviteDetailsResponse getInviteDetails(String token) {
+        log.info("getInviteDetails - start");
+        FamilyInvite invite = requireValidInvite(token);
+        Family family = familyDao.selectById(invite.getFamilyId())
+                .orElseThrow(() -> new NotFoundException("Gia đình không tồn tại: " + invite.getFamilyId()));
+        return new InviteDetailsResponse(invite.getEmail(), family.getName());
+    }
+
+    public void acceptInvite(String token, AcceptInviteRequest request) {
+        log.info("acceptInvite - start");
+        FamilyInvite invite = requireValidInvite(token);
+
+        userDao.selectByEmail(invite.getEmail()).ifPresent(u -> {
+            throw new ConflictException("Email đã có tài khoản trong hệ thống: " + invite.getEmail());
+        });
+
+        User user = new User();
+        user.setFamilyId(invite.getFamilyId());
+        user.setEmail(invite.getEmail());
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setDisplayName(request.displayName());
+        user.setRole(ROLE_MEMBER);
+        user.setActive(true);
+        user.setProvider(PROVIDER_LOCAL);
+        userDao.insert(user);
+
+        invite.setAcceptedAt(LocalDateTime.now());
+        familyInviteDao.update(invite);
+    }
+
+    private FamilyInvite requireValidInvite(String token) {
+        FamilyInvite invite = familyInviteDao.selectByToken(token)
+                .orElseThrow(() -> new BadRequestException("Lời mời không hợp lệ"));
+        if (invite.getAcceptedAt() != null) {
+            throw new BadRequestException("Lời mời này đã được sử dụng");
+        }
+        if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new BadRequestException("Lời mời đã hết hạn");
+        }
+        return invite;
     }
 
     /**

@@ -34,4 +34,10 @@ public class SummaryController {
         log.info("reportByCategory - start, yearMonth={}", yearMonth);
         return ApiResponse.ok(summaryService.reportByCategory(CurrentUser.familyId(), yearMonth));
     }
+
+    @GetMapping("/reports/trend")
+    public ApiResponse<List<SummaryResponse>> trend(@RequestParam(defaultValue = "6") int months) {
+        log.info("trend - start, months={}", months);
+        return ApiResponse.ok(summaryService.trend(CurrentUser.familyId(), months));
+    }
 }

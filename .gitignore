@@ -25,3 +25,5 @@ replay_pid*
 
 # Local secrets — never commit real credentials, only *.env.example templates
 .env
+
+target/

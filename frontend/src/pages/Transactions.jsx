@@ -12,12 +12,24 @@ const emptyForm = {
   note: "",
 };
 
+const emptyFilter = {
+  walletId: "",
+  categoryId: "",
+  type: "",
+  fromDate: "",
+  toDate: "",
+};
+
+const PAGE_SIZE = 20;
+
 export default function Transactions() {
   const [transactions, setTransactions] = useState([]);
   const [wallets, setWallets] = useState([]);
   const [categories, setCategories] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
+  const [filter, setFilter] = useState(emptyFilter);
+  const [page, setPage] = useState(0);
   const [error, setError] = useState("");
 
   function load() {
@@ -82,6 +94,7 @@ export default function Transactions() {
   }
 
   async function handleDelete(id) {
+    if (!window.confirm("Xoá giao dịch này? Hành động này không thể hoàn tác.")) return;
     setError("");
     try {
       await client.delete(`/expenses/transactions/${id}`);
@@ -97,6 +110,59 @@ export default function Transactions() {
 
   function categoryName(id) {
     return categories.find((c) => c.id === id)?.name ?? `#${id}`;
+  }
+
+  function updateFilter(field, value) {
+    setFilter((f) => ({ ...f, [field]: value }));
+    setPage(0);
+  }
+
+  function clearFilter() {
+    setFilter(emptyFilter);
+    setPage(0);
+  }
+
+  const filteredTransactions = transactions.filter((t) => {
+    if (filter.walletId && String(t.walletId) !== filter.walletId) return false;
+    if (filter.categoryId && String(t.categoryId) !== filter.categoryId) return false;
+    if (filter.type && t.type !== filter.type) return false;
+    const occurredDate = t.occurredAt.slice(0, 10);
+    if (filter.fromDate && occurredDate < filter.fromDate) return false;
+    if (filter.toDate && occurredDate > filter.toDate) return false;
+    return true;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filteredTransactions.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages - 1);
+  const pagedTransactions = filteredTransactions.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  const hasActiveFilter = Object.values(filter).some(Boolean);
+
+  function escapeCsvField(value) {
+    const str = String(value ?? "");
+    return /[",\r\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+  }
+
+  function exportCsv() {
+    const header = ["Thời gian", "Ví", "Danh mục", "Loại", "Số tiền", "Ghi chú"];
+    const rows = filteredTransactions.map((t) => [
+      t.occurredAt.replace("T", " "),
+      walletName(t.walletId),
+      categoryName(t.categoryId),
+      t.type === "EXPENSE" ? "Chi tiêu" : "Thu nhập",
+      t.amount,
+      t.note ?? "",
+    ]);
+    // Leading BOM so Excel detects UTF-8 and renders Vietnamese diacritics correctly.
+    const csvContent = "﻿" + [header, ...rows].map((row) => row.map(escapeCsvField).join(",")).join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `giao-dich-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -173,9 +239,67 @@ export default function Transactions() {
       </div>
 
       <div className="section-card">
-        <h2>Lịch sử giao dịch</h2>
-        {transactions.length === 0 ? (
-          <p className="empty-state">Chưa có giao dịch nào</p>
+        <div className="page-header">
+          <h2>Lịch sử giao dịch</h2>
+          {filteredTransactions.length > 0 && (
+            <button type="button" className="btn-secondary" onClick={exportCsv}>
+              Xuất CSV
+            </button>
+          )}
+        </div>
+
+        {transactions.length > 0 && (
+          <form className="inline-form filter-bar" onSubmit={(e) => e.preventDefault()}>
+            <label className="field">
+              Ví
+              <select value={filter.walletId} onChange={(e) => updateFilter("walletId", e.target.value)}>
+                <option value="">Tất cả</option>
+                {wallets.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              Danh mục
+              <select value={filter.categoryId} onChange={(e) => updateFilter("categoryId", e.target.value)}>
+                <option value="">Tất cả</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              Loại
+              <select value={filter.type} onChange={(e) => updateFilter("type", e.target.value)}>
+                <option value="">Tất cả</option>
+                <option value="EXPENSE">Chi tiêu</option>
+                <option value="INCOME">Thu nhập</option>
+              </select>
+            </label>
+            <label className="field">
+              Từ ngày
+              <input type="date" value={filter.fromDate} onChange={(e) => updateFilter("fromDate", e.target.value)} />
+            </label>
+            <label className="field">
+              Đến ngày
+              <input type="date" value={filter.toDate} onChange={(e) => updateFilter("toDate", e.target.value)} />
+            </label>
+            {hasActiveFilter && (
+              <button type="button" className="btn-secondary" onClick={clearFilter}>
+                Xoá lọc
+              </button>
+            )}
+          </form>
+        )}
+
+        {filteredTransactions.length === 0 ? (
+          <p className="empty-state">
+            {hasActiveFilter ? "Không có giao dịch nào khớp bộ lọc" : "Chưa có giao dịch nào"}
+          </p>
         ) : (
           <table>
             <thead>
@@ -190,7 +314,7 @@ export default function Transactions() {
               </tr>
             </thead>
             <tbody>
-              {transactions.map((t) => (
+              {pagedTransactions.map((t) => (
                 <tr key={t.id}>
                   <td>{t.occurredAt.replace("T", " ")}</td>
                   <td>{walletName(t.walletId)}</td>
@@ -222,6 +346,32 @@ export default function Transactions() {
               ))}
             </tbody>
           </table>
+        )}
+
+        {filteredTransactions.length > PAGE_SIZE && (
+          <div className="pagination">
+            <span className="pagination-info">
+              {filteredTransactions.length} giao dịch — Trang {currentPage + 1}/{totalPages}
+            </span>
+            <div className="pagination-controls">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={currentPage === 0}
+              >
+                Trước
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={currentPage >= totalPages - 1}
+              >
+                Sau
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>

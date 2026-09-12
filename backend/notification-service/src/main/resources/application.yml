@@ -41,14 +41,21 @@ kafka:
   topic:
     expense-events: expense-events
     user-verification: user-verification
+    password-reset: password-reset
+    family-invite: family-invite
 
 app:
   base-url: ${APP_BASE_URL:http://localhost:8080}
+  frontend-url: ${FRONTEND_BASE_URL:http://localhost:5173}
   mail:
     from: ${MAIL_FROM:no-reply@family-expense-manager.local}
     # Display-only, for the "expires in N hours" line in the email — keep in sync with
     # auth-service's auth.verification-token-ttl-hours, which is what actually enforces it.
     verification-ttl-hours: 24
+    # Keep in sync with auth-service's auth.reset-password-token-ttl-hours.
+    reset-password-ttl-hours: 1
+    # Keep in sync with auth-service's auth.invite-token-ttl-hours.
+    invite-ttl-hours: 72
 
 management:
   endpoints:

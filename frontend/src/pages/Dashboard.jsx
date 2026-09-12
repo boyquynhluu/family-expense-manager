@@ -1,4 +1,14 @@
 import { useEffect, useState } from "react";
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import client from "../api/client";
 import { BalanceIcon, CalendarIcon, TrendDownIcon, TrendUpIcon, WalletIcon } from "../components/AppIcons";
 import { formatCurrency } from "../utils/format";
@@ -17,6 +27,7 @@ export default function Dashboard() {
   const [wallets, setWallets] = useState([]);
   const [categories, setCategories] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [trend, setTrend] = useState([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -46,7 +57,14 @@ export default function Dashboard() {
     client.get("/expenses/wallets").then((res) => setWallets(res.data.data));
     client.get("/expenses/categories").then((res) => setCategories(res.data.data));
     client.get("/expenses/transactions").then((res) => setTransactions(res.data.data));
+    client.get("/expenses/reports/trend", { params: { months: 6 } }).then((res) => setTrend(res.data.data));
   }, []);
+
+  const trendChartData = trend.map((row) => ({
+    yearMonth: row.yearMonth,
+    "Thu nhập": Number(row.totalIncome),
+    "Chi tiêu": Number(row.totalExpense),
+  }));
 
   const sortedReport = [...report].sort((a, b) => b.total - a.total);
   const maxCategoryTotal = sortedReport.length > 0 ? Math.max(...sortedReport.map((r) => r.total)) : 0;
@@ -123,6 +141,25 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      <div className="section-card">
+        <h2>Xu hướng thu chi 6 tháng gần đây</h2>
+        {trendChartData.length === 0 ? (
+          <p className="empty-state">Chưa có dữ liệu</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={trendChartData} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="yearMonth" />
+              <YAxis tickFormatter={(v) => formatCurrency(v)} width={90} />
+              <Tooltip formatter={(value) => formatCurrency(value)} />
+              <Legend />
+              <Line type="monotone" dataKey="Thu nhập" stroke="#16a34a" strokeWidth={2} />
+              <Line type="monotone" dataKey="Chi tiêu" stroke="#dc2626" strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
 
       <div className="section-card">
         <h2>Số dư theo ví</h2>

@@ -189,6 +189,13 @@ select:focus {
   margin: 0;
 }
 
+.auth-card .success-text {
+  color: #16a34a;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
 .auth-input-group {
   display: flex;
   align-items: center;
@@ -467,6 +474,17 @@ select:focus {
   text-underline-offset: 2px;
 }
 
+.verify-message {
+  text-align: center;
+  color: #fff;
+  font-size: 0.95rem;
+  margin: 0 0 1rem;
+}
+
+.verify-message.is-error {
+  color: #fca5a5;
+}
+
 /* App shell */
 .app-shell {
   display: flex;
@@ -632,6 +650,31 @@ select:focus {
   background: #f9fafb;
 }
 
+.filter-bar {
+  margin-bottom: 1.25rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid #f1f2f5;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #f1f2f5;
+}
+
+.pagination-info {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.pagination-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .row-actions {
   display: flex;
   gap: 0.4rem;
@@ -727,6 +770,7 @@ select:focus {
   flex-direction: column;
   gap: 0.2rem;
   min-width: 0;
+  flex: 1;
 }
 
 .category-chip-name {

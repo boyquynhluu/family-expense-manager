@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { BellIcon, GridIcon, LogoutIcon, PieChartIcon, ReceiptIcon, TagIcon, WalletIcon } from "./AppIcons";
+import { BellIcon, GridIcon, LogoutIcon, PieChartIcon, ReceiptIcon, TagIcon, UserIcon, WalletIcon } from "./AppIcons";
 
 const links = [
   { to: "/", label: "Dashboard", icon: GridIcon },
@@ -9,6 +9,7 @@ const links = [
   { to: "/transactions", label: "Giao dịch", icon: ReceiptIcon },
   { to: "/budgets", label: "Ngân sách", icon: PieChartIcon },
   { to: "/notifications", label: "Thông báo", icon: BellIcon },
+  { to: "/profile", label: "Hồ sơ", icon: UserIcon },
 ];
 
 export default function Layout() {

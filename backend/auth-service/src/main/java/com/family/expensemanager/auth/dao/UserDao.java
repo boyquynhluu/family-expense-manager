@@ -1,5 +1,6 @@
 package com.family.expensemanager.auth.dao;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.seasar.doma.Dao;
@@ -22,10 +23,16 @@ public interface UserDao {
     Optional<User> selectByEmail(String email);
 
     @Select
+    List<User> selectByFamilyId(Long familyId);
+
+    @Select
     Optional<User> selectById(Long id);
 
     @Select
     Optional<User> selectByVerificationToken(String verificationToken);
+
+    @Select
+    Optional<User> selectByResetPasswordToken(String resetPasswordToken);
 
     @Select
     Optional<User> selectByProviderAndProviderId(String provider, String providerId);

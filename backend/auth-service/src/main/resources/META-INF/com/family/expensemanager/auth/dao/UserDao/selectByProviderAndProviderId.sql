@@ -7,7 +7,9 @@ SELECT
     role,
     active,
     provider,
-    provider_id
+    provider_id,
+    reset_password_token,
+    reset_password_token_expires_at
 FROM
     USERS
 WHERE

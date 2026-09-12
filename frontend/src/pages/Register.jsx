@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import { Link, useNavigate } from "react-router-dom";
+import { EyeIcon, EyeOffIcon, HomeIcon, KeyIcon, MailIcon, UserIcon } from "../components/AuthIcons";
 import { useAuth } from "../hooks/useAuth";
-import { HomeIcon, UserIcon, MailIcon, KeyIcon, EyeIcon, EyeOffIcon } from "../components/AuthIcons";
 
 export default function Register() {
   const { register } = useAuth();
@@ -77,7 +77,7 @@ export default function Register() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="ban@vidu.com"
+              placeholder="Email@gmail.com"
               aria-label="Email"
               required
             />

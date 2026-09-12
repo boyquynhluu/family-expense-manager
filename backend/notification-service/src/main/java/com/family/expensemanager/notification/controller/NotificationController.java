@@ -3,6 +3,7 @@ package com.family.expensemanager.notification.controller;
 import com.family.expensemanager.common.dto.ApiResponse;
 import com.family.expensemanager.common.security.CurrentUser;
 import com.family.expensemanager.notification.dto.NotificationResponse;
+import com.family.expensemanager.notification.dto.UnreadCountResponse;
 import com.family.expensemanager.notification.service.NotificationService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,6 +28,12 @@ public class NotificationController {
     public ApiResponse<List<NotificationResponse>> list() {
         log.info("list - start");
         return ApiResponse.ok(notificationService.listByFamily(CurrentUser.familyId()));
+    }
+
+    @GetMapping("/unread-count")
+    public ApiResponse<UnreadCountResponse> unreadCount() {
+        log.info("unreadCount - start");
+        return ApiResponse.ok(new UnreadCountResponse(notificationService.countUnread(CurrentUser.familyId())));
     }
 
     @PutMapping("/{id}/read")

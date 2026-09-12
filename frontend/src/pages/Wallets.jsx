@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import client from "../api/client";
-import { EditIcon, WalletIcon } from "../components/AppIcons";
+import { EditIcon, TrashIcon, WalletIcon } from "../components/AppIcons";
 import { formatCurrency } from "../utils/format";
+import { useAuth } from "../hooks/useAuth";
 
 export default function Wallets() {
+  const { role } = useAuth();
+  const isOwner = role === "OWNER";
   const [wallets, setWallets] = useState([]);
   const [name, setName] = useState("");
   const [currency, setCurrency] = useState("VND");
@@ -49,6 +52,17 @@ export default function Wallets() {
       load();
     } catch (err) {
       setError(err.response?.data?.message || "Lưu ví thất bại");
+    }
+  }
+
+  async function handleDelete(id) {
+    if (!window.confirm("Xoá ví này? Chỉ xoá được khi ví chưa có giao dịch nào.")) return;
+    setError("");
+    try {
+      await client.delete(`/expenses/wallets/${id}`);
+      load();
+    } catch (err) {
+      setError(err.response?.data?.message || "Xoá ví thất bại");
     }
   }
 
@@ -131,6 +145,16 @@ export default function Wallets() {
                     <button type="button" className="icon-btn" onClick={() => startEdit(w)} aria-label="Sửa">
                       <EditIcon />
                     </button>
+                    {isOwner && (
+                      <button
+                        type="button"
+                        className="icon-btn icon-btn-danger"
+                        onClick={() => handleDelete(w.id)}
+                        aria-label="Xoá"
+                      >
+                        <TrashIcon />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
