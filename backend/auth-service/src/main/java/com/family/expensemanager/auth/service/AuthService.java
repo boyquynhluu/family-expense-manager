@@ -42,6 +42,7 @@ import lombok.extern.slf4j.Slf4j;
 public class AuthService {
 
     private static final String ROLE_OWNER = "OWNER";
+    private static final String PROVIDER_LOCAL = "LOCAL";
 
     private final FamilyDao familyDao;
     private final UserDao userDao;
@@ -74,6 +75,7 @@ public class AuthService {
     }
 
     public MessageResponse register(RegisterRequest request) {
+        log.info("register - start, email={}", request.email());
         userDao.selectByEmail(request.email()).ifPresent(u -> {
             throw new ConflictException("Email đã được đăng ký: " + request.email());
         });
@@ -92,6 +94,7 @@ public class AuthService {
         user.setDisplayName(request.displayName());
         user.setRole(ROLE_OWNER);
         user.setActive(false);
+        user.setProvider(PROVIDER_LOCAL);
         user.setVerificationToken(verificationToken);
         user.setVerificationTokenExpiresAt(LocalDateTime.now().plus(verificationTokenTtl));
         userDao.insert(user);
@@ -103,6 +106,7 @@ public class AuthService {
     }
 
     public void verifyEmail(String token) {
+        log.info("verifyEmail - start");
         User user = userDao.selectByVerificationToken(token)
                 .orElseThrow(() -> new BadRequestException("Token xác thực không hợp lệ"));
 
@@ -118,8 +122,14 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
+        log.info("login - start, email={}", request.email());
         User user = userDao.selectByEmail(request.email())
                 .orElseThrow(() -> new UnauthorizedException("Email hoặc mật khẩu không đúng"));
+
+        if (user.getPasswordHash() == null) {
+            throw new UnauthorizedException(
+                    "Tài khoản này được đăng ký qua " + user.getProvider() + ". Vui lòng đăng nhập bằng phương thức đó.");
+        }
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new UnauthorizedException("Email hoặc mật khẩu không đúng");
@@ -133,6 +143,7 @@ public class AuthService {
     }
 
     public AuthResponse refresh(RefreshRequest request) {
+        log.info("refresh - start");
         String tokenHash = sha256(request.refreshToken());
         RefreshToken stored = refreshTokenDao.selectByTokenHash(tokenHash)
                 .orElseThrow(() -> new UnauthorizedException("Refresh token không hợp lệ"));
@@ -150,7 +161,54 @@ public class AuthService {
         return issueTokens(user);
     }
 
-    private AuthResponse issueTokens(User user) {
+    /**
+     * Finds or creates the local {@link User} behind an OAuth2 login, called from the
+     * provider-specific {@code OAuth2UserService}s during the login flow. A verified
+     * social-provider email is trusted the same way our own email verification is, so
+     * the account comes back {@code active} immediately.
+     */
+    public User processOAuth2User(String provider, String providerId, String email, String displayName) {
+        log.info("processOAuth2User - start, provider={}, email={}", provider, email);
+        if (email == null || email.isBlank()) {
+            throw new BadRequestException(
+                    "Không lấy được email từ " + provider + ". Vui lòng cấp quyền chia sẻ email.");
+        }
+
+        User existingByProvider = userDao.selectByProviderAndProviderId(provider, providerId).orElse(null);
+        if (existingByProvider != null) {
+            return existingByProvider;
+        }
+
+        User existingByEmail = userDao.selectByEmail(email).orElse(null);
+        if (existingByEmail != null) {
+            // Link this provider to the account already registered with that (verified) email.
+            existingByEmail.setProvider(provider);
+            existingByEmail.setProviderId(providerId);
+            existingByEmail.setActive(true);
+            userDao.update(existingByEmail);
+            return existingByEmail;
+        }
+
+        Family family = new Family();
+        family.setName(displayName + "'s Family");
+        family.setCreatedAt(LocalDateTime.now());
+        familyDao.insert(family);
+
+        User user = new User();
+        user.setFamilyId(family.getId());
+        user.setEmail(email);
+        user.setPasswordHash(null);
+        user.setDisplayName(displayName);
+        user.setRole(ROLE_OWNER);
+        user.setActive(true);
+        user.setProvider(provider);
+        user.setProviderId(providerId);
+        userDao.insert(user);
+        return user;
+    }
+
+    public AuthResponse issueTokens(User user) {
+        log.info("issueTokens - start, userId={}", user.getId());
         Map<String, Object> claims = Map.of(
                 JwtUtil.CLAIM_FAMILY_ID, user.getFamilyId(),
                 JwtUtil.CLAIM_ROLE, user.getRole());
@@ -168,16 +226,19 @@ public class AuthService {
     }
 
     private String generateOpaqueToken() {
+        log.info("generateOpaqueToken - start");
         byte[] bytes = new byte[32];
         new SecureRandom().nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     private String sha256(String value) {
+        log.info("sha256 - start");
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException e) {
+            log.error("Không tạo được SHA-256 MessageDigest", e);
             throw new IllegalStateException(e);
         }
     }

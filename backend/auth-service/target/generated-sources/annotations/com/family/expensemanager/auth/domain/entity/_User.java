@@ -1,7 +1,7 @@
 package com.family.expensemanager.auth.domain.entity;
 
 /** */
-@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-07T22:22:26.672+0700")
+@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-11T22:49:07.304+0700")
 @org.seasar.doma.EntityTypeImplementation
 public final class _User extends org.seasar.doma.jdbc.entity.AbstractEntityType<com.family.expensemanager.auth.domain.entity.User> {
 
@@ -47,9 +47,9 @@ public final class _User extends org.seasar.doma.jdbc.entity.AbstractEntityType<
         __tableName = "USERS";
         __isQuoteRequired = false;
         java.util.List<org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.auth.domain.entity.User, ?>> __idList = new java.util.ArrayList<>();
-        java.util.List<org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.auth.domain.entity.User, ?>> __list = new java.util.ArrayList<>(9);
-        java.util.Map<String, org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.auth.domain.entity.User, ?>> __map = new java.util.LinkedHashMap<>(9);
-        java.util.Map<String, org.seasar.doma.jdbc.entity.EmbeddedPropertyType<com.family.expensemanager.auth.domain.entity.User, ?>> __embeddedMap = new java.util.LinkedHashMap<>(9);
+        java.util.List<org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.auth.domain.entity.User, ?>> __list = new java.util.ArrayList<>(11);
+        java.util.Map<String, org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.auth.domain.entity.User, ?>> __map = new java.util.LinkedHashMap<>(11);
+        java.util.Map<String, org.seasar.doma.jdbc.entity.EmbeddedPropertyType<com.family.expensemanager.auth.domain.entity.User, ?>> __embeddedMap = new java.util.LinkedHashMap<>(11);
         initializeMaps(__map, __embeddedMap);
         initializeIdList(__map, __idList);
         initializeList(__map, __list);
@@ -69,6 +69,8 @@ public final class _User extends org.seasar.doma.jdbc.entity.AbstractEntityType<
         __map.put("active", new org.seasar.doma.jdbc.entity.DefaultPropertyType<com.family.expensemanager.auth.domain.entity.User, java.lang.Boolean, java.lang.Boolean>(com.family.expensemanager.auth.domain.entity.User.class, org.seasar.doma.internal.jdbc.scalar.BasicScalarSuppliers.ofBoolean(), "active", "", __namingType, true, true, false));
         __map.put("verificationToken", new org.seasar.doma.jdbc.entity.DefaultPropertyType<com.family.expensemanager.auth.domain.entity.User, java.lang.String, java.lang.String>(com.family.expensemanager.auth.domain.entity.User.class, org.seasar.doma.internal.jdbc.scalar.BasicScalarSuppliers.ofString(), "verificationToken", "verification_token", __namingType, true, true, false));
         __map.put("verificationTokenExpiresAt", new org.seasar.doma.jdbc.entity.DefaultPropertyType<com.family.expensemanager.auth.domain.entity.User, java.time.LocalDateTime, java.time.LocalDateTime>(com.family.expensemanager.auth.domain.entity.User.class, org.seasar.doma.internal.jdbc.scalar.BasicScalarSuppliers.ofLocalDateTime(), "verificationTokenExpiresAt", "verification_token_expires_at", __namingType, true, true, false));
+        __map.put("provider", new org.seasar.doma.jdbc.entity.DefaultPropertyType<com.family.expensemanager.auth.domain.entity.User, java.lang.String, java.lang.String>(com.family.expensemanager.auth.domain.entity.User.class, org.seasar.doma.internal.jdbc.scalar.BasicScalarSuppliers.ofString(), "provider", "", __namingType, true, true, false));
+        __map.put("providerId", new org.seasar.doma.jdbc.entity.DefaultPropertyType<com.family.expensemanager.auth.domain.entity.User, java.lang.String, java.lang.String>(com.family.expensemanager.auth.domain.entity.User.class, org.seasar.doma.internal.jdbc.scalar.BasicScalarSuppliers.ofString(), "providerId", "provider_id", __namingType, true, true, false));
     }
 
     private void initializeIdList(java.util.Map<String, org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.auth.domain.entity.User, ?>> __map, java.util.List<org.seasar.doma.jdbc.entity.EntityPropertyType<com.family.expensemanager.auth.domain.entity.User, ?>> __idList) {
@@ -216,6 +218,8 @@ public final class _User extends org.seasar.doma.jdbc.entity.AbstractEntityType<
         if (__args.get("active") != null) __args.get("active").save(entity);
         if (__args.get("verificationToken") != null) __args.get("verificationToken").save(entity);
         if (__args.get("verificationTokenExpiresAt") != null) __args.get("verificationTokenExpiresAt").save(entity);
+        if (__args.get("provider") != null) __args.get("provider").save(entity);
+        if (__args.get("providerId") != null) __args.get("providerId").save(entity);
         return entity;
     }
 

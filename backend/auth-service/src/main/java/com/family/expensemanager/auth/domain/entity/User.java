@@ -38,6 +38,12 @@ public class User {
     @Column(name = "verification_token_expires_at")
     private LocalDateTime verificationTokenExpiresAt;
 
+    /** {@code LOCAL}, {@code GOOGLE} or {@code FACEBOOK}. Null password_hash implies an OAuth2-only account. */
+    private String provider;
+
+    @Column(name = "provider_id")
+    private String providerId;
+
     public Long getId() {
         return id;
     }
@@ -108,5 +114,21 @@ public class User {
 
     public void setVerificationTokenExpiresAt(LocalDateTime verificationTokenExpiresAt) {
         this.verificationTokenExpiresAt = verificationTokenExpiresAt;
+    }
+
+    public String getProvider() {
+        return provider;
+    }
+
+    public void setProvider(String provider) {
+        this.provider = provider;
+    }
+
+    public String getProviderId() {
+        return providerId;
+    }
+
+    public void setProviderId(String providerId) {
+        this.providerId = providerId;
     }
 }

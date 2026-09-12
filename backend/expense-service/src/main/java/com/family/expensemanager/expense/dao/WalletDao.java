@@ -4,6 +4,7 @@ import com.family.expensemanager.expense.domain.entity.Wallet;
 import org.seasar.doma.Dao;
 import org.seasar.doma.Insert;
 import org.seasar.doma.Select;
+import org.seasar.doma.Update;
 
 import java.util.List;
 import java.util.Optional;
@@ -13,6 +14,9 @@ public interface WalletDao {
 
     @Insert
     int insert(Wallet wallet);
+
+    @Update
+    int update(Wallet wallet);
 
     @Select
     List<Wallet> selectByFamilyId(Long familyId);

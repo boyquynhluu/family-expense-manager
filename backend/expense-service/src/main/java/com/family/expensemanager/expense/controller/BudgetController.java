@@ -14,23 +14,26 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 @RestController
 @RequestMapping("/api/expenses/budgets")
+@RequiredArgsConstructor
+@Slf4j(topic = "BudgetController")
 public class BudgetController {
 
     private final BudgetService budgetService;
 
-    public BudgetController(BudgetService budgetService) {
-        this.budgetService = budgetService;
-    }
-
     @PostMapping
     public ApiResponse<BudgetResponse> create(@Valid @RequestBody CreateBudgetRequest request) {
+        log.info("create - start");
         return ApiResponse.ok(budgetService.create(CurrentUser.familyId(), request));
     }
 
     @GetMapping
     public ApiResponse<List<BudgetResponse>> list() {
+        log.info("list - start");
         return ApiResponse.ok(budgetService.listByFamily(CurrentUser.familyId()));
     }
 }

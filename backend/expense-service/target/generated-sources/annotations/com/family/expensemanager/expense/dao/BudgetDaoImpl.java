@@ -1,7 +1,7 @@
 package com.family.expensemanager.expense.dao;
 
 /** */
-@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-06T23:15:04.094+0700")
+@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-11T22:49:12.062+0700")
 @org.seasar.doma.DaoImplementation
 public class BudgetDaoImpl implements com.family.expensemanager.expense.dao.BudgetDao, org.seasar.doma.jdbc.ConfigProvider {
 

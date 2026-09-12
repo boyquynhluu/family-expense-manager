@@ -10,17 +10,19 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 @Service
+@RequiredArgsConstructor
+@Slf4j(topic = "CategoryService")
 public class CategoryService {
 
     private final CategoryDao categoryDao;
 
-    public CategoryService(CategoryDao categoryDao) {
-        this.categoryDao = categoryDao;
-    }
-
     @Transactional
     public CategoryResponse create(Long familyId, CreateCategoryRequest request) {
+        log.info("create - start, familyId={}, name={}", familyId, request.name());
         Category category = new Category();
         category.setFamilyId(familyId);
         category.setName(request.name());
@@ -32,10 +34,12 @@ public class CategoryService {
     }
 
     public List<CategoryResponse> listByFamily(Long familyId) {
+        log.info("listByFamily - start, familyId={}", familyId);
         return categoryDao.selectByFamilyId(familyId).stream().map(CategoryResponse::from).toList();
     }
 
     Category requireOwnedByFamily(Long categoryId, Long familyId) {
+        log.info("requireOwnedByFamily - start, categoryId={}, familyId={}", categoryId, familyId);
         Category category = categoryDao.selectById(categoryId)
                 .orElseThrow(() -> new NotFoundException("Category không tồn tại: " + categoryId));
         if (!category.getFamilyId().equals(familyId)) {

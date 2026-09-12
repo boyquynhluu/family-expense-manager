@@ -1,13 +1,14 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { BellIcon, GridIcon, LogoutIcon, PieChartIcon, ReceiptIcon, TagIcon, WalletIcon } from "./AppIcons";
 
 const links = [
-  { to: "/", label: "Dashboard" },
-  { to: "/wallets", label: "Ví" },
-  { to: "/categories", label: "Danh mục" },
-  { to: "/transactions", label: "Giao dịch" },
-  { to: "/budgets", label: "Ngân sách" },
-  { to: "/notifications", label: "Thông báo" },
+  { to: "/", label: "Dashboard", icon: GridIcon },
+  { to: "/wallets", label: "Ví", icon: WalletIcon },
+  { to: "/categories", label: "Danh mục", icon: TagIcon },
+  { to: "/transactions", label: "Giao dịch", icon: ReceiptIcon },
+  { to: "/budgets", label: "Ngân sách", icon: PieChartIcon },
+  { to: "/notifications", label: "Thông báo", icon: BellIcon },
 ];
 
 export default function Layout() {
@@ -16,17 +17,25 @@ export default function Layout() {
   return (
     <div className="app-shell">
       <nav className="sidebar">
-        <div className="brand">Family Expense</div>
+        <div className="brand">
+          <span className="brand-icon">💰</span>
+          <span>Family Expense</span>
+        </div>
         <ul>
-          {links.map((link) => (
-            <li key={link.to}>
-              <NavLink to={link.to} end={link.to === "/"}>
-                {link.label}
-              </NavLink>
-            </li>
-          ))}
+          {links.map((link) => {
+            const Icon = link.icon;
+            return (
+              <li key={link.to}>
+                <NavLink to={link.to} end={link.to === "/"}>
+                  <Icon />
+                  {link.label}
+                </NavLink>
+              </li>
+            );
+          })}
         </ul>
         <button type="button" className="logout-btn" onClick={logout}>
+          <LogoutIcon />
           Đăng xuất
         </button>
       </nav>

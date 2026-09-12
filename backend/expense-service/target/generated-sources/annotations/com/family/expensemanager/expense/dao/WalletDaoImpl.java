@@ -1,7 +1,7 @@
 package com.family.expensemanager.expense.dao;
 
 /** */
-@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-06T23:15:04.177+0700")
+@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-11T22:49:12.193+0700")
 @org.seasar.doma.DaoImplementation
 public class WalletDaoImpl implements com.family.expensemanager.expense.dao.WalletDao, org.seasar.doma.jdbc.ConfigProvider {
 
@@ -11,9 +11,11 @@ public class WalletDaoImpl implements com.family.expensemanager.expense.dao.Wall
 
     private static final java.lang.reflect.Method __method0 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.expense.dao.WalletDao.class, "insert", com.family.expensemanager.expense.domain.entity.Wallet.class);
 
-    private static final java.lang.reflect.Method __method1 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.expense.dao.WalletDao.class, "selectByFamilyId", java.lang.Long.class);
+    private static final java.lang.reflect.Method __method1 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.expense.dao.WalletDao.class, "update", com.family.expensemanager.expense.domain.entity.Wallet.class);
 
-    private static final java.lang.reflect.Method __method2 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.expense.dao.WalletDao.class, "selectById", java.lang.Long.class);
+    private static final java.lang.reflect.Method __method2 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.expense.dao.WalletDao.class, "selectByFamilyId", java.lang.Long.class);
+
+    private static final java.lang.reflect.Method __method3 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.expense.dao.WalletDao.class, "selectById", java.lang.Long.class);
 
     private final org.seasar.doma.internal.jdbc.dao.DaoImplSupport __support;
 
@@ -61,11 +63,44 @@ public class WalletDaoImpl implements com.family.expensemanager.expense.dao.Wall
     }
 
     @Override
+    public int update(com.family.expensemanager.expense.domain.entity.Wallet wallet) {
+        __support.entering("com.family.expensemanager.expense.dao.WalletDaoImpl", "update", wallet);
+        try {
+            if (wallet == null) {
+                throw new org.seasar.doma.DomaNullPointerException("wallet");
+            }
+            org.seasar.doma.jdbc.query.AutoUpdateQuery<com.family.expensemanager.expense.domain.entity.Wallet> __query = __support.getQueryImplementors().createAutoUpdateQuery(__method1, com.family.expensemanager.expense.domain.entity._Wallet.getSingletonInternal());
+            __query.setMethod(__method1);
+            __query.setConfig(__support.getConfig());
+            __query.setEntity(wallet);
+            __query.setCallerClassName("com.family.expensemanager.expense.dao.WalletDaoImpl");
+            __query.setCallerMethodName("update");
+            __query.setQueryTimeout(-1);
+            __query.setSqlLogType(org.seasar.doma.jdbc.SqlLogType.FORMATTED);
+            __query.setNullExcluded(false);
+            __query.setVersionIgnored(false);
+            __query.setIncludedPropertyNames();
+            __query.setExcludedPropertyNames();
+            __query.setUnchangedPropertyIncluded(false);
+            __query.setOptimisticLockExceptionSuppressed(false);
+            __query.prepare();
+            org.seasar.doma.jdbc.command.UpdateCommand __command = __support.getCommandImplementors().createUpdateCommand(__method1, __query);
+            int __result = __command.execute();
+            __query.complete();
+            __support.exiting("com.family.expensemanager.expense.dao.WalletDaoImpl", "update", __result);
+            return __result;
+        } catch (java.lang.RuntimeException __e) {
+            __support.throwing("com.family.expensemanager.expense.dao.WalletDaoImpl", "update", __e);
+            throw __e;
+        }
+    }
+
+    @Override
     public java.util.List<com.family.expensemanager.expense.domain.entity.Wallet> selectByFamilyId(java.lang.Long familyId) {
         __support.entering("com.family.expensemanager.expense.dao.WalletDaoImpl", "selectByFamilyId", familyId);
         try {
-            org.seasar.doma.jdbc.query.SqlFileSelectQuery __query = __support.getQueryImplementors().createSqlFileSelectQuery(__method1);
-            __query.setMethod(__method1);
+            org.seasar.doma.jdbc.query.SqlFileSelectQuery __query = __support.getQueryImplementors().createSqlFileSelectQuery(__method2);
+            __query.setMethod(__method2);
             __query.setConfig(__support.getConfig());
             __query.setSqlFilePath("META-INF/com/family/expensemanager/expense/dao/WalletDao/selectByFamilyId.sql");
             __query.setEntityType(com.family.expensemanager.expense.domain.entity._Wallet.getSingletonInternal());
@@ -80,7 +115,7 @@ public class WalletDaoImpl implements com.family.expensemanager.expense.dao.Wall
             __query.setFetchSize(-1);
             __query.setSqlLogType(org.seasar.doma.jdbc.SqlLogType.FORMATTED);
             __query.prepare();
-            org.seasar.doma.jdbc.command.SelectCommand<java.util.List<com.family.expensemanager.expense.domain.entity.Wallet>> __command = __support.getCommandImplementors().createSelectCommand(__method1, __query, new org.seasar.doma.internal.jdbc.command.EntityResultListHandler<com.family.expensemanager.expense.domain.entity.Wallet>(com.family.expensemanager.expense.domain.entity._Wallet.getSingletonInternal()));
+            org.seasar.doma.jdbc.command.SelectCommand<java.util.List<com.family.expensemanager.expense.domain.entity.Wallet>> __command = __support.getCommandImplementors().createSelectCommand(__method2, __query, new org.seasar.doma.internal.jdbc.command.EntityResultListHandler<com.family.expensemanager.expense.domain.entity.Wallet>(com.family.expensemanager.expense.domain.entity._Wallet.getSingletonInternal()));
             java.util.List<com.family.expensemanager.expense.domain.entity.Wallet> __result = __command.execute();
             __query.complete();
             __support.exiting("com.family.expensemanager.expense.dao.WalletDaoImpl", "selectByFamilyId", __result);
@@ -95,8 +130,8 @@ public class WalletDaoImpl implements com.family.expensemanager.expense.dao.Wall
     public java.util.Optional<com.family.expensemanager.expense.domain.entity.Wallet> selectById(java.lang.Long id) {
         __support.entering("com.family.expensemanager.expense.dao.WalletDaoImpl", "selectById", id);
         try {
-            org.seasar.doma.jdbc.query.SqlFileSelectQuery __query = __support.getQueryImplementors().createSqlFileSelectQuery(__method2);
-            __query.setMethod(__method2);
+            org.seasar.doma.jdbc.query.SqlFileSelectQuery __query = __support.getQueryImplementors().createSqlFileSelectQuery(__method3);
+            __query.setMethod(__method3);
             __query.setConfig(__support.getConfig());
             __query.setSqlFilePath("META-INF/com/family/expensemanager/expense/dao/WalletDao/selectById.sql");
             __query.setEntityType(com.family.expensemanager.expense.domain.entity._Wallet.getSingletonInternal());
@@ -111,7 +146,7 @@ public class WalletDaoImpl implements com.family.expensemanager.expense.dao.Wall
             __query.setFetchSize(-1);
             __query.setSqlLogType(org.seasar.doma.jdbc.SqlLogType.FORMATTED);
             __query.prepare();
-            org.seasar.doma.jdbc.command.SelectCommand<java.util.Optional<com.family.expensemanager.expense.domain.entity.Wallet>> __command = __support.getCommandImplementors().createSelectCommand(__method2, __query, new org.seasar.doma.internal.jdbc.command.OptionalEntitySingleResultHandler<com.family.expensemanager.expense.domain.entity.Wallet>(com.family.expensemanager.expense.domain.entity._Wallet.getSingletonInternal()));
+            org.seasar.doma.jdbc.command.SelectCommand<java.util.Optional<com.family.expensemanager.expense.domain.entity.Wallet>> __command = __support.getCommandImplementors().createSelectCommand(__method3, __query, new org.seasar.doma.internal.jdbc.command.OptionalEntitySingleResultHandler<com.family.expensemanager.expense.domain.entity.Wallet>(com.family.expensemanager.expense.domain.entity._Wallet.getSingletonInternal()));
             java.util.Optional<com.family.expensemanager.expense.domain.entity.Wallet> __result = __command.execute();
             __query.complete();
             __support.exiting("com.family.expensemanager.expense.dao.WalletDaoImpl", "selectById", __result);

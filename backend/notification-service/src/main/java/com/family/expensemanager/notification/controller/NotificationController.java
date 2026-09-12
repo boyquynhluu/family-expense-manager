@@ -5,23 +5,41 @@ import com.family.expensemanager.common.security.CurrentUser;
 import com.family.expensemanager.notification.dto.NotificationResponse;
 import com.family.expensemanager.notification.service.NotificationService;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 @RestController
 @RequestMapping("/api/notifications")
+@RequiredArgsConstructor
+@Slf4j(topic = "NotificationController")
 public class NotificationController {
 
     private final NotificationService notificationService;
 
-    public NotificationController(NotificationService notificationService) {
-        this.notificationService = notificationService;
-    }
-
     @GetMapping
     public ApiResponse<List<NotificationResponse>> list() {
+        log.info("list - start");
         return ApiResponse.ok(notificationService.listByFamily(CurrentUser.familyId()));
+    }
+
+    @PutMapping("/{id}/read")
+    public ApiResponse<Void> markAsRead(@PathVariable Long id) {
+        log.info("markAsRead - start, id={}", id);
+        notificationService.markAsRead(id, CurrentUser.familyId());
+        return ApiResponse.ok();
+    }
+
+    @PutMapping("/read-all")
+    public ApiResponse<Void> markAllAsRead() {
+        log.info("markAllAsRead - start");
+        notificationService.markAllAsRead(CurrentUser.familyId());
+        return ApiResponse.ok();
     }
 }

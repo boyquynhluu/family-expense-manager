@@ -7,7 +7,9 @@ SELECT
     role,
     active,
     verification_token,
-    verification_token_expires_at
+    verification_token_expires_at,
+    provider,
+    provider_id
 FROM
     USERS
 WHERE

@@ -15,6 +15,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.List;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * Pre-validates JWTs at the gateway so bad requests fail fast, without being the sole
  * source of truth — each downstream service re-verifies independently (see README
@@ -26,6 +29,8 @@ import java.util.List;
  * own {@link FormFilter}.
  */
 @Component
+@RequiredArgsConstructor
+@Slf4j(topic = "JwtGatewayFilter")
 public class JwtGatewayFilter extends OncePerRequestFilter implements Ordered {
 
     private static final List<String> PUBLIC_PATHS = List.of(
@@ -35,10 +40,6 @@ public class JwtGatewayFilter extends OncePerRequestFilter implements Ordered {
             "/api/auth/verify");
 
     private final JwtUtil jwtUtil;
-
-    public JwtGatewayFilter(JwtUtil jwtUtil) {
-        this.jwtUtil = jwtUtil;
-    }
 
     @Override
     public int getOrder() {
@@ -64,6 +65,7 @@ public class JwtGatewayFilter extends OncePerRequestFilter implements Ordered {
         try {
             jwtUtil.parseClaims(header.substring(7));
         } catch (Exception e) {
+            log.warn("JWT không hợp lệ tại gateway cho path {}: {}", path, e.getMessage());
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             return;
         }
@@ -73,6 +75,8 @@ public class JwtGatewayFilter extends OncePerRequestFilter implements Ordered {
 
     private boolean isPublic(String path) {
         return PUBLIC_PATHS.contains(path)
+                || path.startsWith("/api/auth/oauth2/")
+                || path.startsWith("/api/auth/login/oauth2/")
                 || path.endsWith("/v3/api-docs")
                 || path.contains("/v3/api-docs/")
                 || path.startsWith("/swagger-ui")

@@ -1,7 +1,7 @@
 package com.family.expensemanager.expense.dao;
 
 /** */
-@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-06T23:15:04.157+0700")
+@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-11T22:49:12.169+0700")
 @org.seasar.doma.DaoImplementation
 public class TransactionDaoImpl implements com.family.expensemanager.expense.dao.TransactionDao, org.seasar.doma.jdbc.ConfigProvider {
 
@@ -22,6 +22,8 @@ public class TransactionDaoImpl implements com.family.expensemanager.expense.dao
     private static final java.lang.reflect.Method __method5 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.expense.dao.TransactionDao.class, "sumAmountByCategoryPeriodAndType", java.lang.Long.class, java.lang.Long.class, java.lang.String.class, java.lang.String.class);
 
     private static final java.lang.reflect.Method __method6 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.expense.dao.TransactionDao.class, "sumAmountByFamilyPeriodAndType", java.lang.Long.class, java.lang.String.class, java.lang.String.class);
+
+    private static final java.lang.reflect.Method __method7 = org.seasar.doma.internal.jdbc.dao.DaoImplSupport.getDeclaredMethod(com.family.expensemanager.expense.dao.TransactionDao.class, "sumAmountByWalletAndType", java.lang.Long.class, java.lang.String.class);
 
     private final org.seasar.doma.internal.jdbc.dao.DaoImplSupport __support;
 
@@ -253,6 +255,37 @@ public class TransactionDaoImpl implements com.family.expensemanager.expense.dao
             return __result;
         } catch (java.lang.RuntimeException __e) {
             __support.throwing("com.family.expensemanager.expense.dao.TransactionDaoImpl", "sumAmountByFamilyPeriodAndType", __e);
+            throw __e;
+        }
+    }
+
+    @Override
+    public java.math.BigDecimal sumAmountByWalletAndType(java.lang.Long walletId, java.lang.String type) {
+        __support.entering("com.family.expensemanager.expense.dao.TransactionDaoImpl", "sumAmountByWalletAndType", walletId, type);
+        try {
+            org.seasar.doma.jdbc.query.SqlFileSelectQuery __query = __support.getQueryImplementors().createSqlFileSelectQuery(__method7);
+            __query.setMethod(__method7);
+            __query.setConfig(__support.getConfig());
+            __query.setSqlFilePath("META-INF/com/family/expensemanager/expense/dao/TransactionDao/sumAmountByWalletAndType.sql");
+            __query.addParameter("walletId", java.lang.Long.class, walletId);
+            __query.addParameter("type", java.lang.String.class, type);
+            __query.setCallerClassName("com.family.expensemanager.expense.dao.TransactionDaoImpl");
+            __query.setCallerMethodName("sumAmountByWalletAndType");
+            __query.setResultEnsured(false);
+            __query.setResultMappingEnsured(false);
+            __query.setFetchType(org.seasar.doma.FetchType.LAZY);
+            __query.setQueryTimeout(-1);
+            __query.setMaxRows(-1);
+            __query.setFetchSize(-1);
+            __query.setSqlLogType(org.seasar.doma.jdbc.SqlLogType.FORMATTED);
+            __query.prepare();
+            org.seasar.doma.jdbc.command.SelectCommand<java.math.BigDecimal> __command = __support.getCommandImplementors().createSelectCommand(__method7, __query, new org.seasar.doma.internal.jdbc.command.BasicSingleResultHandler<java.math.BigDecimal>(org.seasar.doma.internal.wrapper.WrapperSuppliers.ofBigDecimal()));
+            java.math.BigDecimal __result = __command.execute();
+            __query.complete();
+            __support.exiting("com.family.expensemanager.expense.dao.TransactionDaoImpl", "sumAmountByWalletAndType", __result);
+            return __result;
+        } catch (java.lang.RuntimeException __e) {
+            __support.throwing("com.family.expensemanager.expense.dao.TransactionDaoImpl", "sumAmountByWalletAndType", __e);
             throw __e;
         }
     }

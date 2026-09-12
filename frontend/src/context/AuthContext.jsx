@@ -1,5 +1,6 @@
 import { createContext, useEffect, useMemo, useState } from "react";
 import client from "../api/client";
+import { clearTokens, getAccessToken, saveTokens } from "../utils/tokenStorage";
 
 export const AuthContext = createContext(null);
 
@@ -14,9 +15,9 @@ function decodeJwt(token) {
 }
 
 export function AuthProvider({ children }) {
-  const [accessToken, setAccessToken] = useState(() => localStorage.getItem("accessToken"));
+  const [accessToken, setAccessToken] = useState(() => getAccessToken());
   const [claims, setClaims] = useState(() => {
-    const token = localStorage.getItem("accessToken");
+    const token = getAccessToken();
     return token ? decodeJwt(token) : null;
   });
 
@@ -24,16 +25,22 @@ export function AuthProvider({ children }) {
     setClaims(accessToken ? decodeJwt(accessToken) : null);
   }, [accessToken]);
 
-  function persistTokens(newAccessToken, newRefreshToken) {
-    localStorage.setItem("accessToken", newAccessToken);
-    localStorage.setItem("refreshToken", newRefreshToken);
+  function persistTokens(newAccessToken, newRefreshToken, remember) {
+    saveTokens(newAccessToken, newRefreshToken, remember);
     setAccessToken(newAccessToken);
   }
 
-  async function login(email, password) {
+  async function login(email, password, remember = true) {
     const res = await client.post("/auth/login", { email, password });
     const { accessToken: token, refreshToken } = res.data.data;
-    persistTokens(token, refreshToken);
+    persistTokens(token, refreshToken, remember);
+  }
+
+  // Called by OAuth2Callback with the tokens auth-service appended to the redirect
+  // after a Google/Facebook login — there's no "remember me" step in that flow, so it
+  // always persists to localStorage (same as password login left checked by default).
+  function loginWithTokens(newAccessToken, newRefreshToken) {
+    persistTokens(newAccessToken, newRefreshToken, true);
   }
 
   async function register(familyName, email, password, displayName) {
@@ -45,8 +52,7 @@ export function AuthProvider({ children }) {
   }
 
   function logout() {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
+    clearTokens();
     setAccessToken(null);
   }
 
@@ -57,6 +63,7 @@ export function AuthProvider({ children }) {
       role: claims?.role ?? null,
       userId: claims?.sub ?? null,
       login,
+      loginWithTokens,
       register,
       logout,
     }),

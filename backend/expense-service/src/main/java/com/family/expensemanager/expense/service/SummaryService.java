@@ -9,7 +9,12 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.util.List;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 @Service
+@RequiredArgsConstructor
+@Slf4j(topic = "SummaryService")
 public class SummaryService {
 
     private static final String TYPE_INCOME = "INCOME";
@@ -18,13 +23,9 @@ public class SummaryService {
     private final TransactionDao transactionDao;
     private final CategoryService categoryService;
 
-    public SummaryService(TransactionDao transactionDao, CategoryService categoryService) {
-        this.transactionDao = transactionDao;
-        this.categoryService = categoryService;
-    }
-
     @Cacheable(cacheNames = "expense:summary", key = "#familyId + ':' + #yearMonth")
     public SummaryResponse summary(Long familyId, String yearMonth) {
+        log.info("summary - start, familyId={}, yearMonth={}", familyId, yearMonth);
         BigDecimal totalIncome = transactionDao.sumAmountByFamilyPeriodAndType(familyId, yearMonth, TYPE_INCOME);
         BigDecimal totalExpense = transactionDao.sumAmountByFamilyPeriodAndType(familyId, yearMonth, TYPE_EXPENSE);
         return new SummaryResponse(yearMonth, totalIncome, totalExpense, totalIncome.subtract(totalExpense));
@@ -32,6 +33,7 @@ public class SummaryService {
 
     @Cacheable(cacheNames = "expense:report:category", key = "#familyId + ':' + #yearMonth")
     public List<CategoryReportItem> reportByCategory(Long familyId, String yearMonth) {
+        log.info("reportByCategory - start, familyId={}, yearMonth={}", familyId, yearMonth);
         return categoryService.listByFamily(familyId).stream()
                 .filter(c -> TYPE_EXPENSE.equals(c.type()))
                 .map(c -> new CategoryReportItem(c.id(), c.name(),

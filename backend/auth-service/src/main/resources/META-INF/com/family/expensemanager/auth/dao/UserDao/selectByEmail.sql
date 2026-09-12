@@ -5,7 +5,9 @@ SELECT
     password_hash,
     display_name,
     role,
-    active
+    active,
+    provider,
+    provider_id
 FROM
     USERS
 WHERE

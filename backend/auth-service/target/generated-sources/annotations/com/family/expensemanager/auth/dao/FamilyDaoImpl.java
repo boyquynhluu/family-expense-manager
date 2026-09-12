@@ -1,7 +1,7 @@
 package com.family.expensemanager.auth.dao;
 
 /** */
-@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-07T22:22:26.923+0700")
+@javax.annotation.processing.Generated(value = { "Doma", "2.61.0" }, date = "2026-09-11T22:49:07.391+0700")
 @org.seasar.doma.DaoImplementation
 public class FamilyDaoImpl implements com.family.expensemanager.auth.dao.FamilyDao, org.seasar.doma.jdbc.ConfigProvider {
 

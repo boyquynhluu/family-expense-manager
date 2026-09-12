@@ -17,38 +17,44 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 @RestController
 @RequestMapping("/api/expenses/transactions")
+@RequiredArgsConstructor
+@Slf4j(topic = "TransactionController")
 public class TransactionController {
 
     private final TransactionService transactionService;
 
-    public TransactionController(TransactionService transactionService) {
-        this.transactionService = transactionService;
-    }
-
     @PostMapping
     public ApiResponse<TransactionResponse> create(@Valid @RequestBody TransactionRequest request) {
+        log.info("create - start");
         return ApiResponse.ok(transactionService.create(CurrentUser.familyId(), CurrentUser.userId(), request));
     }
 
     @GetMapping
     public ApiResponse<List<TransactionResponse>> list() {
+        log.info("list - start");
         return ApiResponse.ok(transactionService.listByFamily(CurrentUser.familyId()));
     }
 
     @GetMapping("/{id}")
     public ApiResponse<TransactionResponse> get(@PathVariable Long id) {
+        log.info("get - start, id={}", id);
         return ApiResponse.ok(transactionService.get(CurrentUser.familyId(), id));
     }
 
     @PutMapping("/{id}")
     public ApiResponse<TransactionResponse> update(@PathVariable Long id, @Valid @RequestBody TransactionRequest request) {
+        log.info("update - start, id={}", id);
         return ApiResponse.ok(transactionService.update(CurrentUser.familyId(), id, request));
     }
 
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable Long id) {
+        log.info("delete - start, id={}", id);
         transactionService.delete(CurrentUser.familyId(), id);
         return ApiResponse.ok();
     }

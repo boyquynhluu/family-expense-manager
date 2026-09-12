@@ -15,19 +15,20 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.List;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * Verifies the JWT on every request independently of the gateway (defense in depth —
  * see README "Bảo mật"). On a valid token it populates the SecurityContext with the
  * user id as principal and a ROLE_&lt;role&gt; authority; on a missing/invalid token it
  * simply leaves the context empty and lets Spring Security's access rules decide.
  */
+@RequiredArgsConstructor
+@Slf4j(topic = "JwtAuthenticationFilter")
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
-
-    public JwtAuthenticationFilter(JwtUtil jwtUtil) {
-        this.jwtUtil = jwtUtil;
-    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -47,6 +48,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 authentication.setDetails(claims);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } catch (Exception e) {
+                log.warn("JWT không hợp lệ, bỏ qua xác thực: {}", e.getMessage());
                 SecurityContextHolder.clearContext();
             }
         }

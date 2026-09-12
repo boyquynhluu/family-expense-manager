@@ -14,6 +14,18 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID:}
+            client-secret: ${GOOGLE_CLIENT_SECRET:}
+            scope: openid,email,profile
+            redirect-uri: ${app.base-url}/api/auth/login/oauth2/code/{registrationId}
+          # Facebook tạm bỏ: Spring Boot validate mọi registration khai báo ở đây phải có
+          # client-id/secret không rỗng, nên để trống sẽ làm app không start được. Thêm lại
+          # khối này (và FACEBOOK_CLIENT_ID/SECRET trong infra/.env) khi có Facebook App thật.
 
 eureka:
   client:
@@ -27,6 +39,14 @@ jwt:
 
 auth:
   verification-token-ttl-hours: 24
+
+# Public URL of the api-gateway (not this service) as seen by the browser and by
+# Google/Facebook's OAuth2 redirect — must match a redirect URI registered in each
+# provider's console, e.g. http://localhost:8080/api/auth/login/oauth2/code/google.
+app:
+  base-url: ${APP_BASE_URL:http://localhost:8080}
+  oauth2:
+    success-redirect-url: ${OAUTH2_SUCCESS_REDIRECT_URL:http://localhost:5173/oauth2/callback}
 
 kafka:
   topic:
