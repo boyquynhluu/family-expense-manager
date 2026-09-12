@@ -488,16 +488,19 @@ select:focus {
 /* App shell */
 .app-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .sidebar {
   width: 220px;
+  flex-shrink: 0;
   background: #1f2430;
   color: #fff;
   display: flex;
   flex-direction: column;
   padding: 1.5rem 1rem;
+  overflow-y: auto;
 }
 
 .sidebar .brand {
@@ -564,6 +567,18 @@ select:focus {
   text-align: center;
 }
 
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: auto;
+  padding: 0.55rem 0.75rem;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-top: 1px solid #3a4152;
+}
+
 .logout-btn {
   display: flex;
   align-items: center;
@@ -572,7 +587,7 @@ select:focus {
   background: transparent;
   border: 1px solid #3a4152;
   color: #cbd5e1;
-  margin-top: auto;
+  margin-top: 0.75rem;
 }
 
 .logout-btn:hover {
@@ -583,6 +598,7 @@ select:focus {
   flex: 1;
   padding: 2rem;
   overflow-x: auto;
+  overflow-y: auto;
 }
 
 /* Page header shared by content pages */
@@ -651,6 +667,35 @@ select:focus {
 .field select {
   font-weight: 400;
   color: #1f2430;
+}
+
+.password-field-wrapper {
+  position: relative;
+  display: flex;
+}
+
+.password-field-wrapper input {
+  width: 100%;
+  padding-right: 2.25rem;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 0;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.password-toggle-btn:hover {
+  color: #374151;
+  background: none;
 }
 
 .btn-secondary {

@@ -1,7 +1,17 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useUnreadNotifications } from "../hooks/useUnreadNotifications";
-import { BellIcon, GridIcon, LogoutIcon, PieChartIcon, ReceiptIcon, TagIcon, UserIcon, WalletIcon } from "./AppIcons";
+import {
+  BellIcon,
+  GridIcon,
+  LogoutIcon,
+  PieChartIcon,
+  ReceiptIcon,
+  ShieldIcon,
+  TagIcon,
+  UserIcon,
+  WalletIcon,
+} from "./AppIcons";
 
 const links = [
   { to: "/", label: "Dashboard", icon: GridIcon },
@@ -14,8 +24,11 @@ const links = [
 ];
 
 export default function Layout() {
-  const { logout } = useAuth();
+  const { logout, displayName, isSystemAdmin } = useAuth();
   const unreadCount = useUnreadNotifications();
+  const visibleLinks = isSystemAdmin
+    ? [...links, { to: "/admin", label: "Quản trị hệ thống", icon: ShieldIcon }]
+    : links;
 
   return (
     <div className="app-shell">
@@ -25,7 +38,7 @@ export default function Layout() {
           <span>Family Expense</span>
         </div>
         <ul>
-          {links.map((link) => {
+          {visibleLinks.map((link) => {
             const Icon = link.icon;
             return (
               <li key={link.to}>
@@ -40,6 +53,12 @@ export default function Layout() {
             );
           })}
         </ul>
+        {displayName && (
+          <div className="sidebar-user">
+            <UserIcon />
+            <span>{displayName}</span>
+          </div>
+        )}
         <button type="button" className="logout-btn" onClick={logout}>
           <LogoutIcon />
           Đăng xuất

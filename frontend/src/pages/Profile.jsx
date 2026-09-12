@@ -1,15 +1,21 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import client from "../api/client";
+import { EyeIcon, EyeOffIcon } from "../components/AuthIcons";
+
+const RELATIONSHIP_OPTIONS = ["Bố", "Mẹ", "Ông", "Bà", "Anh", "Chị", "Em", "Con", "Cháu", "Khác"];
 
 export default function Profile() {
   const [profile, setProfile] = useState(null);
   const [displayName, setDisplayName] = useState("");
+  const [relationship, setRelationship] = useState("");
   const [profileError, setProfileError] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
 
@@ -26,6 +32,7 @@ export default function Profile() {
     client.get("/auth/me").then((res) => {
       setProfile(res.data.data);
       setDisplayName(res.data.data.displayName);
+      setRelationship(res.data.data.relationship ?? "");
     });
     loadMembers();
   }, []);
@@ -50,7 +57,7 @@ export default function Profile() {
     setProfileError("");
     setSavingProfile(true);
     try {
-      const res = await client.put("/auth/me", { displayName });
+      const res = await client.put("/auth/me", { displayName, relationship: relationship || null });
       setProfile(res.data.data);
       toast.success("Cập nhật hồ sơ thành công");
     } catch (err) {
@@ -101,6 +108,17 @@ export default function Profile() {
             <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
           </label>
           <label className="field">
+            Quan hệ trong gia đình
+            <select value={relationship} onChange={(e) => setRelationship(e.target.value)}>
+              <option value="">Không chọn</option>
+              {RELATIONSHIP_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
             Vai trò
             <input value={profile.role} disabled />
           </label>
@@ -121,22 +139,42 @@ export default function Profile() {
           <form className="inline-form" onSubmit={handlePasswordSubmit}>
             <label className="field">
               Mật khẩu hiện tại
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                required
-              />
+              <div className="password-field-wrapper">
+                <input
+                  type={showCurrentPassword ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowCurrentPassword((v) => !v)}
+                  aria-label={showCurrentPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                >
+                  {showCurrentPassword ? <EyeOffIcon /> : <EyeIcon />}
+                </button>
+              </div>
             </label>
             <label className="field">
               Mật khẩu mới
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                minLength={8}
-                required
-              />
+              <div className="password-field-wrapper">
+                <input
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  minLength={8}
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowNewPassword((v) => !v)}
+                  aria-label={showNewPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                >
+                  {showNewPassword ? <EyeOffIcon /> : <EyeIcon />}
+                </button>
+              </div>
             </label>
             <button type="submit" disabled={savingPassword}>
               {savingPassword ? "Đang lưu..." : "Đổi mật khẩu"}
@@ -157,6 +195,7 @@ export default function Profile() {
                 <th>Tên hiển thị</th>
                 <th>Email</th>
                 <th>Vai trò</th>
+                <th>Quan hệ</th>
               </tr>
             </thead>
             <tbody>
@@ -165,6 +204,7 @@ export default function Profile() {
                   <td>{m.displayName}</td>
                   <td>{m.email}</td>
                   <td>{m.role}</td>
+                  <td>{m.relationship || "-"}</td>
                 </tr>
               ))}
             </tbody>

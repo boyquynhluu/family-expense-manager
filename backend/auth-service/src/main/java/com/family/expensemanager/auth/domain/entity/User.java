@@ -50,6 +50,12 @@ public class User {
     @Column(name = "provider_id")
     private String providerId;
 
+    @Column(name = "is_system_admin")
+    private Boolean isSystemAdmin;
+
+    /** Purely informational family label (Bố, Mẹ, Anh, Chị, Em, ...) — no business logic reads it. */
+    private String relationship;
+
     public Long getId() {
         return id;
     }
@@ -152,5 +158,21 @@ public class User {
 
     public void setProviderId(String providerId) {
         this.providerId = providerId;
+    }
+
+    public Boolean getIsSystemAdmin() {
+        return isSystemAdmin;
+    }
+
+    public void setIsSystemAdmin(Boolean isSystemAdmin) {
+        this.isSystemAdmin = isSystemAdmin;
+    }
+
+    public String getRelationship() {
+        return relationship;
+    }
+
+    public void setRelationship(String relationship) {
+        this.relationship = relationship;
     }
 }

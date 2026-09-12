@@ -17,6 +17,7 @@ import Transactions from "./pages/Transactions";
 import Budgets from "./pages/Budgets";
 import Notifications from "./pages/Notifications";
 import Profile from "./pages/Profile";
+import AdminPanel from "./pages/AdminPanel";
 
 export default function App() {
   return (
@@ -40,6 +41,7 @@ export default function App() {
               <Route path="/budgets" element={<Budgets />} />
               <Route path="/notifications" element={<Notifications />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/admin" element={<AdminPanel />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

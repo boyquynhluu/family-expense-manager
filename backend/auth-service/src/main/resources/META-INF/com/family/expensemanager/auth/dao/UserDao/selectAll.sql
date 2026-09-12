@@ -16,5 +16,5 @@ SELECT
     relationship
 FROM
     USERS
-WHERE
-    email = /* email */'test@gmail.com'
+ORDER BY
+    id

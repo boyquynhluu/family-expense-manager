@@ -232,6 +232,7 @@ public class AuthService {
         User user = userDao.selectById(userId)
                 .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
         user.setDisplayName(request.displayName());
+        user.setRelationship(request.relationship());
         userDao.update(user);
         return UserProfileResponse.from(user);
     }
@@ -378,7 +379,9 @@ public class AuthService {
         log.info("issueTokens - start, userId={}", user.getId());
         Map<String, Object> claims = Map.of(
                 JwtUtil.CLAIM_FAMILY_ID, user.getFamilyId(),
-                JwtUtil.CLAIM_ROLE, user.getRole());
+                JwtUtil.CLAIM_ROLE, user.getRole(),
+                JwtUtil.CLAIM_DISPLAY_NAME, user.getDisplayName(),
+                JwtUtil.CLAIM_IS_SYSTEM_ADMIN, Boolean.TRUE.equals(user.getIsSystemAdmin()));
         String accessToken = jwtUtil.generateToken(String.valueOf(user.getId()), claims, accessTokenTtlMillis);
 
         String rawRefreshToken = generateOpaqueToken();

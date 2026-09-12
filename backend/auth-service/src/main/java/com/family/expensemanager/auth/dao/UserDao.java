@@ -36,4 +36,10 @@ public interface UserDao {
 
     @Select
     Optional<User> selectByProviderAndProviderId(String provider, String providerId);
+
+    @Select
+    List<User> selectAll();
+
+    @Select
+    long countByFamilyId(Long familyId);
 }

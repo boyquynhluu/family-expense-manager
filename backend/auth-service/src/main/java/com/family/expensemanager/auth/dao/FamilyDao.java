@@ -1,5 +1,6 @@
 package com.family.expensemanager.auth.dao;
 
+import java.util.List;
 import java.util.Optional;
 
 import com.family.expensemanager.auth.domain.entity.Family;
@@ -15,4 +16,7 @@ public interface FamilyDao {
 
     @Select
     Optional<Family> selectById(Long id);
+
+    @Select
+    List<Family> selectAll();
 }

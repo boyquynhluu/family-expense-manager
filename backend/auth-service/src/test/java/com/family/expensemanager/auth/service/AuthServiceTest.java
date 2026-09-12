@@ -263,13 +263,14 @@ class AuthServiceTest {
     }
 
     @Test
-    void updateProfile_updatesDisplayName() {
+    void updateProfile_updatesDisplayNameAndRelationship() {
         User user = activeLocalUser();
         when(userDao.selectById(1L)).thenReturn(Optional.of(user));
 
-        var response = authService.updateProfile(1L, new UpdateProfileRequest("Tên Mới"));
+        var response = authService.updateProfile(1L, new UpdateProfileRequest("Tên Mới", "Bố"));
 
         assertThat(response.displayName()).isEqualTo("Tên Mới");
+        assertThat(response.relationship()).isEqualTo("Bố");
         verify(userDao).update(user);
     }
 
