@@ -259,6 +259,25 @@ public class AuthService {
         return userDao.selectByFamilyId(familyId).stream().map(UserProfileResponse::from).toList();
     }
 
+    @Transactional
+    @PreAuthorize("hasRole('OWNER')")
+    public void removeMember(Long familyId, Long callerUserId, Long targetUserId) {
+        log.info("removeMember - start, familyId={}, targetUserId={}", familyId, targetUserId);
+        if (targetUserId.equals(callerUserId)) {
+            throw new BadRequestException("Không thể tự xoá chính mình khỏi gia đình");
+        }
+        User target = userDao.selectById(targetUserId)
+                .orElseThrow(() -> new NotFoundException("Thành viên không tồn tại: " + targetUserId));
+        if (!target.getFamilyId().equals(familyId)) {
+            throw new NotFoundException("Thành viên không tồn tại: " + targetUserId);
+        }
+        if (ROLE_OWNER.equals(target.getRole())) {
+            throw new BadRequestException("Không thể xoá chủ hộ khỏi gia đình");
+        }
+        refreshTokenDao.deleteByUserId(targetUserId);
+        userDao.delete(target);
+    }
+
     @PreAuthorize("hasRole('OWNER')")
     public MessageResponse inviteMember(Long familyId, Long inviterUserId, InviteMemberRequest request) {
         log.info("inviteMember - start, familyId={}, email={}", familyId, request.email());

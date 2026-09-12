@@ -275,6 +275,47 @@ class AuthServiceTest {
     }
 
     @Test
+    void removeMember_deletesUserAndRevokesSessions_whenValidMember() {
+        User member = activeLocalUser();
+        member.setId(5L);
+        member.setRole("MEMBER");
+        when(userDao.selectById(5L)).thenReturn(Optional.of(member));
+
+        authService.removeMember(1L, 1L, 5L);
+
+        verify(refreshTokenDao).deleteByUserId(5L);
+        verify(userDao).delete(member);
+    }
+
+    @Test
+    void removeMember_throwsBadRequest_whenRemovingSelf() {
+        assertThatThrownBy(() -> authService.removeMember(1L, 1L, 1L)).isInstanceOf(BadRequestException.class);
+        verify(userDao, never()).delete(any());
+    }
+
+    @Test
+    void removeMember_throwsNotFound_whenTargetInAnotherFamily() {
+        User member = activeLocalUser();
+        member.setId(5L);
+        member.setFamilyId(2L);
+        member.setRole("MEMBER");
+        when(userDao.selectById(5L)).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> authService.removeMember(1L, 1L, 5L)).isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void removeMember_throwsBadRequest_whenTargetIsOwner() {
+        User owner = activeLocalUser();
+        owner.setId(5L);
+        owner.setRole("OWNER");
+        when(userDao.selectById(5L)).thenReturn(Optional.of(owner));
+
+        assertThatThrownBy(() -> authService.removeMember(1L, 1L, 5L)).isInstanceOf(BadRequestException.class);
+        verify(userDao, never()).delete(any());
+    }
+
+    @Test
     void inviteMember_throwsConflict_whenEmailAlreadyRegistered() {
         when(userDao.selectByEmail("existing@b.com")).thenReturn(Optional.of(new User()));
 
