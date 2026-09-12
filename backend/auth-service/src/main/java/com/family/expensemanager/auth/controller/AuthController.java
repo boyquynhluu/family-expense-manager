@@ -17,6 +17,7 @@ import com.family.expensemanager.auth.service.AuthService;
 import com.family.expensemanager.common.dto.ApiResponse;
 import com.family.expensemanager.common.security.CurrentUser;
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -105,6 +106,13 @@ public class AuthController {
     public ApiResponse<List<UserProfileResponse>> familyMembers() {
         log.info("familyMembers - start");
         return ApiResponse.ok(authService.getFamilyMembers(CurrentUser.familyId()));
+    }
+
+    @DeleteMapping("/family/members/{userId}")
+    public ApiResponse<MessageResponse> removeMember(@PathVariable Long userId) {
+        log.info("removeMember - start, userId={}", userId);
+        authService.removeMember(CurrentUser.familyId(), CurrentUser.userId(), userId);
+        return ApiResponse.ok(new MessageResponse("Đã xoá thành viên khỏi gia đình"));
     }
 
     @PostMapping("/invite")

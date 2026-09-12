@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import client from "../api/client";
 import { EyeIcon, EyeOffIcon } from "../components/AuthIcons";
+import { TrashIcon } from "../components/AppIcons";
 
 const RELATIONSHIP_OPTIONS = ["Bố", "Mẹ", "Ông", "Bà", "Anh", "Chị", "Em", "Con", "Cháu", "Khác"];
 
@@ -37,6 +38,17 @@ export default function Profile() {
     loadMembers();
   }, []);
 
+  async function handleRemoveMember(member) {
+    if (!window.confirm(`Xoá ${member.displayName} khỏi gia đình? Hành động này không thể hoàn tác.`)) return;
+    try {
+      await client.delete(`/auth/family/members/${member.id}`);
+      toast.success("Đã xoá thành viên khỏi gia đình");
+      loadMembers();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Xoá thành viên thất bại");
+    }
+  }
+
   async function handleInviteSubmit(e) {
     e.preventDefault();
     setInviteError("");
@@ -59,6 +71,7 @@ export default function Profile() {
     try {
       const res = await client.put("/auth/me", { displayName, relationship: relationship || null });
       setProfile(res.data.data);
+      loadMembers();
       toast.success("Cập nhật hồ sơ thành công");
     } catch (err) {
       setProfileError(err.response?.data?.message || "Cập nhật hồ sơ thất bại");
@@ -196,6 +209,7 @@ export default function Profile() {
                 <th>Email</th>
                 <th>Vai trò</th>
                 <th>Quan hệ</th>
+                {profile.role === "OWNER" && <th></th>}
               </tr>
             </thead>
             <tbody>
@@ -205,6 +219,20 @@ export default function Profile() {
                   <td>{m.email}</td>
                   <td>{m.role}</td>
                   <td>{m.relationship || "-"}</td>
+                  {profile.role === "OWNER" && (
+                    <td className="row-actions">
+                      {m.role !== "OWNER" && (
+                        <button
+                          type="button"
+                          className="icon-btn icon-btn-danger"
+                          onClick={() => handleRemoveMember(m)}
+                          aria-label="Xoá"
+                        >
+                          <TrashIcon />
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
