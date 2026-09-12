@@ -1132,3 +1132,63 @@ select:focus {
   color: #4b5563;
   font-size: 0.9rem;
 }
+
+.custom-swal-popup {
+    border-radius: 18px !important;
+    padding: 30px !important;
+    width: 420px !important;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15) !important;
+}
+
+.custom-swal-title {
+    font-size: 24px !important;
+    font-weight: 600 !important;
+    color: #1f2937 !important;
+    margin-top: 10px !important;
+}
+
+.custom-swal-text {
+    font-size: 15px !important;
+    color: #6b7280 !important;
+    line-height: 1.6 !important;
+    margin-top: 8px !important;
+}
+
+.custom-swal-icon {
+    margin: 0 auto 10px !important;
+}
+
+.custom-swal-confirm {
+    background: #6366f1 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+    padding: 10px 24px !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    margin: 8px 5px 0 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+}
+
+.custom-swal-confirm:hover {
+    background: #4f46e5 !important;
+    transform: translateY(-1px);
+}
+
+.custom-swal-cancel {
+    background: #f3f4f6 !important;
+    color: #374151 !important;
+    border: none !important;
+    border-radius: 8px !important;
+    padding: 10px 24px !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    margin: 8px 5px 0 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+}
+
+.custom-swal-cancel:hover {
+    background: #e5e7eb !important;
+}
