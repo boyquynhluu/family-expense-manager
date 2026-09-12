@@ -24,6 +24,11 @@ public class NotificationService {
         return notificationDao.selectByFamilyId(familyId).stream().map(NotificationResponse::from).toList();
     }
 
+    public long countUnread(Long familyId) {
+        log.info("countUnread - start, familyId={}", familyId);
+        return notificationDao.countUnreadByFamilyId(familyId);
+    }
+
     @Transactional
     public void markAsRead(Long notificationId, Long familyId) {
         log.info("markAsRead - start, notificationId={}, familyId={}", notificationId, familyId);

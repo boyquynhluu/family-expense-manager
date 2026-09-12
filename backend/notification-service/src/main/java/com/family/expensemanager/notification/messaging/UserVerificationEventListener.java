@@ -19,8 +19,8 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Consumes {@code user-verification} events published by auth-service right after
- * registration, and emails the user an HTML verification link back to the gateway's
- * {@code GET /api/auth/verify?token=...} endpoint.
+ * registration, and emails the user an HTML verification link to the frontend's
+ * {@code /verify?token=...} page, which calls the API then routes to {@code /login}.
  */
 @Component
 @Slf4j(topic = "UserVerificationEventListener")
@@ -29,17 +29,17 @@ public class UserVerificationEventListener {
     private static final String TEMPLATE_PATH = "mail-templates/verification-email.html";
 
     private final JavaMailSender mailSender;
-    private final String baseUrl;
+    private final String frontendUrl;
     private final String fromAddress;
     private final long verificationTtlHours;
     private final String template;
 
     public UserVerificationEventListener(JavaMailSender mailSender,
-                                          @Value("${app.base-url}") String baseUrl,
+                                          @Value("${app.frontend-url}") String frontendUrl,
                                           @Value("${app.mail.from}") String fromAddress,
                                           @Value("${app.mail.verification-ttl-hours}") long verificationTtlHours) {
         this.mailSender = mailSender;
-        this.baseUrl = baseUrl;
+        this.frontendUrl = frontendUrl;
         this.fromAddress = fromAddress;
         this.verificationTtlHours = verificationTtlHours;
         this.template = loadTemplate();
@@ -47,7 +47,7 @@ public class UserVerificationEventListener {
 
     @KafkaListener(topics = "${kafka.topic.user-verification}")
     public void onUserVerificationEvent(UserVerificationEvent event) throws MessagingException {
-        String verifyLink = baseUrl + "/api/auth/verify?token=" + event.verificationToken();
+        String verifyLink = frontendUrl + "/verify?token=" + event.verificationToken();
 
         String html = template
                 .replace("{{displayName}}", event.displayName())

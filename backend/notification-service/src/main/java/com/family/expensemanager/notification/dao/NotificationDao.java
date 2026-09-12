@@ -23,4 +23,7 @@ public interface NotificationDao {
 
     @Select
     Optional<Notification> selectById(Long id);
+
+    @Select
+    long countUnreadByFamilyId(Long familyId);
 }

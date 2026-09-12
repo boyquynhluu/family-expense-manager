@@ -6,8 +6,11 @@ import com.family.expensemanager.expense.dto.CategoryResponse;
 import com.family.expensemanager.expense.dto.CreateCategoryRequest;
 import com.family.expensemanager.expense.service.CategoryService;
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,5 +38,18 @@ public class CategoryController {
     public ApiResponse<List<CategoryResponse>> list() {
         log.info("list - start");
         return ApiResponse.ok(categoryService.listByFamily(CurrentUser.familyId()));
+    }
+
+    @PutMapping("/{id}")
+    public ApiResponse<CategoryResponse> update(@PathVariable Long id, @Valid @RequestBody CreateCategoryRequest request) {
+        log.info("update - start, id={}", id);
+        return ApiResponse.ok(categoryService.update(id, CurrentUser.familyId(), request));
+    }
+
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> delete(@PathVariable Long id) {
+        log.info("delete - start, id={}", id);
+        categoryService.delete(id, CurrentUser.familyId());
+        return ApiResponse.ok();
     }
 }

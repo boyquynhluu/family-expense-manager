@@ -39,6 +39,8 @@ jwt:
 
 auth:
   verification-token-ttl-hours: 24
+  reset-password-token-ttl-hours: 1
+  invite-token-ttl-hours: 72
 
 # Public URL of the api-gateway (not this service) as seen by the browser and by
 # Google/Facebook's OAuth2 redirect — must match a redirect URI registered in each
@@ -51,6 +53,8 @@ app:
 kafka:
   topic:
     user-verification: user-verification
+    password-reset: password-reset
+    family-invite: family-invite
 
 management:
   endpoints:

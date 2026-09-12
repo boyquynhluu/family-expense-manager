@@ -38,6 +38,12 @@ public class User {
     @Column(name = "verification_token_expires_at")
     private LocalDateTime verificationTokenExpiresAt;
 
+    @Column(name = "reset_password_token")
+    private String resetPasswordToken;
+
+    @Column(name = "reset_password_token_expires_at")
+    private LocalDateTime resetPasswordTokenExpiresAt;
+
     /** {@code LOCAL}, {@code GOOGLE} or {@code FACEBOOK}. Null password_hash implies an OAuth2-only account. */
     private String provider;
 
@@ -114,6 +120,22 @@ public class User {
 
     public void setVerificationTokenExpiresAt(LocalDateTime verificationTokenExpiresAt) {
         this.verificationTokenExpiresAt = verificationTokenExpiresAt;
+    }
+
+    public String getResetPasswordToken() {
+        return resetPasswordToken;
+    }
+
+    public void setResetPasswordToken(String resetPasswordToken) {
+        this.resetPasswordToken = resetPasswordToken;
+    }
+
+    public LocalDateTime getResetPasswordTokenExpiresAt() {
+        return resetPasswordTokenExpiresAt;
+    }
+
+    public void setResetPasswordTokenExpiresAt(LocalDateTime resetPasswordTokenExpiresAt) {
+        this.resetPasswordTokenExpiresAt = resetPasswordTokenExpiresAt;
     }
 
     public String getProvider() {

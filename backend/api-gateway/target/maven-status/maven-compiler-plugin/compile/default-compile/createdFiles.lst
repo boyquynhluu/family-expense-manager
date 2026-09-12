@@ -1,4 +1,0 @@
-com\family\expensemanager\gateway\config\CorsConfig.class
-com\family\expensemanager\gateway\filter\JwtGatewayFilter.class
-com\family\expensemanager\gateway\ApiGatewayApplication.class
-com\family\expensemanager\gateway\config\GatewayRoutesConfig.class

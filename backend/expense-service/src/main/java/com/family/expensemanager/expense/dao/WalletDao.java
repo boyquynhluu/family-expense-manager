@@ -2,6 +2,7 @@ package com.family.expensemanager.expense.dao;
 
 import com.family.expensemanager.expense.domain.entity.Wallet;
 import org.seasar.doma.Dao;
+import org.seasar.doma.Delete;
 import org.seasar.doma.Insert;
 import org.seasar.doma.Select;
 import org.seasar.doma.Update;
@@ -17,6 +18,9 @@ public interface WalletDao {
 
     @Update
     int update(Wallet wallet);
+
+    @Delete
+    int delete(Wallet wallet);
 
     @Select
     List<Wallet> selectByFamilyId(Long familyId);

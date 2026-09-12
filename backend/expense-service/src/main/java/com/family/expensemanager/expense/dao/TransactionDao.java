@@ -37,4 +37,10 @@ public interface TransactionDao {
 
     @Select
     BigDecimal sumAmountByWalletAndType(Long walletId, String type);
+
+    @Select
+    long countByWalletId(Long walletId);
+
+    @Select
+    long countByCategoryId(Long categoryId);
 }

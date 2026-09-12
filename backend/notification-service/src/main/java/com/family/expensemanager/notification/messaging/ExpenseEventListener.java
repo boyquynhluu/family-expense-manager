@@ -8,6 +8,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
+import java.text.NumberFormat;
+import java.util.Locale;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -37,11 +41,16 @@ public class ExpenseEventListener {
         notification.setTitle("Vượt ngân sách tháng " + event.periodMonth());
         notification.setMessage(String.format(
                 "Danh mục #%d đã chi %s / giới hạn %s trong tháng %s",
-                event.categoryId(), event.totalSpent(), event.limitAmount(), event.periodMonth()));
+                event.categoryId(), formatAmount(event.totalSpent()), formatAmount(event.limitAmount()),
+                event.periodMonth()));
         notification.setPayloadJson(toJson(event));
         notification.setIsRead(false);
 
         notificationDao.insert(notification);
+    }
+
+    private String formatAmount(BigDecimal amount) {
+        return NumberFormat.getIntegerInstance(Locale.US).format(amount);
     }
 
     private String toJson(ExpenseEvent event) {

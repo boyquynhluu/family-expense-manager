@@ -1,11 +1,13 @@
 package com.family.expensemanager.expense.service;
 
+import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.expense.dao.TransactionDao;
 import com.family.expensemanager.expense.dao.WalletDao;
 import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.dto.CreateWalletRequest;
 import com.family.expensemanager.expense.dto.WalletResponse;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +31,7 @@ public class WalletService {
     @Transactional
     public WalletResponse create(Long familyId, CreateWalletRequest request) {
         log.info("create - start, familyId={}, name={}", familyId, request.name());
+        requireConsistentCurrency(familyId, request.currency(), null);
         Wallet wallet = new Wallet();
         wallet.setFamilyId(familyId);
         wallet.setName(request.name());
@@ -49,11 +52,37 @@ public class WalletService {
     public WalletResponse update(Long walletId, Long familyId, CreateWalletRequest request) {
         log.info("update - start, walletId={}, familyId={}", walletId, familyId);
         Wallet wallet = requireOwnedByFamily(walletId, familyId);
+        requireConsistentCurrency(familyId, request.currency(), walletId);
         wallet.setName(request.name());
         wallet.setCurrency(request.currency());
         wallet.setInitialBalance(request.initialBalance());
         walletDao.update(wallet);
         return WalletResponse.from(wallet, currentBalanceOf(wallet));
+    }
+
+    @Transactional
+    @PreAuthorize("hasRole('OWNER')")
+    public void delete(Long walletId, Long familyId) {
+        log.info("delete - start, walletId={}, familyId={}", walletId, familyId);
+        Wallet wallet = requireOwnedByFamily(walletId, familyId);
+        if (transactionDao.countByWalletId(walletId) > 0) {
+            throw new ConflictException("Không thể xoá ví đã có giao dịch");
+        }
+        walletDao.delete(wallet);
+    }
+
+    /**
+     * All wallets in a family must share one currency — the Dashboard/Summary totals
+     * simply sum amounts across wallets with no exchange-rate conversion, so mixing
+     * currencies would silently produce a meaningless total.
+     */
+    private void requireConsistentCurrency(Long familyId, String currency, Long excludeWalletId) {
+        boolean mismatch = walletDao.selectByFamilyId(familyId).stream()
+                .filter(w -> excludeWalletId == null || !w.getId().equals(excludeWalletId))
+                .anyMatch(w -> !w.getCurrency().equals(currency));
+        if (mismatch) {
+            throw new ConflictException("Tất cả ví trong gia đình phải dùng chung 1 loại tiền tệ");
+        }
     }
 
     private BigDecimal currentBalanceOf(Wallet wallet) {
