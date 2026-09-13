@@ -137,32 +137,29 @@ export default function Transactions() {
   const pagedTransactions = filteredTransactions.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
   const hasActiveFilter = Object.values(filter).some(Boolean);
 
-  function escapeCsvField(value) {
-    const str = String(value ?? "");
-    return /[",\r\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
-  }
+  async function exportReport(format) {
+    setError("");
+    const params = { format };
+    if (filter.walletId) params.walletId = filter.walletId;
+    if (filter.categoryId) params.categoryId = filter.categoryId;
+    if (filter.type) params.type = filter.type;
+    if (filter.fromDate) params.fromDate = filter.fromDate;
+    if (filter.toDate) params.toDate = filter.toDate;
 
-  function exportCsv() {
-    const header = ["Thời gian", "Ví", "Danh mục", "Loại", "Số tiền", "Ghi chú"];
-    const rows = filteredTransactions.map((t) => [
-      t.occurredAt.replace("T", " "),
-      walletName(t.walletId),
-      categoryName(t.categoryId),
-      t.type === "EXPENSE" ? "Chi tiêu" : "Thu nhập",
-      t.amount,
-      t.note ?? "",
-    ]);
-    // Leading BOM so Excel detects UTF-8 and renders Vietnamese diacritics correctly.
-    const csvContent = "﻿" + [header, ...rows].map((row) => row.map(escapeCsvField).join(",")).join("\r\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `giao-dich-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    try {
+      const res = await client.get("/expenses/transactions/export", { params, responseType: "blob" });
+      const extension = format === "EXCEL" ? "xlsx" : "csv";
+      const url = URL.createObjectURL(res.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `giao-dich-${new Date().toISOString().slice(0, 10)}.${extension}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.response?.data?.message || "Xuất báo cáo thất bại");
+    }
   }
 
   return (
@@ -252,9 +249,14 @@ export default function Transactions() {
         <div className="page-header">
           <h2>Lịch sử giao dịch</h2>
           {filteredTransactions.length > 0 && (
-            <button type="button" className="btn-secondary" onClick={exportCsv}>
-              Xuất CSV
-            </button>
+            <div className="row-actions">
+              <button type="button" className="btn-secondary" onClick={() => exportReport("CSV")}>
+                Xuất CSV
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => exportReport("EXCEL")}>
+                Xuất Excel
+              </button>
+            </div>
           )}
         </div>
 
