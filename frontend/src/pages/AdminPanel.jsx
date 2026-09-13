@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import Swal from "sweetalert2";
 import client from "../api/client";
 import { useAuth } from "../hooks/useAuth";
 
@@ -32,7 +33,8 @@ export default function AdminPanel() {
     const confirmMessage = nextValue
       ? `Cấp quyền admin toàn hệ thống cho ${user.email}?`
       : `Gỡ quyền admin toàn hệ thống của ${user.email}?`;
-    if (!window.confirm(confirmMessage)) return;
+    const result = await confirmUpdate(confirmMessage);
+    if(!result.isConfirmed) return;
     try {
       await client.put(`/admin/users/${user.id}/system-admin`, { isSystemAdmin: nextValue });
       toast.success("Đã cập nhật quyền admin");
@@ -40,6 +42,29 @@ export default function AdminPanel() {
     } catch (err) {
       toast.error(err.response?.data?.message || "Cập nhật thất bại");
     }
+  }
+
+  async function confirmUpdate(confirmMessage) {
+    return Swal.fire({
+        title: "Cập nhật quyền Admin?",
+        text: confirmMessage,
+        icon: "warning",
+        showCancelButton: true,
+
+        confirmButtonText: "Đồng ý",
+        cancelButtonText: "Hủy",
+
+        customClass: {
+            popup: "custom-swal-popup",
+            title: "custom-swal-title",
+            htmlContainer: "custom-swal-text",
+            confirmButton: "custom-swal-confirm",
+            cancelButton: "custom-swal-cancel",
+            icon: "custom-swal-icon",
+        },
+
+        buttonsStyling: false,
+    });
   }
 
   return (

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import client from "../api/client";
-import { EyeIcon, EyeOffIcon } from "../components/AuthIcons";
 import { TrashIcon } from "../components/AppIcons";
+import { EyeIcon, EyeOffIcon } from "../components/AuthIcons";
 
-const RELATIONSHIP_OPTIONS = ["Bố", "Mẹ", "Ông", "Bà", "Anh", "Chị", "Em", "Con", "Cháu", "Khác"];
+const RELATIONSHIP_OPTIONS = ["Bố", "Mẹ", "Ông", "Bà", "Anh", "Chị", "Em", "Con", "Cháu", "Chồng", "Vợ", "Khác"];
 
 export default function Profile() {
   const [profile, setProfile] = useState(null);

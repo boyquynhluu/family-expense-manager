@@ -329,6 +329,7 @@ public class AuthService {
         user.setRole(ROLE_MEMBER);
         user.setActive(true);
         user.setProvider(PROVIDER_LOCAL);
+        user.setIsSystemAdmin(Boolean.FALSE);
         userDao.insert(user);
 
         invite.setAcceptedAt(LocalDateTime.now());

@@ -7,7 +7,17 @@ export const AuthContext = createContext(null);
 function decodeJwt(token) {
   try {
     const payload = token.split(".")[1];
-    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+
+    const base64 = payload
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
+
+    const binary = atob(base64);
+
+    const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+
+    const json = new TextDecoder("utf-8").decode(bytes);
+
     return JSON.parse(json);
   } catch {
     return null;
