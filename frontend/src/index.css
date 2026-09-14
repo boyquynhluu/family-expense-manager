@@ -1321,4 +1321,73 @@ select:focus {
   .content {
     padding: 1.25rem 1rem;
   }
+
+  /* Wide multi-column tables (Transactions, Wallets, AdminPanel, Profile members) don't
+     fit a phone screen — turn each row into its own labeled card instead of forcing a
+     hidden horizontal scroll. Each <td> keeps working exactly as before on desktop; on
+     mobile its data-label attribute (set in JSX) is shown above the value via ::before. */
+  table,
+  thead,
+  tbody,
+  th,
+  td,
+  tr {
+    display: block;
+  }
+
+  table {
+    width: 100%;
+  }
+
+  thead {
+    display: none;
+  }
+
+  tbody tr {
+    margin-bottom: 0.75rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    background: #fff;
+  }
+
+  tbody tr:last-child {
+    margin-bottom: 0;
+  }
+
+  td {
+    border: none;
+    padding: 0.35rem 0;
+    text-align: left;
+    /* A long unbreakable string (email, URL) has no spaces to wrap at, so without
+       this it visually bleeds past the card's right edge instead of respecting it
+       (e.g. "Nguyen Van A (long.email@example.com)" in AdminPanel's "Chủ hộ" column). */
+    overflow-wrap: anywhere;
+  }
+
+  td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #9aa3b5;
+    margin-bottom: 0.15rem;
+  }
+
+  td:not([data-label])::before,
+  td[data-label=""]::before {
+    content: none;
+    margin: 0;
+  }
+
+  .row-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding-top: 0.6rem;
+    margin-top: 0.3rem;
+    border-top: 1px solid #f1f2f5;
+  }
 }

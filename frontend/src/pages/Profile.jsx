@@ -215,10 +215,10 @@ export default function Profile() {
             <tbody>
               {members.map((m) => (
                 <tr key={m.id}>
-                  <td>{m.displayName}</td>
-                  <td>{m.email}</td>
-                  <td>{m.role}</td>
-                  <td>{m.relationship || "-"}</td>
+                  <td data-label="Tên hiển thị">{m.displayName}</td>
+                  <td data-label="Email">{m.email}</td>
+                  <td data-label="Vai trò">{m.role}</td>
+                  <td data-label="Quan hệ">{m.relationship || "-"}</td>
                   {profile.role === "OWNER" && (
                     <td className="row-actions">
                       {m.role !== "OWNER" && (

@@ -131,14 +131,14 @@ export default function Wallets() {
             <tbody>
               {wallets.map((w) => (
                 <tr key={w.id}>
-                  <td>
+                  <td data-label="Tên">
                     <span className="table-cell-icon">
                       <WalletIcon /> {w.name}
                     </span>
                   </td>
-                  <td>{w.currency}</td>
-                  <td>{formatCurrency(w.initialBalance, w.currency)}</td>
-                  <td>
+                  <td data-label="Tiền tệ">{w.currency}</td>
+                  <td data-label="Số dư ban đầu">{formatCurrency(w.initialBalance, w.currency)}</td>
+                  <td data-label="Số dư hiện tại">
                     <strong>{formatCurrency(w.currentBalance, w.currency)}</strong>
                   </td>
                   <td className="row-actions">

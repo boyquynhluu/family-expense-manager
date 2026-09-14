@@ -95,12 +95,12 @@ export default function AdminPanel() {
             <tbody>
               {families.map((f) => (
                 <tr key={f.id}>
-                  <td>{f.name}</td>
-                  <td>
+                  <td data-label="Tên gia đình">{f.name}</td>
+                  <td data-label="Chủ hộ">
                     {f.ownerDisplayName} ({f.ownerEmail})
                   </td>
-                  <td>{f.memberCount}</td>
-                  <td>{formatDate(f.createdAt)}</td>
+                  <td data-label="Số thành viên">{f.memberCount}</td>
+                  <td data-label="Ngày tạo">{formatDate(f.createdAt)}</td>
                 </tr>
               ))}
             </tbody>
@@ -128,16 +128,16 @@ export default function AdminPanel() {
             <tbody>
               {users.map((u) => (
                 <tr key={u.id}>
-                  <td>{u.email}</td>
-                  <td>{u.displayName}</td>
-                  <td>{u.familyName ?? `#${u.familyId}`}</td>
-                  <td>{u.role}</td>
-                  <td>
+                  <td data-label="Email">{u.email}</td>
+                  <td data-label="Tên hiển thị">{u.displayName}</td>
+                  <td data-label="Gia đình">{u.familyName ?? `#${u.familyId}`}</td>
+                  <td data-label="Vai trò">{u.role}</td>
+                  <td data-label="Trạng thái">
                     <span className={`badge ${u.active ? "badge-income" : "badge-expense"}`}>
                       {u.active ? "Đã kích hoạt" : "Chưa kích hoạt"}
                     </span>
                   </td>
-                  <td>{u.isSystemAdmin ? "Có" : "Không"}</td>
+                  <td data-label="Admin hệ thống">{u.isSystemAdmin ? "Có" : "Không"}</td>
                   <td className="row-actions">
                     <button
                       type="button"
