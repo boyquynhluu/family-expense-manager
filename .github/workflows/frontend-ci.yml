@@ -1,4 +1,4 @@
-name: Frontend CI
+name: Frontend CI & Deploy
 
 on:
   push:
@@ -14,6 +14,9 @@ on:
     paths:
       - "frontend/**"
       - ".github/workflows/frontend-ci.yml"
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -37,8 +40,33 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
+      # Points the deployed site at a real backend once you have one publicly reachable:
+      # set the VITE_API_BASE_URL repo variable (Settings -> Secrets and variables -> Actions
+      # -> Variables). Until then it falls back to localhost, so the deployed page will load
+      # but API calls will fail — that's expected while the backend is local-only.
       - name: Build
         working-directory: frontend
         env:
-          VITE_API_BASE_URL: http://localhost:8080/api
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || 'http://localhost:8080/api' }}
         run: npm run build
+
+      - name: Upload GitHub Pages artifact
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
