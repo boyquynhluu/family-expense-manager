@@ -1,10 +1,13 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useUnreadNotifications } from "../hooks/useUnreadNotifications";
 import {
   BellIcon,
+  CloseIcon,
   GridIcon,
   LogoutIcon,
+  MenuIcon,
   PieChartIcon,
   ReceiptIcon,
   ShieldIcon,
@@ -26,16 +29,50 @@ const links = [
 export default function Layout() {
   const { logout, displayName, isSystemAdmin } = useAuth();
   const unreadCount = useUnreadNotifications();
+  const location = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const visibleLinks = isSystemAdmin
     ? [...links, { to: "/admin", label: "Quản trị hệ thống", icon: ShieldIcon }]
     : links;
 
+  // Close the drawer whenever the route changes (e.g. after tapping a nav link on mobile).
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
   return (
     <div className="app-shell">
-      <nav className="sidebar">
+      <header className="mobile-topbar">
+        <button
+          type="button"
+          className="mobile-menu-btn"
+          onClick={() => setSidebarOpen(true)}
+          aria-label="Mở menu"
+        >
+          <MenuIcon />
+        </button>
         <div className="brand">
           <span className="brand-icon">💰</span>
           <span>Family Expense</span>
+        </div>
+      </header>
+
+      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
+
+      <nav className={`sidebar ${sidebarOpen ? "is-open" : ""}`}>
+        <div className="sidebar-header">
+          <div className="brand">
+            <span className="brand-icon">💰</span>
+            <span>Family Expense</span>
+          </div>
+          <button
+            type="button"
+            className="sidebar-close-btn"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Đóng menu"
+          >
+            <CloseIcon />
+          </button>
         </div>
         <ul>
           {visibleLinks.map((link) => {
