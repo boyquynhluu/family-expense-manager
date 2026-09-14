@@ -238,3 +238,21 @@ Bảng port của các service/tool phổ biến trong hạ tầng nói chung �
 | Jenkins | CI/CD automation server | 8080 |
 
 > Lưu ý: `Tomcat`/`Jenkins` (8080) trùng port với `api-gateway` của project này — nếu chạy chung máy, chỉ được bật một trong hai trên cùng port 8080.
+
+======= DEPLOY BE====
+                         INTERNET
+                            │
+                            ▼
+              GitHub Pages - FE
+              https://xxx.github.io
+                            │
+                            │ API
+                            ▼
+              Cloudflare Tunnel
+              https://api-xxxxx.trycloudflare.com
+                            │
+                            ▼
+                  localhost:8081
+                            │
+                            ▼
+                    Spring Boot BE
