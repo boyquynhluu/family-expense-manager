@@ -88,6 +88,7 @@ select:focus {
    the user) with a soft dark overlay on top so white text/cards stay legible. */
 .auth-page {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1191,4 +1192,18 @@ select:focus {
 
 .custom-swal-cancel:hover {
     background: #e5e7eb !important;
+}
+
+/* iOS Safari (and some Android browsers) auto-zoom the whole page when a focused
+   input's font-size is under 16px — the page then looks "broken"/zoomed off-screen
+   the moment you tap a field. Every input/select in the app renders below that
+   threshold (0.78rem-0.9rem), so bump them to exactly 16px on phone-width screens
+   to stop the zoom, without changing the smaller desktop look. Placed at the end of
+   the file so it wins the cascade over same-specificity rules defined earlier. */
+@media (max-width: 480px) {
+  input,
+  select,
+  .auth-input-group input {
+    font-size: 16px;
+  }
 }

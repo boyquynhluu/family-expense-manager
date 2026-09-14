@@ -14,6 +14,9 @@ on:
     paths:
       - "backend/**"
       - ".github/workflows/backend-ci.yml"
+  # Lets you manually trigger a build+test run from the Actions tab (Run workflow),
+  # without needing a push/PR.
+  workflow_dispatch:
 
 jobs:
   build-and-test:
