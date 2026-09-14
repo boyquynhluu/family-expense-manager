@@ -120,6 +120,7 @@ public class AuthService {
         user.setRole(ROLE_OWNER);
         user.setActive(false);
         user.setProvider(PROVIDER_LOCAL);
+        user.setIsSystemAdmin(Boolean.FALSE);
         user.setVerificationToken(verificationToken);
         user.setVerificationTokenExpiresAt(LocalDateTime.now().plus(verificationTokenTtl));
         userDao.insert(user);
@@ -390,6 +391,7 @@ public class AuthService {
         user.setActive(true);
         user.setProvider(provider);
         user.setProviderId(providerId);
+        user.setIsSystemAdmin(Boolean.FALSE);
         userDao.insert(user);
         return user;
     }
