@@ -328,19 +328,22 @@ export default function Transactions() {
             <tbody>
               {pagedTransactions.map((t) => (
                 <tr key={t.id}>
-                  <td>{t.occurredAt.replace("T", " ")}</td>
-                  <td>{walletName(t.walletId)}</td>
-                  <td>{categoryName(t.categoryId)}</td>
-                  <td>
+                  <td data-label="Thời gian">{t.occurredAt.replace("T", " ")}</td>
+                  <td data-label="Ví">{walletName(t.walletId)}</td>
+                  <td data-label="Danh mục">{categoryName(t.categoryId)}</td>
+                  <td data-label="Loại">
                     <span className={`badge ${t.type === "EXPENSE" ? "badge-expense" : "badge-income"}`}>
                       {t.type === "EXPENSE" ? "Chi tiêu" : "Thu nhập"}
                     </span>
                   </td>
-                  <td className={t.type === "EXPENSE" ? "amount-expense" : "amount-income"}>
+                  <td
+                    data-label="Số tiền"
+                    className={t.type === "EXPENSE" ? "amount-expense" : "amount-income"}
+                  >
                     {t.type === "EXPENSE" ? "-" : "+"}
                     {formatCurrency(t.amount)}
                   </td>
-                  <td>{t.note}</td>
+                  <td data-label="Ghi chú">{t.note}</td>
                   <td className="row-actions">
                     <button type="button" className="icon-btn" onClick={() => startEdit(t)} aria-label="Sửa">
                       <EditIcon />
