@@ -4,6 +4,7 @@ import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.expense.dao.BudgetDao;
 import com.family.expensemanager.expense.dao.CategoryDao;
+import com.family.expensemanager.expense.dao.RecurringTransactionDao;
 import com.family.expensemanager.expense.dao.TransactionDao;
 import com.family.expensemanager.expense.domain.entity.Category;
 import com.family.expensemanager.expense.dto.CategoryResponse;
@@ -25,6 +26,7 @@ public class CategoryService {
     private final CategoryDao categoryDao;
     private final TransactionDao transactionDao;
     private final BudgetDao budgetDao;
+    private final RecurringTransactionDao recurringTransactionDao;
 
     @Transactional
     public CategoryResponse create(Long familyId, CreateCategoryRequest request) {
@@ -63,6 +65,9 @@ public class CategoryService {
         Category category = requireOwnedByFamily(categoryId, familyId);
         if (transactionDao.countByCategoryId(categoryId) > 0 || budgetDao.countByCategoryId(categoryId) > 0) {
             throw new ConflictException("Không thể xoá danh mục đang có giao dịch hoặc ngân sách");
+        }
+        if (recurringTransactionDao.countByCategoryId(categoryId) > 0) {
+            throw new ConflictException("Không thể xoá danh mục đang có giao dịch định kỳ");
         }
         categoryDao.delete(category);
     }

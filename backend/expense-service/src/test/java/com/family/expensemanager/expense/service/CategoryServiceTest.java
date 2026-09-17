@@ -4,6 +4,7 @@ import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.expense.dao.BudgetDao;
 import com.family.expensemanager.expense.dao.CategoryDao;
+import com.family.expensemanager.expense.dao.RecurringTransactionDao;
 import com.family.expensemanager.expense.dao.TransactionDao;
 import com.family.expensemanager.expense.domain.entity.Category;
 import com.family.expensemanager.expense.dto.CreateCategoryRequest;
@@ -32,12 +33,14 @@ class CategoryServiceTest {
     private TransactionDao transactionDao;
     @Mock
     private BudgetDao budgetDao;
+    @Mock
+    private RecurringTransactionDao recurringTransactionDao;
 
     private CategoryService categoryService;
 
     @BeforeEach
     void setUp() {
-        categoryService = new CategoryService(categoryDao, transactionDao, budgetDao);
+        categoryService = new CategoryService(categoryDao, transactionDao, budgetDao, recurringTransactionDao);
     }
 
     @Test
@@ -87,11 +90,24 @@ class CategoryServiceTest {
     }
 
     @Test
+    void delete_throwsConflict_whenCategoryHasRecurringTransactions() {
+        Category category = category(1L, 1L);
+        when(categoryDao.selectById(1L)).thenReturn(Optional.of(category));
+        when(transactionDao.countByCategoryId(1L)).thenReturn(0L);
+        when(budgetDao.countByCategoryId(1L)).thenReturn(0L);
+        when(recurringTransactionDao.countByCategoryId(1L)).thenReturn(1L);
+
+        assertThatThrownBy(() -> categoryService.delete(1L, 1L)).isInstanceOf(ConflictException.class);
+        verify(categoryDao, never()).delete(any());
+    }
+
+    @Test
     void delete_succeeds_whenCategoryUnused() {
         Category category = category(1L, 1L);
         when(categoryDao.selectById(1L)).thenReturn(Optional.of(category));
         when(transactionDao.countByCategoryId(1L)).thenReturn(0L);
         when(budgetDao.countByCategoryId(1L)).thenReturn(0L);
+        when(recurringTransactionDao.countByCategoryId(1L)).thenReturn(0L);
 
         categoryService.delete(1L, 1L);
 

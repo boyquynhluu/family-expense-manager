@@ -14,7 +14,8 @@ public record TransactionResponse(
         String type,
         BigDecimal amount,
         LocalDateTime occurredAt,
-        String note) {
+        String note,
+        Boolean hasReceipt) {
 
     public static TransactionResponse from(Transaction transaction) {
         return new TransactionResponse(
@@ -26,6 +27,7 @@ public record TransactionResponse(
                 transaction.getType(),
                 transaction.getAmount(),
                 transaction.getOccurredAt(),
-                transaction.getNote());
+                transaction.getNote(),
+                transaction.getReceiptPath() != null);
     }
 }

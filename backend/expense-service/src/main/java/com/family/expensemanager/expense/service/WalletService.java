@@ -2,6 +2,7 @@ package com.family.expensemanager.expense.service;
 
 import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
+import com.family.expensemanager.expense.dao.RecurringTransactionDao;
 import com.family.expensemanager.expense.dao.TransactionDao;
 import com.family.expensemanager.expense.dao.WalletDao;
 import com.family.expensemanager.expense.domain.entity.Wallet;
@@ -27,6 +28,7 @@ public class WalletService {
 
     private final WalletDao walletDao;
     private final TransactionDao transactionDao;
+    private final RecurringTransactionDao recurringTransactionDao;
 
     @Transactional
     public WalletResponse create(Long familyId, CreateWalletRequest request) {
@@ -67,6 +69,9 @@ public class WalletService {
         Wallet wallet = requireOwnedByFamily(walletId, familyId);
         if (transactionDao.countByWalletId(walletId) > 0) {
             throw new ConflictException("Không thể xoá ví đã có giao dịch");
+        }
+        if (recurringTransactionDao.countByWalletId(walletId) > 0) {
+            throw new ConflictException("Không thể xoá ví đang có giao dịch định kỳ");
         }
         walletDao.delete(wallet);
     }

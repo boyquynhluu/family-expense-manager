@@ -402,7 +402,8 @@ public class AuthService {
                 JwtUtil.CLAIM_FAMILY_ID, user.getFamilyId(),
                 JwtUtil.CLAIM_ROLE, user.getRole(),
                 JwtUtil.CLAIM_DISPLAY_NAME, user.getDisplayName(),
-                JwtUtil.CLAIM_IS_SYSTEM_ADMIN, Boolean.TRUE.equals(user.getIsSystemAdmin()));
+                JwtUtil.CLAIM_IS_SYSTEM_ADMIN, Boolean.TRUE.equals(user.getIsSystemAdmin()),
+                JwtUtil.CLAIM_EMAIL, user.getEmail());
         String accessToken = jwtUtil.generateToken(String.valueOf(user.getId()), claims, accessTokenTtlMillis);
 
         String rawRefreshToken = generateOpaqueToken();

@@ -31,6 +31,14 @@ public final class CurrentUser {
         return Boolean.TRUE.equals(claims().get(JwtUtil.CLAIM_IS_SYSTEM_ADMIN, Boolean.class));
     }
 
+    public static String email() {
+        return claims().get(JwtUtil.CLAIM_EMAIL, String.class);
+    }
+
+    public static String displayName() {
+        return claims().get(JwtUtil.CLAIM_DISPLAY_NAME, String.class);
+    }
+
     private static Claims claims() {
         return (Claims) authentication().getDetails();
     }

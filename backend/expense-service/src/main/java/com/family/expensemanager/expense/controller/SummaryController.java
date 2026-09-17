@@ -4,6 +4,7 @@ import com.family.expensemanager.common.dto.ApiResponse;
 import com.family.expensemanager.common.security.CurrentUser;
 import com.family.expensemanager.expense.dto.CategoryReportItem;
 import com.family.expensemanager.expense.dto.SummaryResponse;
+import com.family.expensemanager.expense.dto.WalletCategoryBreakdownItem;
 import com.family.expensemanager.expense.service.SummaryService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -39,5 +40,11 @@ public class SummaryController {
     public ApiResponse<List<SummaryResponse>> trend(@RequestParam(defaultValue = "6") int months) {
         log.info("trend - start, months={}", months);
         return ApiResponse.ok(summaryService.trend(CurrentUser.familyId(), months));
+    }
+
+    @GetMapping("/reports/wallet-category")
+    public ApiResponse<List<WalletCategoryBreakdownItem>> walletCategoryBreakdown(@RequestParam String yearMonth) {
+        log.info("walletCategoryBreakdown - start, yearMonth={}", yearMonth);
+        return ApiResponse.ok(summaryService.walletCategoryBreakdown(CurrentUser.familyId(), yearMonth));
     }
 }

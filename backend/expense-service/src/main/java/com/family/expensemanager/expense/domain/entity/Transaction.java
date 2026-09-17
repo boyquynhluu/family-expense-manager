@@ -39,6 +39,12 @@ public class Transaction {
 
     private String note;
 
+    @Column(name = "receipt_path")
+    private String receiptPath;
+
+    @Column(name = "receipt_content_type")
+    private String receiptContentType;
+
     public Long getId() {
         return id;
     }
@@ -109,5 +115,21 @@ public class Transaction {
 
     public void setNote(String note) {
         this.note = note;
+    }
+
+    public String getReceiptPath() {
+        return receiptPath;
+    }
+
+    public void setReceiptPath(String receiptPath) {
+        this.receiptPath = receiptPath;
+    }
+
+    public String getReceiptContentType() {
+        return receiptContentType;
+    }
+
+    public void setReceiptContentType(String receiptContentType) {
+        this.receiptContentType = receiptContentType;
     }
 }

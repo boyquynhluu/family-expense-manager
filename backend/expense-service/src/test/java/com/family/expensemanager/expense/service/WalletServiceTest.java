@@ -2,6 +2,7 @@ package com.family.expensemanager.expense.service;
 
 import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
+import com.family.expensemanager.expense.dao.RecurringTransactionDao;
 import com.family.expensemanager.expense.dao.TransactionDao;
 import com.family.expensemanager.expense.dao.WalletDao;
 import com.family.expensemanager.expense.domain.entity.Wallet;
@@ -32,12 +33,14 @@ class WalletServiceTest {
     private WalletDao walletDao;
     @Mock
     private TransactionDao transactionDao;
+    @Mock
+    private RecurringTransactionDao recurringTransactionDao;
 
     private WalletService walletService;
 
     @BeforeEach
     void setUp() {
-        walletService = new WalletService(walletDao, transactionDao);
+        walletService = new WalletService(walletDao, transactionDao, recurringTransactionDao);
     }
 
     @Test
@@ -114,10 +117,22 @@ class WalletServiceTest {
     }
 
     @Test
+    void delete_throwsConflict_whenWalletHasRecurringTransactions() {
+        Wallet target = wallet(1L, 1L, "VND");
+        when(walletDao.selectById(1L)).thenReturn(Optional.of(target));
+        when(transactionDao.countByWalletId(1L)).thenReturn(0L);
+        when(recurringTransactionDao.countByWalletId(1L)).thenReturn(1L);
+
+        assertThatThrownBy(() -> walletService.delete(1L, 1L)).isInstanceOf(ConflictException.class);
+        verify(walletDao, never()).delete(any());
+    }
+
+    @Test
     void delete_succeeds_whenWalletHasNoTransactions() {
         Wallet target = wallet(1L, 1L, "VND");
         when(walletDao.selectById(1L)).thenReturn(Optional.of(target));
         when(transactionDao.countByWalletId(1L)).thenReturn(0L);
+        when(recurringTransactionDao.countByWalletId(1L)).thenReturn(0L);
 
         walletService.delete(1L, 1L);
 

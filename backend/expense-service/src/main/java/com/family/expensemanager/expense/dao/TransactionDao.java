@@ -8,6 +8,7 @@ import org.seasar.doma.Select;
 import org.seasar.doma.Update;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,11 +27,26 @@ public interface TransactionDao {
     @Select
     List<Transaction> selectByFamilyId(Long familyId);
 
+    /** Backs the paginated/filtered {@code GET /transactions} list — see {@code countByFamilyIdFiltered}. */
+    @Select
+    List<Transaction> selectByFamilyIdFiltered(
+            Long familyId, Long walletId, Long categoryId, String type,
+            LocalDate fromDate, LocalDate toDate, int limit, int offset);
+
+    @Select
+    long countByFamilyIdFiltered(
+            Long familyId, Long walletId, Long categoryId, String type,
+            LocalDate fromDate, LocalDate toDate);
+
     @Select
     Optional<Transaction> selectById(Long id);
 
     @Select
     BigDecimal sumAmountByCategoryPeriodAndType(Long familyId, Long categoryId, String periodMonth, String type);
+
+    @Select
+    BigDecimal sumAmountByWalletCategoryPeriodAndType(
+            Long familyId, Long walletId, Long categoryId, String periodMonth, String type);
 
     @Select
     BigDecimal sumAmountByFamilyPeriodAndType(Long familyId, String periodMonth, String type);

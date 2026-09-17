@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import client from "../api/client";
-import { EditIcon, TrashIcon } from "../components/AppIcons";
+import { CloseIcon, EditIcon, ImageIcon, TrashIcon } from "../components/AppIcons";
 import { formatCurrency } from "../utils/format";
 
 const emptyForm = {
@@ -22,8 +22,10 @@ const emptyFilter = {
 
 const PAGE_SIZE = 20;
 
+const emptyPage = { content: [], page: 0, size: PAGE_SIZE, totalElements: 0, totalPages: 0 };
+
 export default function Transactions() {
-  const [transactions, setTransactions] = useState([]);
+  const [pageData, setPageData] = useState(emptyPage);
   const [wallets, setWallets] = useState([]);
   const [categories, setCategories] = useState([]);
   const [form, setForm] = useState(emptyForm);
@@ -31,13 +33,34 @@ export default function Transactions() {
   const [filter, setFilter] = useState(emptyFilter);
   const [page, setPage] = useState(0);
   const [error, setError] = useState("");
+  const fileInputRef = useRef(null);
+  const [uploadTargetId, setUploadTargetId] = useState(null);
 
+  // Filtering/paging happens on the backend now (see README "1. Phân trang/lọc chỉ làm
+  // ở frontend") — the client only ever holds the current page's rows.
   function load() {
-    client.get("/expenses/transactions").then((res) => setTransactions(res.data.data));
+    const params = { page, size: PAGE_SIZE };
+    if (filter.walletId) params.walletId = filter.walletId;
+    if (filter.categoryId) params.categoryId = filter.categoryId;
+    if (filter.type) params.type = filter.type;
+    if (filter.fromDate) params.fromDate = filter.fromDate;
+    if (filter.toDate) params.toDate = filter.toDate;
+
+    client.get("/expenses/transactions", { params }).then((res) => {
+      const data = res.data.data;
+      // Deleting the last row on a page beyond the first leaves it empty — step back
+      // one page rather than showing a stranded "no results" screen.
+      if (data.content.length === 0 && data.page > 0 && data.totalElements > 0) {
+        setPage(data.page - 1);
+      } else {
+        setPageData(data);
+      }
+    });
   }
 
+  useEffect(load, [filter, page]);
+
   useEffect(() => {
-    load();
     client.get("/expenses/wallets").then((res) => {
       setWallets(res.data.data);
       setForm((f) => ({ ...f, walletId: f.walletId || String(res.data.data[0]?.id ?? "") }));
@@ -104,6 +127,51 @@ export default function Transactions() {
     }
   }
 
+  function triggerUpload(id) {
+    setUploadTargetId(id);
+    fileInputRef.current?.click();
+  }
+
+  async function handleFileSelected(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file (e.g. after a failed upload)
+    if (!file || !uploadTargetId) return;
+    setError("");
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      await client.post(`/expenses/transactions/${uploadTargetId}/receipt`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      load();
+    } catch (err) {
+      setError(err.response?.data?.message || "Tải ảnh hoá đơn thất bại");
+    }
+  }
+
+  async function viewReceipt(id) {
+    setError("");
+    try {
+      const res = await client.get(`/expenses/transactions/${id}/receipt`, { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      setError(err.response?.data?.message || "Không tải được ảnh hoá đơn");
+    }
+  }
+
+  async function handleDeleteReceipt(id) {
+    if (!window.confirm("Xoá ảnh hoá đơn này?")) return;
+    setError("");
+    try {
+      await client.delete(`/expenses/transactions/${id}/receipt`);
+      load();
+    } catch (err) {
+      setError(err.response?.data?.message || "Xoá ảnh hoá đơn thất bại");
+    }
+  }
+
   function walletName(id) {
     return wallets.find((w) => w.id === id)?.name ?? `#${id}`;
   }
@@ -122,19 +190,6 @@ export default function Transactions() {
     setPage(0);
   }
 
-  const filteredTransactions = transactions.filter((t) => {
-    if (filter.walletId && String(t.walletId) !== filter.walletId) return false;
-    if (filter.categoryId && String(t.categoryId) !== filter.categoryId) return false;
-    if (filter.type && t.type !== filter.type) return false;
-    const occurredDate = t.occurredAt.slice(0, 10);
-    if (filter.fromDate && occurredDate < filter.fromDate) return false;
-    if (filter.toDate && occurredDate > filter.toDate) return false;
-    return true;
-  });
-
-  const totalPages = Math.max(1, Math.ceil(filteredTransactions.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages - 1);
-  const pagedTransactions = filteredTransactions.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
   const hasActiveFilter = Object.values(filter).some(Boolean);
 
   async function exportReport(format) {
@@ -245,10 +300,18 @@ export default function Transactions() {
         {error && <p className="error-text">{error}</p>}
       </div>
 
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept="image/jpeg,image/png,image/webp"
+        style={{ display: "none" }}
+        onChange={handleFileSelected}
+      />
+
       <div className="section-card">
         <div className="page-header">
           <h2>Lịch sử giao dịch</h2>
-          {filteredTransactions.length > 0 && (
+          {pageData.totalElements > 0 && (
             <div className="row-actions">
               <button type="button" className="btn-secondary" onClick={() => exportReport("CSV")}>
                 Xuất CSV
@@ -260,55 +323,53 @@ export default function Transactions() {
           )}
         </div>
 
-        {transactions.length > 0 && (
-          <form className="inline-form filter-bar" onSubmit={(e) => e.preventDefault()}>
-            <label className="field">
-              Ví
-              <select value={filter.walletId} onChange={(e) => updateFilter("walletId", e.target.value)}>
-                <option value="">Tất cả</option>
-                {wallets.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              Danh mục
-              <select value={filter.categoryId} onChange={(e) => updateFilter("categoryId", e.target.value)}>
-                <option value="">Tất cả</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              Loại
-              <select value={filter.type} onChange={(e) => updateFilter("type", e.target.value)}>
-                <option value="">Tất cả</option>
-                <option value="EXPENSE">Chi tiêu</option>
-                <option value="INCOME">Thu nhập</option>
-              </select>
-            </label>
-            <label className="field">
-              Từ ngày
-              <input type="date" value={filter.fromDate} onChange={(e) => updateFilter("fromDate", e.target.value)} />
-            </label>
-            <label className="field">
-              Đến ngày
-              <input type="date" value={filter.toDate} onChange={(e) => updateFilter("toDate", e.target.value)} />
-            </label>
-            {hasActiveFilter && (
-              <button type="button" className="btn-secondary" onClick={clearFilter}>
-                Xoá lọc
-              </button>
-            )}
-          </form>
-        )}
+        <form className="inline-form filter-bar" onSubmit={(e) => e.preventDefault()}>
+          <label className="field">
+            Ví
+            <select value={filter.walletId} onChange={(e) => updateFilter("walletId", e.target.value)}>
+              <option value="">Tất cả</option>
+              {wallets.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            Danh mục
+            <select value={filter.categoryId} onChange={(e) => updateFilter("categoryId", e.target.value)}>
+              <option value="">Tất cả</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            Loại
+            <select value={filter.type} onChange={(e) => updateFilter("type", e.target.value)}>
+              <option value="">Tất cả</option>
+              <option value="EXPENSE">Chi tiêu</option>
+              <option value="INCOME">Thu nhập</option>
+            </select>
+          </label>
+          <label className="field">
+            Từ ngày
+            <input type="date" value={filter.fromDate} onChange={(e) => updateFilter("fromDate", e.target.value)} />
+          </label>
+          <label className="field">
+            Đến ngày
+            <input type="date" value={filter.toDate} onChange={(e) => updateFilter("toDate", e.target.value)} />
+          </label>
+          {hasActiveFilter && (
+            <button type="button" className="btn-secondary" onClick={clearFilter}>
+              Xoá lọc
+            </button>
+          )}
+        </form>
 
-        {filteredTransactions.length === 0 ? (
+        {pageData.content.length === 0 ? (
           <p className="empty-state">
             {hasActiveFilter ? "Không có giao dịch nào khớp bộ lọc" : "Chưa có giao dịch nào"}
           </p>
@@ -326,7 +387,7 @@ export default function Transactions() {
               </tr>
             </thead>
             <tbody>
-              {pagedTransactions.map((t) => (
+              {pageData.content.map((t) => (
                 <tr key={t.id}>
                   <td data-label="Thời gian">{t.occurredAt.replace("T", " ")}</td>
                   <td data-label="Ví">{walletName(t.walletId)}</td>
@@ -345,6 +406,35 @@ export default function Transactions() {
                   </td>
                   <td data-label="Ghi chú">{t.note}</td>
                   <td className="row-actions">
+                    {t.hasReceipt ? (
+                      <>
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          onClick={() => viewReceipt(t.id)}
+                          aria-label="Xem hoá đơn"
+                        >
+                          <ImageIcon />
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn icon-btn-danger"
+                          onClick={() => handleDeleteReceipt(t.id)}
+                          aria-label="Xoá ảnh hoá đơn"
+                        >
+                          <CloseIcon />
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => triggerUpload(t.id)}
+                        aria-label="Đính kèm hoá đơn"
+                      >
+                        <ImageIcon />
+                      </button>
+                    )}
                     <button type="button" className="icon-btn" onClick={() => startEdit(t)} aria-label="Sửa">
                       <EditIcon />
                     </button>
@@ -363,25 +453,25 @@ export default function Transactions() {
           </table>
         )}
 
-        {filteredTransactions.length > PAGE_SIZE && (
+        {pageData.totalPages > 1 && (
           <div className="pagination">
             <span className="pagination-info">
-              {filteredTransactions.length} giao dịch — Trang {currentPage + 1}/{totalPages}
+              {pageData.totalElements} giao dịch — Trang {pageData.page + 1}/{pageData.totalPages}
             </span>
             <div className="pagination-controls">
               <button
                 type="button"
                 className="btn-secondary"
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={currentPage === 0}
+                disabled={pageData.page === 0}
               >
                 Trước
               </button>
               <button
                 type="button"
                 className="btn-secondary"
-                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={currentPage >= totalPages - 1}
+                onClick={() => setPage((p) => Math.min(pageData.totalPages - 1, p + 1))}
+                disabled={pageData.page >= pageData.totalPages - 1}
               >
                 Sau
               </button>

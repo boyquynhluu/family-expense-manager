@@ -26,7 +26,7 @@ export default function Dashboard() {
   const [report, setReport] = useState([]);
   const [wallets, setWallets] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [transactions, setTransactions] = useState([]);
+  const [walletBreakdownRows, setWalletBreakdownRows] = useState([]);
   const [trend, setTrend] = useState([]);
   const [error, setError] = useState("");
 
@@ -36,11 +36,13 @@ export default function Dashboard() {
     Promise.all([
       client.get("/expenses/summary", { params: { yearMonth } }),
       client.get("/expenses/reports/category", { params: { yearMonth } }),
+      client.get("/expenses/reports/wallet-category", { params: { yearMonth } }),
     ])
-      .then(([summaryRes, reportRes]) => {
+      .then(([summaryRes, reportRes, walletCategoryRes]) => {
         if (cancelled) return;
         setSummary(summaryRes.data.data);
         setReport(reportRes.data.data);
+        setWalletBreakdownRows(walletCategoryRes.data.data);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -51,12 +53,10 @@ export default function Dashboard() {
     };
   }, [yearMonth]);
 
-  // Wallets/categories/transactions aren't month-scoped on the backend, so they're
-  // loaded once and filtered by yearMonth on the client for the per-wallet breakdown.
+  // Wallets/categories aren't month-scoped on the backend, so they're loaded once.
   useEffect(() => {
     client.get("/expenses/wallets").then((res) => setWallets(res.data.data));
     client.get("/expenses/categories").then((res) => setCategories(res.data.data));
-    client.get("/expenses/transactions").then((res) => setTransactions(res.data.data));
     client.get("/expenses/reports/trend", { params: { months: 6 } }).then((res) => setTrend(res.data.data));
   }, []);
 
@@ -82,14 +82,13 @@ export default function Dashboard() {
     }
   }
 
+  // Aggregation now happens on the backend (GET /expenses/reports/wallet-category) —
+  // see README "1. Phân trang/lọc chỉ làm ở frontend" — so this just regroups the
+  // already-summed rows by wallet instead of reducing over every raw transaction.
   const walletBreakdowns = wallets.map((wallet) => {
-    const totalsByCategory = new Map();
-    for (const t of transactions) {
-      if (t.walletId !== wallet.id || t.type !== "EXPENSE" || !t.occurredAt.startsWith(yearMonth)) continue;
-      totalsByCategory.set(t.categoryId, (totalsByCategory.get(t.categoryId) ?? 0) + Number(t.amount));
-    }
-    const rows = [...totalsByCategory.entries()]
-      .map(([categoryId, total]) => ({ categoryId, total }))
+    const rows = walletBreakdownRows
+      .filter((row) => row.walletId === wallet.id)
+      .map((row) => ({ categoryId: row.categoryId, total: Number(row.total) }))
       .sort((a, b) => b.total - a.total);
     const maxTotal = rows.length > 0 ? Math.max(...rows.map((r) => r.total)) : 0;
     return { wallet, rows, maxTotal };

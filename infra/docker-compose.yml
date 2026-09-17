@@ -6,6 +6,7 @@ networks:
 
 volumes:
   mysql-data:
+  receipt-uploads:
 
 services:
   mysql-db:
@@ -170,7 +171,10 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       JWT_SECRET: ${JWT_SECRET}
+      RECEIPT_STORAGE_PATH: /data/receipts
       JAVA_TOOL_OPTIONS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5008
+    volumes:
+      - receipt-uploads:/data/receipts
     depends_on:
       eureka-server:
         condition: service_healthy

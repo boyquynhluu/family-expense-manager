@@ -5,6 +5,8 @@ import com.family.expensemanager.expense.dao.BudgetDao;
 import com.family.expensemanager.expense.dao.BudgetDaoImpl;
 import com.family.expensemanager.expense.dao.CategoryDao;
 import com.family.expensemanager.expense.dao.CategoryDaoImpl;
+import com.family.expensemanager.expense.dao.RecurringTransactionDao;
+import com.family.expensemanager.expense.dao.RecurringTransactionDaoImpl;
 import com.family.expensemanager.expense.dao.TransactionDao;
 import com.family.expensemanager.expense.dao.TransactionDaoImpl;
 import com.family.expensemanager.expense.dao.WalletDao;
@@ -42,5 +44,10 @@ public class DomaConfiguration {
     @Bean
     public BudgetDao budgetDao(Config domaConfig) {
         return new BudgetDaoImpl(domaConfig);
+    }
+
+    @Bean
+    public RecurringTransactionDao recurringTransactionDao(Config domaConfig) {
+        return new RecurringTransactionDaoImpl(domaConfig);
     }
 }

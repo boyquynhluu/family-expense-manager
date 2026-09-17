@@ -7,7 +7,9 @@ SELECT
     type,
     amount,
     occurred_at,
-    note
+    note,
+    receipt_path,
+    receipt_content_type
 FROM
     TRANSACTIONS
 WHERE

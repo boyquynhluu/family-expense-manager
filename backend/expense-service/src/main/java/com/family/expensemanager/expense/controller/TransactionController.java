@@ -1,8 +1,10 @@
 package com.family.expensemanager.expense.controller;
 
 import com.family.expensemanager.common.dto.ApiResponse;
+import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.report.ReportFormat;
 import com.family.expensemanager.common.security.CurrentUser;
+import com.family.expensemanager.expense.dto.ReceiptFile;
 import com.family.expensemanager.expense.dto.TransactionReportFilter;
 import com.family.expensemanager.expense.dto.TransactionRequest;
 import com.family.expensemanager.expense.dto.TransactionResponse;
@@ -21,9 +23,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
-import java.util.List;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,13 +42,23 @@ public class TransactionController {
     @PostMapping
     public ApiResponse<TransactionResponse> create(@Valid @RequestBody TransactionRequest request) {
         log.info("create - start");
-        return ApiResponse.ok(transactionService.create(CurrentUser.familyId(), CurrentUser.userId(), request));
+        return ApiResponse.ok(transactionService.create(
+                CurrentUser.familyId(), CurrentUser.userId(), CurrentUser.email(), CurrentUser.displayName(),
+                request));
     }
 
     @GetMapping
-    public ApiResponse<List<TransactionResponse>> list() {
-        log.info("list - start");
-        return ApiResponse.ok(transactionService.listByFamily(CurrentUser.familyId()));
+    public ApiResponse<PageResponse<TransactionResponse>> list(
+            @RequestParam(required = false) Long walletId,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) LocalDate fromDate,
+            @RequestParam(required = false) LocalDate toDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        log.info("list - start, page={}, size={}", page, size);
+        TransactionReportFilter filter = new TransactionReportFilter(walletId, categoryId, type, fromDate, toDate);
+        return ApiResponse.ok(transactionService.listByFamilyPaged(CurrentUser.familyId(), filter, page, size));
     }
 
     @GetMapping("/{id}")
@@ -65,6 +77,29 @@ public class TransactionController {
     public ApiResponse<Void> delete(@PathVariable Long id) {
         log.info("delete - start, id={}", id);
         transactionService.delete(CurrentUser.familyId(), id);
+        return ApiResponse.ok();
+    }
+
+    @PostMapping("/{id}/receipt")
+    public ApiResponse<TransactionResponse> uploadReceipt(
+            @PathVariable Long id, @RequestParam("file") MultipartFile file) {
+        log.info("uploadReceipt - start, id={}", id);
+        return ApiResponse.ok(transactionService.uploadReceipt(CurrentUser.familyId(), id, file));
+    }
+
+    @GetMapping("/{id}/receipt")
+    public ResponseEntity<byte[]> getReceipt(@PathVariable Long id) {
+        log.info("getReceipt - start, id={}", id);
+        ReceiptFile receipt = transactionService.getReceipt(CurrentUser.familyId(), id);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(receipt.contentType()))
+                .body(receipt.content());
+    }
+
+    @DeleteMapping("/{id}/receipt")
+    public ApiResponse<Void> deleteReceipt(@PathVariable Long id) {
+        log.info("deleteReceipt - start, id={}", id);
+        transactionService.deleteReceipt(CurrentUser.familyId(), id);
         return ApiResponse.ok();
     }
 
