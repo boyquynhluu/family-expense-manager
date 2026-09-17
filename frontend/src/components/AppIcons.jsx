@@ -152,6 +152,27 @@ export function ShieldIcon() {
   );
 }
 
+export function RepeatIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path d="M4 7h13a3 3 0 0 1 3 3v2" strokeLinecap="round" />
+      <path d="M9 3 4 7l5 4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M20 17H7a3 3 0 0 1-3-3v-2" strokeLinecap="round" />
+      <path d="m15 21 5-4-5-4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function ImageIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="8.5" cy="9.5" r="1.5" />
+      <path d="m21 16-5.5-5.5L4 20" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function MenuIcon() {
   return (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">

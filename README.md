@@ -256,3 +256,52 @@ Bảng port của các service/tool phổ biến trong hạ tầng nói chung �
                             │
                             ▼
                     Spring Boot BE
+
+## Task cần làm
+
+### Thiếu — ảnh hưởng trực tiếp người dùng, đáng cân nhắc làm sớm
+
+> **1. Phân trang/lọc chỉ làm ở frontend**
+> API `GET /transactions` trả về toàn bộ giao dịch của cả gia đình mỗi lần gọi, lọc theo ví/danh mục/ngày chỉ là JS ở client. Data ít thì không sao, nhưng gia đình dùng lâu (hàng nghìn giao dịch) sẽ tải chậm dần. Đây là điểm kỹ thuật đáng sửa sớm nhất trong nhóm này.
+
+> **2. Cảnh báo vượt ngân sách không gửi email**
+> Hệ thống đã có event `BUDGET_EXCEEDED` và đã có sẵn hạ tầng gửi email (dùng cho verify/quên mật khẩu/mời thành viên), nhưng khi vượt ngân sách chỉ tạo thông báo trong app, không gửi email. Người dùng phải tự mở app mới biết.
+
+> **3. Không có giao dịch định kỳ (recurring)**
+> Tiền nhà, internet, subscription hàng tháng phải nhập tay lại mỗi lần.
+
+> **4. Không đính kèm ảnh hoá đơn cho giao dịch**
+
+> **5. Chỉ export, không import**
+> Có xuất CSV/Excel (vừa làm) nhưng không có chiều ngược lại để nhập dữ liệu cũ hàng loạt.
+
+> **6. 1 tài khoản chỉ thuộc đúng 1 gia đình**
+> Không tham gia được nhiều gia đình, không "chuyển" gia đình.
+
+> **7. Chỉ 1 loại tiền tệ/gia đình**
+> Không quy đổi đa tiền tệ (đã có ràng buộc chặn chủ động, không phải bug).
+
+### Thiếu — bảo mật tài khoản
+
+> **8. Không quản lý được phiên đăng nhập**
+> Không thấy đang login ở thiết bị nào, không đăng xuất từ xa được (dù có bảng `REFRESH_TOKENS` sẵn hạ tầng để làm).
+
+> **9. Không có 2FA**
+
+> **10. Xoá là mất vĩnh viễn (hard delete)**
+> Xoá nhầm ví/giao dịch/danh mục không khôi phục lại được.
+
+### Thiếu — chất lượng kỹ thuật (ít lộ ra ngoài, nhưng rủi ro dài hạn)
+
+> **11. Chỉ có unit test (mock DAO), không có integration test chạm DB thật**
+> Chính kiểu lỗ hổng này là lý do bug `is_system_admin` NULL tuần trước lọt qua hết test mà vẫn crash thật khi gọi API. Nên cân nhắc thêm ít nhất vài integration test cho các luồng insert quan trọng.
+
+> **12. Observability sơ sài**
+> Chỉ có Actuator (health/info), không có metrics tổng hợp (Prometheus/Grafana) hay log tập trung — khi chạy thật, lỗi production sẽ khó phát hiện/debug sớm.
+
+> **13. Không i18n**
+> Giao diện cứng tiếng Việt.
+
+### Đã làm đầy đủ (không cần lo)
+
+> Đăng ký/đăng nhập + xác thực email + quên mật khẩu, mời thành viên gia đình, OAuth2 (Google), rate-limit chống brute-force, phân quyền admin hệ thống, export báo cáo CSV/Excel, CI build+test tự động, deploy frontend GitHub Pages, Swagger đầy đủ cho mọi service.

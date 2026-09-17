@@ -4,6 +4,7 @@ import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.expense.dao.TransactionDao;
 import com.family.expensemanager.expense.dto.CategoryReportItem;
 import com.family.expensemanager.expense.dto.SummaryResponse;
+import com.family.expensemanager.expense.dto.WalletCategoryBreakdownItem;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +27,7 @@ public class SummaryService {
 
     private final TransactionDao transactionDao;
     private final CategoryService categoryService;
+    private final WalletService walletService;
 
     @Cacheable(cacheNames = "expense:summary", key = "#familyId + ':' + #yearMonth")
     public SummaryResponse summary(Long familyId, String yearMonth) {
@@ -43,6 +45,30 @@ public class SummaryService {
                 .map(c -> new CategoryReportItem(c.id(), c.name(),
                         transactionDao.sumAmountByCategoryPeriodAndType(familyId, c.id(), yearMonth, TYPE_EXPENSE)))
                 .toList();
+    }
+
+    /**
+     * Per-wallet, per-category expense totals for the month — feeds the Dashboard's
+     * "chi theo danh mục theo từng ví" breakdown without it having to fetch every raw
+     * transaction row and aggregate them in JS (see README tech-debt item on pagination).
+     */
+    @Cacheable(cacheNames = "expense:report:wallet-category", key = "#familyId + ':' + #yearMonth")
+    public List<WalletCategoryBreakdownItem> walletCategoryBreakdown(Long familyId, String yearMonth) {
+        log.info("walletCategoryBreakdown - start, familyId={}, yearMonth={}", familyId, yearMonth);
+        var expenseCategories = categoryService.listByFamily(familyId).stream()
+                .filter(c -> TYPE_EXPENSE.equals(c.type()))
+                .toList();
+        List<WalletCategoryBreakdownItem> result = new ArrayList<>();
+        for (var wallet : walletService.listByFamily(familyId)) {
+            for (var category : expenseCategories) {
+                BigDecimal total = transactionDao.sumAmountByWalletCategoryPeriodAndType(
+                        familyId, wallet.id(), category.id(), yearMonth, TYPE_EXPENSE);
+                if (total.compareTo(BigDecimal.ZERO) != 0) {
+                    result.add(new WalletCategoryBreakdownItem(wallet.id(), category.id(), total));
+                }
+            }
+        }
+        return result;
     }
 
     /**

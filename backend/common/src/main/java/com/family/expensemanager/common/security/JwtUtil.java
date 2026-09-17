@@ -27,6 +27,7 @@ public class JwtUtil {
     public static final String CLAIM_ROLE = "role";
     public static final String CLAIM_DISPLAY_NAME = "displayName";
     public static final String CLAIM_IS_SYSTEM_ADMIN = "isSystemAdmin";
+    public static final String CLAIM_EMAIL = "email";
 
     private final SecretKey key;
 

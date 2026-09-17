@@ -14,6 +14,7 @@ import Dashboard from "./pages/Dashboard";
 import Wallets from "./pages/Wallets";
 import Categories from "./pages/Categories";
 import Transactions from "./pages/Transactions";
+import RecurringTransactions from "./pages/RecurringTransactions";
 import Budgets from "./pages/Budgets";
 import Notifications from "./pages/Notifications";
 import Profile from "./pages/Profile";
@@ -38,6 +39,7 @@ export default function App() {
               <Route path="/wallets" element={<Wallets />} />
               <Route path="/categories" element={<Categories />} />
               <Route path="/transactions" element={<Transactions />} />
+              <Route path="/recurring-transactions" element={<RecurringTransactions />} />
               <Route path="/budgets" element={<Budgets />} />
               <Route path="/notifications" element={<Notifications />} />
               <Route path="/profile" element={<Profile />} />

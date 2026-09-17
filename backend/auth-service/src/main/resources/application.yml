@@ -22,7 +22,7 @@ spring:
             client-id: ${GOOGLE_CLIENT_ID:}
             client-secret: ${GOOGLE_CLIENT_SECRET:}
             scope: openid,email,profile
-            redirect-uri: ${app.base-url}/api/auth/login/oauth2/code/{registrationId}
+            redirect-uri: "{baseUrl}/api/auth/login/oauth2/code/{registrationId}"
           # Facebook tạm bỏ: Spring Boot validate mọi registration khai báo ở đây phải có
           # client-id/secret không rỗng, nên để trống sẽ làm app không start được. Thêm lại
           # khối này (và FACEBOOK_CLIENT_ID/SECRET trong infra/.env) khi có Facebook App thật.
