@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Trans, useTranslation } from "react-i18next";
 import client from "../api/client";
 import { EyeIcon, EyeOffIcon, KeyIcon, UserIcon } from "../components/AuthIcons";
+import LanguageSwitcher from "../components/LanguageSwitcher";
 
 export default function AcceptInvite() {
   const { t } = useTranslation("acceptInvite");
@@ -50,6 +51,7 @@ export default function AcceptInvite() {
 
   return (
     <div className="auth-page">
+      <LanguageSwitcher variant="light" />
       <form className="auth-form" onSubmit={handleSubmit}>
         <h1 className="auth-title">{t("title")}</h1>
 

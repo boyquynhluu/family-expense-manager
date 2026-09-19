@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { oauth2AuthorizationUrl } from "../api/client";
 import { EyeIcon, EyeOffIcon, FacebookIcon, GithubIcon, GoogleIcon, KeyIcon, MailIcon } from "../components/AuthIcons";
+import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuth } from "../hooks/useAuth";
 
 export default function Login() {
@@ -67,6 +68,7 @@ export default function Login() {
   if (twoFactorToken) {
     return (
       <div className="auth-page">
+        <LanguageSwitcher variant="light" />
         <form className="auth-form" onSubmit={handleTwoFactorSubmit}>
           <h1 className="auth-title">{t("twoFactorTitle")}</h1>
 
@@ -107,6 +109,7 @@ export default function Login() {
 
   return (
     <div className="auth-page">
+      <LanguageSwitcher variant="light" />
       <form className="auth-form" onSubmit={handleSubmit}>
         <h1 className="auth-title">{t("title")}</h1>
 

@@ -635,6 +635,24 @@ select:focus {
   letter-spacing: normal;
 }
 
+/* Floats over the auth pages' dark/photo background instead of sitting in the sidebar
+   flow — see LanguageSwitcher's variant="light" (used on Login/Register/...). */
+.language-switcher-light {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 2;
+  margin-bottom: 0;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.language-switcher-light select {
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+}
+
 .sidebar-user {
   display: flex;
   align-items: center;

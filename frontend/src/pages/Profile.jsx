@@ -6,22 +6,33 @@ import client from "../api/client";
 import { TrashIcon } from "../components/AppIcons";
 import { EyeIcon, EyeOffIcon } from "../components/AuthIcons";
 
+// The stored value is always this fixed Vietnamese word regardless of UI language —
+// only the displayed label is translated (see relationshipLabelFor below) — otherwise
+// switching languages would change what gets saved to the DB and orphan existing data
+// saved under the other language's word.
+const RELATIONSHIP_OPTIONS = [
+  ["Bố", "relationshipFather"],
+  ["Mẹ", "relationshipMother"],
+  ["Ông", "relationshipGrandfather"],
+  ["Bà", "relationshipGrandmother"],
+  ["Anh", "relationshipOlderBrother"],
+  ["Chị", "relationshipOlderSister"],
+  ["Em", "relationshipYoungerSibling"],
+  ["Con", "relationshipChild"],
+  ["Cháu", "relationshipGrandchild"],
+  ["Chồng", "relationshipHusband"],
+  ["Vợ", "relationshipWife"],
+  ["Khác", "relationshipOther"],
+];
+
 export default function Profile() {
   const { t } = useTranslation(["profile", "common"]);
-  const RELATIONSHIP_OPTIONS = [
-    t("relationshipFather"),
-    t("relationshipMother"),
-    t("relationshipGrandfather"),
-    t("relationshipGrandmother"),
-    t("relationshipOlderBrother"),
-    t("relationshipOlderSister"),
-    t("relationshipYoungerSibling"),
-    t("relationshipChild"),
-    t("relationshipGrandchild"),
-    t("relationshipHusband"),
-    t("relationshipWife"),
-    t("relationshipOther"),
-  ];
+
+  function relationshipLabelFor(value) {
+    const entry = RELATIONSHIP_OPTIONS.find(([v]) => v === value);
+    return entry ? t(entry[1]) : value;
+  }
+
   const [profile, setProfile] = useState(null);
   const [displayName, setDisplayName] = useState("");
   const [relationship, setRelationship] = useState("");
@@ -233,9 +244,9 @@ export default function Profile() {
             {t("relationshipLabel")}
             <select value={relationship} onChange={(e) => setRelationship(e.target.value)}>
               <option value="">{t("relationshipNone")}</option>
-              {RELATIONSHIP_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+              {RELATIONSHIP_OPTIONS.map(([value, key]) => (
+                <option key={value} value={value}>
+                  {t(key)}
                 </option>
               ))}
             </select>
@@ -327,7 +338,9 @@ export default function Profile() {
                   <td data-label={t("displayNameLabel")}>{m.displayName}</td>
                   <td data-label={t("emailLabel")}>{m.email}</td>
                   <td data-label={t("roleLabel")}>{m.role}</td>
-                  <td data-label={t("relationshipColumnHeader")}>{m.relationship || t("notAvailable")}</td>
+                  <td data-label={t("relationshipColumnHeader")}>
+                    {m.relationship ? relationshipLabelFor(m.relationship) : t("notAvailable")}
+                  </td>
                   {profile.role === "OWNER" && (
                     <td className="row-actions">
                       {m.role !== "OWNER" && (

@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { EyeIcon, EyeOffIcon, KeyIcon } from "../components/AuthIcons";
+import LanguageSwitcher from "../components/LanguageSwitcher";
 
 export default function ResetPassword() {
   const { t } = useTranslation("resetPassword");
@@ -30,6 +31,7 @@ export default function ResetPassword() {
 
   return (
     <div className="auth-page">
+      <LanguageSwitcher variant="light" />
       <form className="auth-form" onSubmit={handleSubmit}>
         <h1 className="auth-title">{t("title")}</h1>
 

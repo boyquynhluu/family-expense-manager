@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { MailIcon } from "../components/AuthIcons";
+import LanguageSwitcher from "../components/LanguageSwitcher";
 
 export default function ForgotPassword() {
   const { t } = useTranslation("forgotPassword");
@@ -28,6 +29,7 @@ export default function ForgotPassword() {
 
   return (
     <div className="auth-page">
+      <LanguageSwitcher variant="light" />
       <form className="auth-form" onSubmit={handleSubmit}>
         <h1 className="auth-title">{t("title")}</h1>
 

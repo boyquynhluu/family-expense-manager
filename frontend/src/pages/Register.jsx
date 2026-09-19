@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { EyeIcon, EyeOffIcon, HomeIcon, KeyIcon, MailIcon, UserIcon } from "../components/AuthIcons";
+import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuth } from "../hooks/useAuth";
 
 export default function Register() {
@@ -36,6 +37,7 @@ export default function Register() {
 
   return (
     <div className="auth-page">
+      <LanguageSwitcher variant="light" />
       <form className="auth-form" onSubmit={handleSubmit}>
         <h1 className="auth-title">{t("title")}</h1>
 

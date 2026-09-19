@@ -26,8 +26,12 @@ i18n
     ns: Object.keys(resources.vi ?? {}),
     defaultNS: "common",
     interpolation: { escapeValue: false },
+    // Deliberately no "navigator" here — this app defaults to Vietnamese for every
+    // visitor regardless of browser/OS locale (matching its pre-i18n behavior), only
+    // switching once someone explicitly picks a language via LanguageSwitcher, which
+    // then sticks (localStorage) for that browser.
     detection: {
-      order: ["localStorage", "navigator"],
+      order: ["localStorage"],
       caches: ["localStorage"],
       lookupLocalStorage: "fem-language",
     },
