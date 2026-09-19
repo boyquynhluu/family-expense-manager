@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import lombok.RequiredArgsConstructor;
@@ -62,6 +63,7 @@ public class WalletService {
         return WalletResponse.from(wallet, currentBalanceOf(wallet));
     }
 
+    /** Soft-delete (README "10. Xoá là mất vĩnh viễn") — the row stays, just hidden, so {@link #restore} can undo it. */
     @Transactional
     @PreAuthorize("hasRole('OWNER')")
     public void delete(Long walletId, Long familyId) {
@@ -73,7 +75,22 @@ public class WalletService {
         if (recurringTransactionDao.countByWalletId(walletId) > 0) {
             throw new ConflictException("Không thể xoá ví đang có giao dịch định kỳ");
         }
-        walletDao.delete(wallet);
+        wallet.setDeletedAt(LocalDateTime.now());
+        walletDao.update(wallet);
+    }
+
+    public List<WalletResponse> listDeleted(Long familyId) {
+        log.info("listDeleted - start, familyId={}", familyId);
+        return walletDao.selectDeletedByFamilyId(familyId).stream().map(WalletResponse::from).toList();
+    }
+
+    @Transactional
+    @PreAuthorize("hasRole('OWNER')")
+    public void restore(Long walletId, Long familyId) {
+        log.info("restore - start, walletId={}, familyId={}", walletId, familyId);
+        if (walletDao.restore(walletId, familyId) == 0) {
+            throw new NotFoundException("Ví đã xoá không tồn tại: " + walletId);
+        }
     }
 
     /**

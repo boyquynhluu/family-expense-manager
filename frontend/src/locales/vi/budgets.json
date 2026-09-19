@@ -1,0 +1,20 @@
+{
+  "title": "Ngân sách",
+  "subtitle": "Đặt hạn mức chi tiêu theo danh mục cho từng tháng",
+  "editTitle": "Cập nhật ngân sách",
+  "newTitle": "Đặt ngân sách mới",
+  "noCategoriesMessage": "Cần tạo ít nhất 1 danh mục chi tiêu trước khi đặt ngân sách.",
+  "categoryLabel": "Danh mục",
+  "monthLabel": "Tháng",
+  "limitLabel": "Hạn mức",
+  "updateButton": "Cập nhật",
+  "createButton": "Đặt ngân sách",
+  "listTitle": "Danh sách ngân sách",
+  "noBudgets": "Chưa có ngân sách nào",
+  "statusDanger": "Vượt ngân sách",
+  "statusWarning": "Gần đạt hạn mức",
+  "statusSafe": "An toàn",
+  "saveFailed": "Lưu ngân sách thất bại",
+  "deleteConfirm": "Xoá ngân sách này?",
+  "deleteFailed": "Xoá ngân sách thất bại"
+}

@@ -1,0 +1,21 @@
+{
+  "title": "Danh mục",
+  "subtitle": "Nhóm các khoản thu/chi để dễ theo dõi",
+  "addTitle": "Thêm danh mục mới",
+  "editTitle": "Cập nhật danh mục",
+  "nameLabel": "Tên danh mục",
+  "namePlaceholder": "VD: Ăn uống",
+  "typeLabel": "Loại",
+  "typeExpense": "Chi tiêu",
+  "typeIncome": "Thu nhập",
+  "iconLabel": "Icon (tuỳ chọn)",
+  "iconPlaceholder": "VD: 🍔",
+  "colorLabel": "Màu",
+  "submitAdd": "Thêm danh mục",
+  "submitUpdate": "Cập nhật",
+  "listTitle": "Danh sách danh mục",
+  "emptyState": "Chưa có danh mục nào",
+  "saveFailed": "Lưu danh mục thất bại",
+  "deleteConfirm": "Xoá danh mục này? Chỉ xoá được khi chưa có giao dịch hoặc ngân sách nào dùng danh mục này — có thể khôi phục sau trong Thùng rác.",
+  "deleteFailed": "Xoá danh mục thất bại"
+}

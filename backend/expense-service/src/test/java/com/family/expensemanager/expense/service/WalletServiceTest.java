@@ -113,7 +113,7 @@ class WalletServiceTest {
         when(transactionDao.countByWalletId(1L)).thenReturn(3L);
 
         assertThatThrownBy(() -> walletService.delete(1L, 1L)).isInstanceOf(ConflictException.class);
-        verify(walletDao, never()).delete(any());
+        verify(walletDao, never()).update(any());
     }
 
     @Test
@@ -124,7 +124,7 @@ class WalletServiceTest {
         when(recurringTransactionDao.countByWalletId(1L)).thenReturn(1L);
 
         assertThatThrownBy(() -> walletService.delete(1L, 1L)).isInstanceOf(ConflictException.class);
-        verify(walletDao, never()).delete(any());
+        verify(walletDao, never()).update(any());
     }
 
     @Test
@@ -136,7 +136,35 @@ class WalletServiceTest {
 
         walletService.delete(1L, 1L);
 
-        verify(walletDao).delete(target);
+        assertThat(target.getDeletedAt()).isNotNull();
+        verify(walletDao).update(target);
+    }
+
+    @Test
+    void restore_clearsDeletedAt_whenRowExists() {
+        when(walletDao.restore(1L, 1L)).thenReturn(1);
+
+        walletService.restore(1L, 1L);
+
+        verify(walletDao).restore(1L, 1L);
+    }
+
+    @Test
+    void restore_throwsNotFound_whenRowMissingOrNotDeleted() {
+        when(walletDao.restore(1L, 1L)).thenReturn(0);
+
+        assertThatThrownBy(() -> walletService.restore(1L, 1L)).isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void listDeleted_returnsDeletedWallets() {
+        Wallet deleted = wallet(1L, 1L, "VND");
+        when(walletDao.selectDeletedByFamilyId(1L)).thenReturn(List.of(deleted));
+
+        var result = walletService.listDeleted(1L);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).id()).isEqualTo(1L);
     }
 
     @Test

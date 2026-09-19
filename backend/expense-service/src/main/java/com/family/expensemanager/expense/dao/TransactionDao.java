@@ -59,4 +59,10 @@ public interface TransactionDao {
 
     @Select
     long countByCategoryId(Long categoryId);
+
+    @Select
+    List<Transaction> selectDeletedByFamilyId(Long familyId);
+
+    @Update(sqlFile = true)
+    int restore(Long id, Long familyId);
 }

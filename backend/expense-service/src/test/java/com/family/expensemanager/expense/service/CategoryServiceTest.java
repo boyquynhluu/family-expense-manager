@@ -75,7 +75,7 @@ class CategoryServiceTest {
         when(transactionDao.countByCategoryId(1L)).thenReturn(1L);
 
         assertThatThrownBy(() -> categoryService.delete(1L, 1L)).isInstanceOf(ConflictException.class);
-        verify(categoryDao, never()).delete(any());
+        verify(categoryDao, never()).update(any());
     }
 
     @Test
@@ -86,7 +86,7 @@ class CategoryServiceTest {
         when(budgetDao.countByCategoryId(1L)).thenReturn(1L);
 
         assertThatThrownBy(() -> categoryService.delete(1L, 1L)).isInstanceOf(ConflictException.class);
-        verify(categoryDao, never()).delete(any());
+        verify(categoryDao, never()).update(any());
     }
 
     @Test
@@ -98,7 +98,7 @@ class CategoryServiceTest {
         when(recurringTransactionDao.countByCategoryId(1L)).thenReturn(1L);
 
         assertThatThrownBy(() -> categoryService.delete(1L, 1L)).isInstanceOf(ConflictException.class);
-        verify(categoryDao, never()).delete(any());
+        verify(categoryDao, never()).update(any());
     }
 
     @Test
@@ -111,7 +111,24 @@ class CategoryServiceTest {
 
         categoryService.delete(1L, 1L);
 
-        verify(categoryDao).delete(category);
+        assertThat(category.getDeletedAt()).isNotNull();
+        verify(categoryDao).update(category);
+    }
+
+    @Test
+    void restore_clearsDeletedAt_whenRowExists() {
+        when(categoryDao.restore(1L, 1L)).thenReturn(1);
+
+        categoryService.restore(1L, 1L);
+
+        verify(categoryDao).restore(1L, 1L);
+    }
+
+    @Test
+    void restore_throwsNotFound_whenRowMissingOrNotDeleted() {
+        when(categoryDao.restore(1L, 1L)).thenReturn(0);
+
+        assertThatThrownBy(() -> categoryService.restore(1L, 1L)).isInstanceOf(NotFoundException.class);
     }
 
     private static Category category(Long id, Long familyId) {

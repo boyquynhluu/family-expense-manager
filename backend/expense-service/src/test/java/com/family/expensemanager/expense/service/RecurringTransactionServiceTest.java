@@ -92,7 +92,7 @@ class RecurringTransactionServiceTest {
         when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
         when(transactionService.create(any(), any(), any(), any(), any()))
                 .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, "EXPENSE", BigDecimal.TEN,
-                        LocalDate.of(2026, 1, 1).atStartOfDay(), null, false));
+                        LocalDate.of(2026, 1, 1).atStartOfDay(), null, false, null));
 
         service.generateDueTransactions();
 
@@ -107,7 +107,7 @@ class RecurringTransactionServiceTest {
         RecurringTransaction rule = rule(1L, LocalDate.of(2025, 10, 1), 1, null);
         when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
         when(transactionService.create(any(), any(), any(), any(), any()))
-                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, "EXPENSE", BigDecimal.TEN, null, null, false));
+                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, "EXPENSE", BigDecimal.TEN, null, null, false, null));
 
         service.generateDueTransactions();
 
@@ -121,7 +121,7 @@ class RecurringTransactionServiceTest {
         RecurringTransaction rule = rule(1L, LocalDate.of(2026, 1, 1), 1, LocalDate.of(2026, 1, 31));
         when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
         when(transactionService.create(any(), any(), any(), any(), any()))
-                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, "EXPENSE", BigDecimal.TEN, null, null, false));
+                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, "EXPENSE", BigDecimal.TEN, null, null, false, null));
 
         service.generateDueTransactions();
 
@@ -136,7 +136,7 @@ class RecurringTransactionServiceTest {
         when(transactionService.create(eq(1L), any(), any(), any(), any()))
                 .thenThrow(new RuntimeException("wallet was deleted"));
         when(transactionService.create(eq(2L), any(), any(), any(), any()))
-                .thenReturn(new TransactionResponse(99L, 5L, 7L, 2L, 10L, "EXPENSE", BigDecimal.TEN, null, null, false));
+                .thenReturn(new TransactionResponse(99L, 5L, 7L, 2L, 10L, "EXPENSE", BigDecimal.TEN, null, null, false, null));
 
         service.generateDueTransactions();
 

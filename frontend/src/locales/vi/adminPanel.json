@@ -1,0 +1,35 @@
+{
+  "loadFamiliesFailed": "Không tải được danh sách gia đình",
+  "loadUsersFailed": "Không tải được danh sách người dùng",
+  "grantAdminConfirm": "Cấp quyền admin toàn hệ thống cho {{email}}?",
+  "revokeAdminConfirm": "Gỡ quyền admin toàn hệ thống của {{email}}?",
+  "updateAdminSuccess": "Đã cập nhật quyền admin",
+  "updateAdminFailed": "Cập nhật thất bại",
+
+  "swalTitle": "Cập nhật quyền Admin?",
+  "swalConfirmButtonText": "Đồng ý",
+  "swalCancelButtonText": "Hủy",
+
+  "title": "Quản trị hệ thống",
+  "subtitle": "Xem toàn bộ gia đình và người dùng, cấp quyền admin",
+
+  "familyListTitle": "Danh sách gia đình ({{count}})",
+  "noFamilies": "Chưa có gia đình nào",
+  "familyNameHeader": "Tên gia đình",
+  "ownerHeader": "Chủ hộ",
+  "memberCountHeader": "Số thành viên",
+  "createdAtHeader": "Ngày tạo",
+
+  "userListTitle": "Danh sách người dùng ({{count}})",
+  "noUsers": "Chưa có người dùng nào",
+  "emailHeader": "Email",
+  "displayNameHeader": "Tên hiển thị",
+  "familyHeader": "Gia đình",
+  "roleHeader": "Vai trò",
+  "statusHeader": "Trạng thái",
+  "systemAdminHeader": "Admin hệ thống",
+  "activated": "Đã kích hoạt",
+  "notActivated": "Chưa kích hoạt",
+  "revokeAdminButton": "Gỡ quyền admin",
+  "grantAdminButton": "Cấp quyền admin"
+}

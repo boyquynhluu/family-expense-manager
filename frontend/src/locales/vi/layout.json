@@ -1,0 +1,18 @@
+{
+  "brand": "Family Expense",
+  "openMenu": "Mở menu",
+  "closeMenu": "Đóng menu",
+  "nav": {
+    "dashboard": "Dashboard",
+    "wallets": "Ví",
+    "categories": "Danh mục",
+    "transactions": "Giao dịch",
+    "recurringTransactions": "Giao dịch định kỳ",
+    "budgets": "Ngân sách",
+    "notifications": "Thông báo",
+    "trash": "Thùng rác",
+    "profile": "Hồ sơ",
+    "admin": "Quản trị hệ thống"
+  },
+  "logout": "Đăng xuất"
+}

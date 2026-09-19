@@ -40,8 +40,21 @@ export function AuthProvider({ children }) {
     setAccessToken(newAccessToken);
   }
 
+  // Returns { requiresTwoFactor: true, twoFactorToken } instead of logging in when the
+  // account has 2FA enabled (README "9. Không có 2FA") — the caller must then collect a
+  // code from the user and call verifyTwoFactor() to actually get tokens.
   async function login(email, password, remember = true) {
     const res = await client.post("/auth/login", { email, password });
+    const data = res.data.data;
+    if (data.requiresTwoFactor) {
+      return { requiresTwoFactor: true, twoFactorToken: data.twoFactorToken };
+    }
+    persistTokens(data.tokens.accessToken, data.tokens.refreshToken, remember);
+    return { requiresTwoFactor: false };
+  }
+
+  async function verifyTwoFactor(twoFactorToken, code, remember = true) {
+    const res = await client.post("/auth/2fa/verify-login", { challengeToken: twoFactorToken, code });
     const { accessToken: token, refreshToken } = res.data.data;
     persistTokens(token, refreshToken, remember);
   }
@@ -61,9 +74,27 @@ export function AuthProvider({ children }) {
     return res.data.data.message;
   }
 
-  function logout() {
+  // Best-effort: revoke the session server-side (see README "8. Không quản lý được
+  // phiên đăng nhập") so it stops working immediately instead of just expiring
+  // naturally — but local logout must succeed even if this call fails (e.g. already
+  // expired token, network hiccup), so it's never allowed to block clearing tokens.
+  async function logout() {
+    try {
+      await client.post("/auth/logout");
+    } catch {
+      // ignore — clearing local tokens below is what actually logs this device out
+    }
     clearTokens();
     setAccessToken(null);
+  }
+
+  // Re-points this session at a different family the account belongs to (see README
+  // "6. 1 tài khoản chỉ thuộc đúng 1 gia đình") — the backend re-issues fresh tokens
+  // scoped to it, same mechanism as login/refresh.
+  async function switchFamily(familyId) {
+    const res = await client.post("/auth/switch-family", { familyId });
+    const { accessToken: token, refreshToken } = res.data.data;
+    persistTokens(token, refreshToken);
   }
 
   const value = useMemo(
@@ -75,9 +106,11 @@ export function AuthProvider({ children }) {
       displayName: claims?.displayName ?? null,
       isSystemAdmin: claims?.isSystemAdmin ?? false,
       login,
+      verifyTwoFactor,
       loginWithTokens,
       register,
       logout,
+      switchFamily,
     }),
     [accessToken, claims]
   );

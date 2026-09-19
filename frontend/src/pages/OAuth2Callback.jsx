@@ -1,11 +1,13 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../hooks/useAuth";
 
 // Landed on after Google/Facebook login: auth-service redirects here with either
 // ?accessToken=...&refreshToken=... or ?error=... appended (see auth-service
 // OAuth2AuthenticationSuccessHandler / OAuth2AuthenticationFailureHandler).
 export default function OAuth2Callback() {
+  const { t } = useTranslation("oauth2Callback");
   const [searchParams] = useSearchParams();
   const { loginWithTokens } = useAuth();
   const navigate = useNavigate();
@@ -30,7 +32,7 @@ export default function OAuth2Callback() {
 
   return (
     <div className="auth-page">
-      <p>Đang đăng nhập...</p>
+      <p>{t("loggingIn")}</p>
     </div>
   );
 }

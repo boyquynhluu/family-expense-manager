@@ -9,8 +9,10 @@ SELECT
     occurred_at,
     note,
     receipt_path,
-    receipt_content_type
+    receipt_content_type,
+    deleted_at
 FROM
     TRANSACTIONS
 WHERE
     id = /* id */0
+    AND deleted_at IS NULL

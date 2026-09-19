@@ -13,6 +13,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import lombok.RequiredArgsConstructor;
@@ -58,6 +59,7 @@ public class CategoryService {
         return CategoryResponse.from(category);
     }
 
+    /** Soft-delete (README "10. Xoá là mất vĩnh viễn") — the row stays, just hidden, so {@link #restore} can undo it. */
     @Transactional
     @PreAuthorize("hasRole('OWNER')")
     public void delete(Long categoryId, Long familyId) {
@@ -69,7 +71,22 @@ public class CategoryService {
         if (recurringTransactionDao.countByCategoryId(categoryId) > 0) {
             throw new ConflictException("Không thể xoá danh mục đang có giao dịch định kỳ");
         }
-        categoryDao.delete(category);
+        category.setDeletedAt(LocalDateTime.now());
+        categoryDao.update(category);
+    }
+
+    public List<CategoryResponse> listDeleted(Long familyId) {
+        log.info("listDeleted - start, familyId={}", familyId);
+        return categoryDao.selectDeletedByFamilyId(familyId).stream().map(CategoryResponse::from).toList();
+    }
+
+    @Transactional
+    @PreAuthorize("hasRole('OWNER')")
+    public void restore(Long categoryId, Long familyId) {
+        log.info("restore - start, categoryId={}, familyId={}", categoryId, familyId);
+        if (categoryDao.restore(categoryId, familyId) == 0) {
+            throw new NotFoundException("Danh mục đã xoá không tồn tại: " + categoryId);
+        }
     }
 
     Category requireOwnedByFamily(Long categoryId, Long familyId) {

@@ -3,19 +3,30 @@ package com.family.expensemanager.auth.controller;
 import com.family.expensemanager.auth.dto.AcceptInviteRequest;
 import com.family.expensemanager.auth.dto.AuthResponse;
 import com.family.expensemanager.auth.dto.ChangePasswordRequest;
+import com.family.expensemanager.auth.dto.FamilyMembershipResponse;
 import com.family.expensemanager.auth.dto.ForgotPasswordRequest;
 import com.family.expensemanager.auth.dto.InviteDetailsResponse;
 import com.family.expensemanager.auth.dto.InviteMemberRequest;
 import com.family.expensemanager.auth.dto.LoginRequest;
+import com.family.expensemanager.auth.dto.LoginResponse;
 import com.family.expensemanager.auth.dto.MessageResponse;
 import com.family.expensemanager.auth.dto.RefreshRequest;
 import com.family.expensemanager.auth.dto.RegisterRequest;
 import com.family.expensemanager.auth.dto.ResetPasswordRequest;
+import com.family.expensemanager.auth.dto.SessionResponse;
+import com.family.expensemanager.auth.dto.SwitchFamilyRequest;
+import com.family.expensemanager.auth.dto.TwoFactorCodeRequest;
+import com.family.expensemanager.auth.dto.TwoFactorConfirmResponse;
+import com.family.expensemanager.auth.dto.TwoFactorDisableRequest;
+import com.family.expensemanager.auth.dto.TwoFactorSetupResponse;
+import com.family.expensemanager.auth.dto.TwoFactorVerifyLoginRequest;
 import com.family.expensemanager.auth.dto.UpdateProfileRequest;
 import com.family.expensemanager.auth.dto.UserProfileResponse;
+import com.family.expensemanager.auth.security.RequestMetadataUtil;
 import com.family.expensemanager.auth.service.AuthService;
 import com.family.expensemanager.common.dto.ApiResponse;
 import com.family.expensemanager.common.security.CurrentUser;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -59,15 +70,32 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ApiResponse<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
+    public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
         log.info("login - start, email={}", request.email());
-        return ApiResponse.ok(authService.login(request));
+        return ApiResponse.ok(authService.login(request,
+                RequestMetadataUtil.deviceInfo(httpRequest), RequestMetadataUtil.ipAddress(httpRequest)));
+    }
+
+    @PostMapping("/2fa/verify-login")
+    public ApiResponse<AuthResponse> verifyTwoFactorLogin(@Valid @RequestBody TwoFactorVerifyLoginRequest request,
+                                                            HttpServletRequest httpRequest) {
+        log.info("verifyTwoFactorLogin - start");
+        return ApiResponse.ok(authService.verifyTwoFactorLogin(request.challengeToken(), request.code(),
+                RequestMetadataUtil.deviceInfo(httpRequest), RequestMetadataUtil.ipAddress(httpRequest)));
     }
 
     @PostMapping("/refresh")
-    public ApiResponse<AuthResponse> refresh(@Valid @RequestBody RefreshRequest request) {
+    public ApiResponse<AuthResponse> refresh(@Valid @RequestBody RefreshRequest request, HttpServletRequest httpRequest) {
         log.info("refresh - start");
-        return ApiResponse.ok(authService.refresh(request));
+        return ApiResponse.ok(authService.refresh(request,
+                RequestMetadataUtil.deviceInfo(httpRequest), RequestMetadataUtil.ipAddress(httpRequest)));
+    }
+
+    @PostMapping("/logout")
+    public ApiResponse<MessageResponse> logout() {
+        log.info("logout - start");
+        authService.logout(CurrentUser.userId(), CurrentUser.sessionId());
+        return ApiResponse.ok(new MessageResponse("Đã đăng xuất"));
     }
 
     @PostMapping("/forgot-password")
@@ -102,6 +130,25 @@ public class AuthController {
         return ApiResponse.ok(new MessageResponse("Đổi mật khẩu thành công."));
     }
 
+    @PostMapping("/2fa/setup")
+    public ApiResponse<TwoFactorSetupResponse> setupTwoFactor() {
+        log.info("setupTwoFactor - start");
+        return ApiResponse.ok(authService.setupTwoFactor(CurrentUser.userId()));
+    }
+
+    @PostMapping("/2fa/confirm")
+    public ApiResponse<TwoFactorConfirmResponse> confirmTwoFactor(@Valid @RequestBody TwoFactorCodeRequest request) {
+        log.info("confirmTwoFactor - start");
+        return ApiResponse.ok(authService.confirmTwoFactor(CurrentUser.userId(), request.code()));
+    }
+
+    @PostMapping("/2fa/disable")
+    public ApiResponse<MessageResponse> disableTwoFactor(@Valid @RequestBody TwoFactorDisableRequest request) {
+        log.info("disableTwoFactor - start");
+        authService.disableTwoFactor(CurrentUser.userId(), request.password());
+        return ApiResponse.ok(new MessageResponse("Đã tắt xác thực 2 lớp"));
+    }
+
     @GetMapping("/family/members")
     public ApiResponse<List<UserProfileResponse>> familyMembers() {
         log.info("familyMembers - start");
@@ -113,6 +160,39 @@ public class AuthController {
         log.info("removeMember - start, userId={}", userId);
         authService.removeMember(CurrentUser.familyId(), CurrentUser.userId(), userId);
         return ApiResponse.ok(new MessageResponse("Đã xoá thành viên khỏi gia đình"));
+    }
+
+    @GetMapping("/my-families")
+    public ApiResponse<List<FamilyMembershipResponse>> myFamilies() {
+        log.info("myFamilies - start");
+        return ApiResponse.ok(authService.listMyFamilies(CurrentUser.userId()));
+    }
+
+    @PostMapping("/switch-family")
+    public ApiResponse<AuthResponse> switchFamily(@Valid @RequestBody SwitchFamilyRequest request, HttpServletRequest httpRequest) {
+        log.info("switchFamily - start, familyId={}", request.familyId());
+        return ApiResponse.ok(authService.switchFamily(CurrentUser.userId(), request.familyId(),
+                RequestMetadataUtil.deviceInfo(httpRequest), RequestMetadataUtil.ipAddress(httpRequest)));
+    }
+
+    @GetMapping("/sessions")
+    public ApiResponse<List<SessionResponse>> sessions() {
+        log.info("sessions - start");
+        return ApiResponse.ok(authService.listSessions(CurrentUser.userId(), CurrentUser.sessionId()));
+    }
+
+    @DeleteMapping("/sessions/{sessionId}")
+    public ApiResponse<MessageResponse> revokeSession(@PathVariable Long sessionId) {
+        log.info("revokeSession - start, sessionId={}", sessionId);
+        authService.revokeSession(CurrentUser.userId(), sessionId);
+        return ApiResponse.ok(new MessageResponse("Đã đăng xuất phiên này"));
+    }
+
+    @PostMapping("/sessions/revoke-others")
+    public ApiResponse<MessageResponse> revokeOtherSessions() {
+        log.info("revokeOtherSessions - start");
+        authService.revokeAllOtherSessions(CurrentUser.userId(), CurrentUser.sessionId());
+        return ApiResponse.ok(new MessageResponse("Đã đăng xuất khỏi mọi thiết bị khác"));
     }
 
     @PostMapping("/invite")

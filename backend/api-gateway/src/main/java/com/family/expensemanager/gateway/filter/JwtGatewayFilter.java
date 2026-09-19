@@ -39,7 +39,12 @@ public class JwtGatewayFilter extends OncePerRequestFilter implements Ordered {
             "/api/auth/refresh",
             "/api/auth/verify",
             "/api/auth/forgot-password",
-            "/api/auth/reset-password");
+            "/api/auth/reset-password",
+            // Only a short-lived 2FA challenge token is presented here, never a JWT —
+            // see AuthService#login/#verifyTwoFactorLogin (README "9. Không có 2FA").
+            "/api/auth/2fa/verify-login",
+            "/actuator/health",
+            "/actuator/prometheus");
 
     private final JwtUtil jwtUtil;
 
@@ -85,7 +90,6 @@ public class JwtGatewayFilter extends OncePerRequestFilter implements Ordered {
                 || path.matches("^/api/auth/invite/[^/]+/accept$")
                 || path.endsWith("/v3/api-docs")
                 || path.contains("/v3/api-docs/")
-                || path.startsWith("/swagger-ui")
-                || path.equals("/actuator/health");
+                || path.startsWith("/swagger-ui");
     }
 }

@@ -1,0 +1,35 @@
+{
+  "loadFamiliesFailed": "Failed to load the family list",
+  "loadUsersFailed": "Failed to load the user list",
+  "grantAdminConfirm": "Grant system-wide admin privileges to {{email}}?",
+  "revokeAdminConfirm": "Revoke system-wide admin privileges from {{email}}?",
+  "updateAdminSuccess": "Admin privileges updated",
+  "updateAdminFailed": "Update failed",
+
+  "swalTitle": "Update admin privileges?",
+  "swalConfirmButtonText": "Confirm",
+  "swalCancelButtonText": "Cancel",
+
+  "title": "System administration",
+  "subtitle": "View all families and users, and grant admin privileges",
+
+  "familyListTitle": "Families ({{count}})",
+  "noFamilies": "No families yet",
+  "familyNameHeader": "Family name",
+  "ownerHeader": "Owner",
+  "memberCountHeader": "Members",
+  "createdAtHeader": "Created at",
+
+  "userListTitle": "Users ({{count}})",
+  "noUsers": "No users yet",
+  "emailHeader": "Email",
+  "displayNameHeader": "Display name",
+  "familyHeader": "Family",
+  "roleHeader": "Role",
+  "statusHeader": "Status",
+  "systemAdminHeader": "System admin",
+  "activated": "Activated",
+  "notActivated": "Not activated",
+  "revokeAdminButton": "Revoke admin",
+  "grantAdminButton": "Grant admin"
+}

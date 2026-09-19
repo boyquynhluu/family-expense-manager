@@ -9,6 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { BalanceIcon, CalendarIcon, TrendDownIcon, TrendUpIcon, WalletIcon } from "../components/AppIcons";
 import { formatCurrency } from "../utils/format";
@@ -21,6 +22,7 @@ function currentYearMonth() {
 }
 
 export default function Dashboard() {
+  const { t } = useTranslation("dashboard");
   const [yearMonth, setYearMonth] = useState(currentYearMonth());
   const [summary, setSummary] = useState(null);
   const [report, setReport] = useState([]);
@@ -46,7 +48,7 @@ export default function Dashboard() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err.response?.data?.message || "Không tải được dữ liệu tổng hợp");
+        setError(err.response?.data?.message || t("summaryLoadFailed"));
       });
     return () => {
       cancelled = true;
@@ -62,8 +64,8 @@ export default function Dashboard() {
 
   const trendChartData = trend.map((row) => ({
     yearMonth: row.yearMonth,
-    "Thu nhập": Number(row.totalIncome),
-    "Chi tiêu": Number(row.totalExpense),
+    [t("income")]: Number(row.totalIncome),
+    [t("expense")]: Number(row.totalExpense),
   }));
 
   const sortedReport = [...report].sort((a, b) => b.total - a.total);
@@ -98,8 +100,8 @@ export default function Dashboard() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Dashboard</h1>
-          <p className="page-header-subtitle">Tổng quan chi tiêu gia đình theo tháng</p>
+          <h1>{t("title")}</h1>
+          <p className="page-header-subtitle">{t("subtitle")}</p>
         </div>
         <label className="month-picker">
           <CalendarIcon />
@@ -116,7 +118,7 @@ export default function Dashboard() {
               <TrendUpIcon />
             </span>
             <div className="card-body">
-              <span>Tổng thu</span>
+              <span>{t("totalIncome")}</span>
               <strong>{formatCurrency(summary.totalIncome)}</strong>
             </div>
           </div>
@@ -125,7 +127,7 @@ export default function Dashboard() {
               <TrendDownIcon />
             </span>
             <div className="card-body">
-              <span>Tổng chi</span>
+              <span>{t("totalExpense")}</span>
               <strong>{formatCurrency(summary.totalExpense)}</strong>
             </div>
           </div>
@@ -134,7 +136,7 @@ export default function Dashboard() {
               <BalanceIcon />
             </span>
             <div className="card-body">
-              <span>Chênh lệch thu chi tháng này</span>
+              <span>{t("balanceThisMonth")}</span>
               <strong>{formatCurrency(summary.balance)}</strong>
             </div>
           </div>
@@ -142,9 +144,9 @@ export default function Dashboard() {
       )}
 
       <div className="section-card">
-        <h2>Xu hướng thu chi 6 tháng gần đây</h2>
+        <h2>{t("trendTitle")}</h2>
         {trendChartData.length === 0 ? (
-          <p className="empty-state">Chưa có dữ liệu</p>
+          <p className="empty-state">{t("noData")}</p>
         ) : (
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={trendChartData} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
@@ -153,17 +155,17 @@ export default function Dashboard() {
               <YAxis tickFormatter={(v) => formatCurrency(v)} width={90} />
               <Tooltip formatter={(value) => formatCurrency(value)} />
               <Legend />
-              <Line type="monotone" dataKey="Thu nhập" stroke="#16a34a" strokeWidth={2} />
-              <Line type="monotone" dataKey="Chi tiêu" stroke="#dc2626" strokeWidth={2} />
+              <Line type="monotone" dataKey={t("income")} stroke="#16a34a" strokeWidth={2} />
+              <Line type="monotone" dataKey={t("expense")} stroke="#dc2626" strokeWidth={2} />
             </LineChart>
           </ResponsiveContainer>
         )}
       </div>
 
       <div className="section-card">
-        <h2>Số dư theo ví</h2>
+        <h2>{t("walletBalanceTitle")}</h2>
         {wallets.length === 0 ? (
-          <p className="empty-state">Chưa có ví nào</p>
+          <p className="empty-state">{t("noWallets")}</p>
         ) : (
           <div className="category-breakdown">
             {wallets.map((w) => (
@@ -183,9 +185,9 @@ export default function Dashboard() {
       </div>
 
       <div className="section-card">
-        <h2>Chi theo danh mục</h2>
+        <h2>{t("expenseByCategoryTitle")}</h2>
         {sortedReport.length === 0 ? (
-          <p className="empty-state">Chưa có dữ liệu chi tiêu trong tháng này</p>
+          <p className="empty-state">{t("noExpenseData")}</p>
         ) : (
           <div className="category-breakdown">
             {sortedReport.map((row, index) => {
@@ -214,9 +216,9 @@ export default function Dashboard() {
       </div>
 
       <div className="section-card">
-        <h2>Chi theo danh mục theo từng ví</h2>
+        <h2>{t("expenseByCategoryByWalletTitle")}</h2>
         {walletBreakdowns.length === 0 ? (
-          <p className="empty-state">Chưa có ví nào</p>
+          <p className="empty-state">{t("noWallets")}</p>
         ) : (
           <div className="wallet-breakdown-grid">
             {walletBreakdowns.map(({ wallet, rows, maxTotal }) => (
@@ -225,7 +227,7 @@ export default function Dashboard() {
                   <WalletIcon /> {wallet.name}
                 </div>
                 {rows.length === 0 ? (
-                  <p className="empty-state">Chưa có chi tiêu trong tháng này</p>
+                  <p className="empty-state">{t("noExpenseThisMonth")}</p>
                 ) : (
                   <div className="category-breakdown">
                     {rows.map((row) => {

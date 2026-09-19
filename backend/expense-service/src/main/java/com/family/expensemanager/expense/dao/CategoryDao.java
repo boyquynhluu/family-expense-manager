@@ -30,4 +30,10 @@ public interface CategoryDao {
 
     @Select
     Optional<Category> selectById(Long id);
+
+    @Select
+    List<Category> selectDeletedByFamilyId(Long familyId);
+
+    @Update(sqlFile = true)
+    int restore(Long id, Long familyId);
 }

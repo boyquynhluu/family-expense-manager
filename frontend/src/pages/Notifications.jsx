@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { BellIcon } from "../components/AppIcons";
 
 export default function Notifications() {
+  const { t } = useTranslation("notifications");
   const [notifications, setNotifications] = useState([]);
   const [error, setError] = useState("");
 
@@ -10,7 +12,7 @@ export default function Notifications() {
     client
       .get("/notifications")
       .then((res) => setNotifications(res.data.data))
-      .catch((err) => setError(err.response?.data?.message || "Không tải được thông báo"));
+      .catch((err) => setError(err.response?.data?.message || t("loadFailed")));
   }
 
   useEffect(() => {
@@ -26,7 +28,7 @@ export default function Notifications() {
     try {
       await client.put(`/notifications/${id}/read`);
     } catch (err) {
-      setError(err.response?.data?.message || "Không đánh dấu được thông báo đã đọc");
+      setError(err.response?.data?.message || t("markReadFailed"));
       load();
     }
   }
@@ -36,7 +38,7 @@ export default function Notifications() {
     try {
       await client.put("/notifications/read-all");
     } catch (err) {
-      setError(err.response?.data?.message || "Không đánh dấu được tất cả đã đọc");
+      setError(err.response?.data?.message || t("markAllReadFailed"));
       load();
     }
   }
@@ -47,12 +49,12 @@ export default function Notifications() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Thông báo</h1>
-          <p className="page-header-subtitle">Cảnh báo vượt ngân sách và các cập nhật khác</p>
+          <h1>{t("title")}</h1>
+          <p className="page-header-subtitle">{t("subtitle")}</p>
         </div>
         {hasUnread && (
           <button type="button" className="btn-secondary" onClick={markAllAsRead}>
-            Đánh dấu tất cả đã đọc
+            {t("markAllReadButton")}
           </button>
         )}
       </div>
@@ -61,7 +63,7 @@ export default function Notifications() {
 
       {notifications.length === 0 ? (
         <div className="section-card">
-          <p className="empty-state">Chưa có thông báo nào</p>
+          <p className="empty-state">{t("noNotifications")}</p>
         </div>
       ) : (
         <ul className="notification-list">

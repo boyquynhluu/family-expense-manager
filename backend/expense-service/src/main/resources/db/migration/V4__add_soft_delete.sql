@@ -1,0 +1,7 @@
+ALTER TABLE WALLETS ADD COLUMN deleted_at DATETIME NULL;
+ALTER TABLE CATEGORIES ADD COLUMN deleted_at DATETIME NULL;
+ALTER TABLE TRANSACTIONS ADD COLUMN deleted_at DATETIME NULL;
+
+CREATE INDEX idx_wallets_deleted_at ON WALLETS (deleted_at);
+CREATE INDEX idx_categories_deleted_at ON CATEGORIES (deleted_at);
+CREATE INDEX idx_transactions_deleted_at ON TRANSACTIONS (deleted_at);

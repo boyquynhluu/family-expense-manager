@@ -1,0 +1,18 @@
+{
+  "title": "Dashboard",
+  "subtitle": "Tổng quan chi tiêu gia đình theo tháng",
+  "summaryLoadFailed": "Không tải được dữ liệu tổng hợp",
+  "totalIncome": "Tổng thu",
+  "totalExpense": "Tổng chi",
+  "balanceThisMonth": "Chênh lệch thu chi tháng này",
+  "trendTitle": "Xu hướng thu chi 6 tháng gần đây",
+  "noData": "Chưa có dữ liệu",
+  "income": "Thu nhập",
+  "expense": "Chi tiêu",
+  "walletBalanceTitle": "Số dư theo ví",
+  "noWallets": "Chưa có ví nào",
+  "expenseByCategoryTitle": "Chi theo danh mục",
+  "noExpenseData": "Chưa có dữ liệu chi tiêu trong tháng này",
+  "expenseByCategoryByWalletTitle": "Chi theo danh mục theo từng ví",
+  "noExpenseThisMonth": "Chưa có chi tiêu trong tháng này"
+}

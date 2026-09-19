@@ -589,6 +589,52 @@ select:focus {
   text-align: center;
 }
 
+.family-switcher {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+  padding: 0 0.1rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #9aa3b5;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.family-switcher select {
+  background: #2a3040;
+  border: 1px solid #3a4152;
+  color: #e5e7eb;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.language-switcher {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+  padding: 0 0.1rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #9aa3b5;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.language-switcher select {
+  background: #2a3040;
+  border: 1px solid #3a4152;
+  color: #e5e7eb;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 .sidebar-user {
   display: flex;
   align-items: center;
@@ -808,6 +854,23 @@ select:focus {
 .amount-expense {
   color: #dc2626;
   font-weight: 600;
+}
+
+.recovery-codes-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.recovery-codes-list code {
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
 }
 
 .amount-income {

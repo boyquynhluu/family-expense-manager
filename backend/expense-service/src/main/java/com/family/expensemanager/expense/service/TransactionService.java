@@ -141,15 +141,33 @@ public class TransactionService {
         return TransactionResponse.from(transaction);
     }
 
+    /**
+     * Soft-delete (README "10. Xoá là mất vĩnh viễn") — the row and its receipt file
+     * both stay in place, just hidden from normal queries, so {@link #restore} can bring
+     * a mistaken delete back exactly as it was.
+     */
     @Transactional
     public void delete(Long familyId, Long transactionId) {
         log.info("delete - start, familyId={}, transactionId={}", familyId, transactionId);
         Transaction transaction = requireOwnedByFamily(transactionId, familyId);
-        if (transaction.getReceiptPath() != null) {
-            receiptStorageService.delete(transaction.getReceiptPath());
-        }
-        transactionDao.delete(transaction);
+        transaction.setDeletedAt(LocalDateTime.now());
+        transactionDao.update(transaction);
         evictCaches(familyId, periodMonthOf(transaction.getOccurredAt()));
+    }
+
+    public List<TransactionResponse> listDeleted(Long familyId) {
+        log.info("listDeleted - start, familyId={}", familyId);
+        return transactionDao.selectDeletedByFamilyId(familyId).stream().map(TransactionResponse::from).toList();
+    }
+
+    @Transactional
+    public void restore(Long familyId, Long transactionId) {
+        log.info("restore - start, familyId={}, transactionId={}", familyId, transactionId);
+        if (transactionDao.restore(transactionId, familyId) == 0) {
+            throw new NotFoundException("Giao dịch đã xoá không tồn tại: " + transactionId);
+        }
+        Transaction restored = requireOwnedByFamily(transactionId, familyId);
+        evictCaches(familyId, periodMonthOf(restored.getOccurredAt()));
     }
 
     @Transactional

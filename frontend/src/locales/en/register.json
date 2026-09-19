@@ -1,0 +1,19 @@
+{
+  "registerSuccess": "Registration successful. Please check your email to verify your account.",
+  "registerFailed": "Registration failed",
+  "title": "Create your account",
+  "welcome": "Welcome!",
+  "subtitle": "Just a few details to create the head-of-household account for your family.",
+  "familyNamePlaceholder": "Family name",
+  "displayNamePlaceholder": "Your display name",
+  "emailPlaceholder": "Email@gmail.com",
+  "passwordPlaceholder": "Password (minimum 8 characters)",
+  "passwordLabel": "Password",
+  "hidePassword": "Hide password",
+  "showPassword": "Show password",
+  "termsAgreement": "I agree to the Terms of Service",
+  "registering": "Registering...",
+  "submit": "Register",
+  "haveAccount": "Already have an account?",
+  "loginLink": "Log in"
+}

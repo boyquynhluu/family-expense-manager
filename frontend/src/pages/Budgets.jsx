@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { AlertIcon, EditIcon, TrashIcon } from "../components/AppIcons";
 import { formatCurrency } from "../utils/format";
@@ -18,6 +19,7 @@ function statusOf(spent, limit) {
 }
 
 export default function Budgets() {
+  const { t } = useTranslation(["common", "budgets"]);
   const { role } = useAuth();
   const isOwner = role === "OWNER";
   const [budgets, setBudgets] = useState([]);
@@ -90,18 +92,18 @@ export default function Budgets() {
       cancelEdit();
       load();
     } catch (err) {
-      setError(err.response?.data?.message || "Lưu ngân sách thất bại");
+      setError(err.response?.data?.message || t("budgets:saveFailed"));
     }
   }
 
   async function handleDelete(id) {
-    if (!window.confirm("Xoá ngân sách này?")) return;
+    if (!window.confirm(t("budgets:deleteConfirm"))) return;
     setError("");
     try {
       await client.delete(`/expenses/budgets/${id}`);
       load();
     } catch (err) {
-      setError(err.response?.data?.message || "Xoá ngân sách thất bại");
+      setError(err.response?.data?.message || t("budgets:deleteFailed"));
     }
   }
 
@@ -113,19 +115,19 @@ export default function Budgets() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Ngân sách</h1>
-          <p className="page-header-subtitle">Đặt hạn mức chi tiêu theo danh mục cho từng tháng</p>
+          <h1>{t("budgets:title")}</h1>
+          <p className="page-header-subtitle">{t("budgets:subtitle")}</p>
         </div>
       </div>
 
       <div className="section-card">
-        <h2>{editingId ? "Cập nhật ngân sách" : "Đặt ngân sách mới"}</h2>
+        <h2>{editingId ? t("budgets:editTitle") : t("budgets:newTitle")}</h2>
         {categories.length === 0 ? (
-          <p className="empty-state">Cần tạo ít nhất 1 danh mục chi tiêu trước khi đặt ngân sách.</p>
+          <p className="empty-state">{t("budgets:noCategoriesMessage")}</p>
         ) : (
           <form className="inline-form" onSubmit={handleSubmit}>
             <label className="field">
-              Danh mục
+              {t("budgets:categoryLabel")}
               <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -135,11 +137,11 @@ export default function Budgets() {
               </select>
             </label>
             <label className="field">
-              Tháng
+              {t("budgets:monthLabel")}
               <input type="month" value={periodMonth} onChange={(e) => setPeriodMonth(e.target.value)} required />
             </label>
             <label className="field">
-              Hạn mức
+              {t("budgets:limitLabel")}
               <input
                 type="number"
                 step="0.01"
@@ -149,10 +151,10 @@ export default function Budgets() {
                 required
               />
             </label>
-            <button type="submit">{editingId ? "Cập nhật" : "Đặt ngân sách"}</button>
+            <button type="submit">{editingId ? t("budgets:updateButton") : t("budgets:createButton")}</button>
             {editingId && (
               <button type="button" className="btn-secondary" onClick={cancelEdit}>
-                Huỷ
+                {t("common:cancel")}
               </button>
             )}
           </form>
@@ -161,9 +163,9 @@ export default function Budgets() {
       </div>
 
       <div className="section-card">
-        <h2>Danh sách ngân sách</h2>
+        <h2>{t("budgets:listTitle")}</h2>
         {budgets.length === 0 ? (
-          <p className="empty-state">Chưa có ngân sách nào</p>
+          <p className="empty-state">{t("budgets:noBudgets")}</p>
         ) : (
           <div className="category-breakdown">
             {budgets.map((b) => {
@@ -180,11 +182,20 @@ export default function Budgets() {
                     <span className="category-row-amount">
                       <span className={`badge budget-badge-${status}`}>
                         {status === "danger" && <AlertIcon />}
-                        {status === "danger" ? "Vượt ngân sách" : status === "warning" ? "Gần đạt hạn mức" : "An toàn"}
+                        {status === "danger"
+                          ? t("budgets:statusDanger")
+                          : status === "warning"
+                            ? t("budgets:statusWarning")
+                            : t("budgets:statusSafe")}
                       </span>
                       {formatCurrency(spent)} / {formatCurrency(b.limitAmount)}
                       <span className="row-actions">
-                        <button type="button" className="icon-btn" onClick={() => startEdit(b)} aria-label="Sửa">
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          onClick={() => startEdit(b)}
+                          aria-label={t("common:edit")}
+                        >
                           <EditIcon />
                         </button>
                         {isOwner && (
@@ -192,7 +203,7 @@ export default function Budgets() {
                             type="button"
                             className="icon-btn icon-btn-danger"
                             onClick={() => handleDelete(b.id)}
-                            aria-label="Xoá"
+                            aria-label={t("common:delete")}
                           >
                             <TrashIcon />
                           </button>

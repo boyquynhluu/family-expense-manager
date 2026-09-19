@@ -1,10 +1,12 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { EyeIcon, EyeOffIcon, HomeIcon, KeyIcon, MailIcon, UserIcon } from "../components/AuthIcons";
 import { useAuth } from "../hooks/useAuth";
 
 export default function Register() {
+  const { t } = useTranslation("register");
   const { register } = useAuth();
   const navigate = useNavigate();
   const [familyName, setFamilyName] = useState("");
@@ -21,12 +23,12 @@ export default function Register() {
     setLoading(true);
     try {
       const message = await register(familyName, email, password, displayName);
-      toast.success(message || "Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.", {
+      toast.success(message || t("registerSuccess"), {
         duration: 6000,
       });
       navigate("/login");
     } catch (err) {
-      setError(err.response?.data?.message || "Đăng ký thất bại");
+      setError(err.response?.data?.message || t("registerFailed"));
     } finally {
       setLoading(false);
     }
@@ -35,11 +37,11 @@ export default function Register() {
   return (
     <div className="auth-page">
       <form className="auth-form" onSubmit={handleSubmit}>
-        <h1 className="auth-title">Đăng ký tài khoản</h1>
+        <h1 className="auth-title">{t("title")}</h1>
 
         <div className="auth-card">
-          <p className="auth-card-title">Chào mừng!</p>
-          <p className="auth-card-subtitle">Chỉ cần vài thông tin để tạo tài khoản chủ hộ cho gia đình bạn.</p>
+          <p className="auth-card-title">{t("welcome")}</p>
+          <p className="auth-card-subtitle">{t("subtitle")}</p>
 
           {error && <p className="error-text">{error}</p>}
 
@@ -50,8 +52,8 @@ export default function Register() {
             <input
               value={familyName}
               onChange={(e) => setFamilyName(e.target.value)}
-              placeholder="Tên gia đình"
-              aria-label="Tên gia đình"
+              placeholder={t("familyNamePlaceholder")}
+              aria-label={t("familyNamePlaceholder")}
               required
             />
           </div>
@@ -63,8 +65,8 @@ export default function Register() {
             <input
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Tên hiển thị của bạn"
-              aria-label="Tên hiển thị của bạn"
+              placeholder={t("displayNamePlaceholder")}
+              aria-label={t("displayNamePlaceholder")}
               required
             />
           </div>
@@ -77,7 +79,7 @@ export default function Register() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email@gmail.com"
+              placeholder={t("emailPlaceholder")}
               aria-label="Email"
               required
             />
@@ -91,8 +93,8 @@ export default function Register() {
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Mật khẩu (tối thiểu 8 ký tự)"
-              aria-label="Mật khẩu"
+              placeholder={t("passwordPlaceholder")}
+              aria-label={t("passwordLabel")}
               minLength={8}
               required
             />
@@ -100,7 +102,7 @@ export default function Register() {
               type="button"
               className="auth-input-toggle"
               onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+              aria-label={showPassword ? t("hidePassword") : t("showPassword")}
             >
               {showPassword ? <EyeOffIcon /> : <EyeIcon />}
             </button>
@@ -108,16 +110,16 @@ export default function Register() {
 
           <label className="auth-terms">
             <input type="checkbox" required />
-            Tôi đồng ý với Điều khoản sử dụng
+            {t("termsAgreement")}
           </label>
 
           <button type="submit" className="auth-submit" disabled={loading}>
-            {loading ? "Đang đăng ký..." : "Đăng ký"}
+            {loading ? t("registering") : t("submit")}
           </button>
         </div>
 
         <p className="auth-footer-text">
-          Đã có tài khoản? <Link to="/login">Đăng nhập</Link>
+          {t("haveAccount")} <Link to="/login">{t("loginLink")}</Link>
         </p>
       </form>
     </div>

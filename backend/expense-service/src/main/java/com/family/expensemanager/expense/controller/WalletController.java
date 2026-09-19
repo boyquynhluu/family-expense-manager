@@ -52,4 +52,17 @@ public class WalletController {
         walletService.delete(id, CurrentUser.familyId());
         return ApiResponse.ok();
     }
+
+    @GetMapping("/trash")
+    public ApiResponse<List<WalletResponse>> trash() {
+        log.info("trash - start");
+        return ApiResponse.ok(walletService.listDeleted(CurrentUser.familyId()));
+    }
+
+    @PostMapping("/{id}/restore")
+    public ApiResponse<Void> restore(@PathVariable Long id) {
+        log.info("restore - start, id={}", id);
+        walletService.restore(id, CurrentUser.familyId());
+        return ApiResponse.ok();
+    }
 }

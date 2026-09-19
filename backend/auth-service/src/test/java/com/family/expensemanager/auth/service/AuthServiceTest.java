@@ -2,10 +2,15 @@ package com.family.expensemanager.auth.service;
 
 import com.family.expensemanager.auth.dao.FamilyDao;
 import com.family.expensemanager.auth.dao.FamilyInviteDao;
+import com.family.expensemanager.auth.dao.FamilyMembershipDao;
 import com.family.expensemanager.auth.dao.RefreshTokenDao;
+import com.family.expensemanager.auth.dao.TwoFactorRecoveryCodeDao;
 import com.family.expensemanager.auth.dao.UserDao;
 import com.family.expensemanager.auth.domain.entity.Family;
 import com.family.expensemanager.auth.domain.entity.FamilyInvite;
+import com.family.expensemanager.auth.domain.entity.FamilyMembership;
+import com.family.expensemanager.auth.domain.entity.RefreshToken;
+import com.family.expensemanager.auth.domain.entity.TwoFactorRecoveryCode;
 import com.family.expensemanager.auth.domain.entity.User;
 import com.family.expensemanager.auth.dto.AcceptInviteRequest;
 import com.family.expensemanager.auth.dto.ChangePasswordRequest;
@@ -14,7 +19,11 @@ import com.family.expensemanager.auth.dto.InviteMemberRequest;
 import com.family.expensemanager.auth.dto.LoginRequest;
 import com.family.expensemanager.auth.dto.RegisterRequest;
 import com.family.expensemanager.auth.dto.ResetPasswordRequest;
+import com.family.expensemanager.auth.dto.TwoFactorConfirmResponse;
+import com.family.expensemanager.auth.dto.TwoFactorSetupResponse;
 import com.family.expensemanager.auth.dto.UpdateProfileRequest;
+import com.family.expensemanager.auth.security.TotpService;
+import com.family.expensemanager.auth.security.TwoFactorChallengeStore;
 import com.family.expensemanager.common.event.FamilyInviteEvent;
 import com.family.expensemanager.common.event.PasswordResetEvent;
 import com.family.expensemanager.common.event.UserVerificationEvent;
@@ -23,6 +32,7 @@ import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.common.exception.UnauthorizedException;
 import com.family.expensemanager.common.security.JwtUtil;
+import com.family.expensemanager.common.security.RevokedSessionStore;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,13 +44,16 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -56,9 +69,19 @@ class AuthServiceTest {
     @Mock
     private FamilyInviteDao familyInviteDao;
     @Mock
+    private FamilyMembershipDao familyMembershipDao;
+    @Mock
+    private TwoFactorRecoveryCodeDao twoFactorRecoveryCodeDao;
+    @Mock
     private PasswordEncoder passwordEncoder;
     @Mock
     private JwtUtil jwtUtil;
+    @Mock
+    private RevokedSessionStore revokedSessionStore;
+    @Mock
+    private TotpService totpService;
+    @Mock
+    private TwoFactorChallengeStore twoFactorChallengeStore;
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
@@ -67,7 +90,8 @@ class AuthServiceTest {
     @BeforeEach
     void setUp() {
         authService = new AuthService(
-                familyDao, userDao, refreshTokenDao, familyInviteDao, passwordEncoder, jwtUtil, eventPublisher,
+                familyDao, userDao, refreshTokenDao, familyInviteDao, familyMembershipDao, twoFactorRecoveryCodeDao,
+                passwordEncoder, jwtUtil, revokedSessionStore, totpService, twoFactorChallengeStore, eventPublisher,
                 15, 7, 24, 1, 72);
     }
 
@@ -143,11 +167,28 @@ class AuthServiceTest {
         when(passwordEncoder.matches("password1", "hashed")).thenReturn(true);
         when(jwtUtil.generateToken(any(), any(), anyLong())).thenReturn("access-token");
 
-        var response = authService.login(new LoginRequest("a@b.com", "password1"));
+        var response = authService.login(new LoginRequest("a@b.com", "password1"), null, null);
 
-        assertThat(response.accessToken()).isEqualTo("access-token");
-        assertThat(response.refreshToken()).isNotBlank();
+        assertThat(response.requiresTwoFactor()).isFalse();
+        assertThat(response.tokens().accessToken()).isEqualTo("access-token");
+        assertThat(response.tokens().refreshToken()).isNotBlank();
         verify(refreshTokenDao).insert(any());
+    }
+
+    @Test
+    void login_returnsChallenge_insteadOfTokens_whenTwoFactorEnabled() {
+        User user = activeLocalUser();
+        user.setTotpEnabled(true);
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password1", "hashed")).thenReturn(true);
+        when(twoFactorChallengeStore.issueChallenge(1L)).thenReturn("challenge-token");
+
+        var response = authService.login(new LoginRequest("a@b.com", "password1"), null, null);
+
+        assertThat(response.requiresTwoFactor()).isTrue();
+        assertThat(response.twoFactorToken()).isEqualTo("challenge-token");
+        assertThat(response.tokens()).isNull();
+        verify(refreshTokenDao, never()).insert(any());
     }
 
     @Test
@@ -156,7 +197,7 @@ class AuthServiceTest {
         when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("wrong", "hashed")).thenReturn(false);
 
-        assertThatThrownBy(() -> authService.login(new LoginRequest("a@b.com", "wrong")))
+        assertThatThrownBy(() -> authService.login(new LoginRequest("a@b.com", "wrong"), null, null))
                 .isInstanceOf(UnauthorizedException.class);
     }
 
@@ -167,7 +208,7 @@ class AuthServiceTest {
         when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("password1", "hashed")).thenReturn(true);
 
-        assertThatThrownBy(() -> authService.login(new LoginRequest("a@b.com", "password1")))
+        assertThatThrownBy(() -> authService.login(new LoginRequest("a@b.com", "password1"), null, null))
                 .isInstanceOf(UnauthorizedException.class);
     }
 
@@ -178,7 +219,7 @@ class AuthServiceTest {
         user.setProvider("GOOGLE");
         when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(user));
 
-        assertThatThrownBy(() -> authService.login(new LoginRequest("a@b.com", "password1")))
+        assertThatThrownBy(() -> authService.login(new LoginRequest("a@b.com", "password1"), null, null))
                 .isInstanceOf(UnauthorizedException.class);
     }
 
@@ -186,7 +227,7 @@ class AuthServiceTest {
     void login_throwsUnauthorized_whenEmailUnknown() {
         when(userDao.selectByEmail("nobody@b.com")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> authService.login(new LoginRequest("nobody@b.com", "password1")))
+        assertThatThrownBy(() -> authService.login(new LoginRequest("nobody@b.com", "password1"), null, null))
                 .isInstanceOf(UnauthorizedException.class);
     }
 
@@ -275,16 +316,56 @@ class AuthServiceTest {
     }
 
     @Test
-    void removeMember_deletesUserAndRevokesSessions_whenValidMember() {
+    void removeMember_deletesAccountEntirely_whenNoOtherMembershipsRemain() {
         User member = activeLocalUser();
         member.setId(5L);
-        member.setRole("MEMBER");
+        FamilyMembership membership = membership(5L, 1L, "MEMBER");
+        when(familyMembershipDao.selectByUserIdAndFamilyId(5L, 1L)).thenReturn(Optional.of(membership));
         when(userDao.selectById(5L)).thenReturn(Optional.of(member));
+        when(familyMembershipDao.selectByUserId(5L)).thenReturn(List.of());
 
         authService.removeMember(1L, 1L, 5L);
 
+        verify(familyMembershipDao).delete(membership);
         verify(refreshTokenDao).deleteByUserId(5L);
         verify(userDao).delete(member);
+    }
+
+    @Test
+    void removeMember_reassignsActiveFamily_whenOtherMembershipsRemain() {
+        User member = activeLocalUser();
+        member.setId(5L);
+        member.setFamilyId(1L); // family 1 is their currently-active one, being removed from
+        FamilyMembership membership = membership(5L, 1L, "MEMBER");
+        FamilyMembership other = membership(5L, 2L, "OWNER");
+        when(familyMembershipDao.selectByUserIdAndFamilyId(5L, 1L)).thenReturn(Optional.of(membership));
+        when(userDao.selectById(5L)).thenReturn(Optional.of(member));
+        when(familyMembershipDao.selectByUserId(5L)).thenReturn(List.of(other));
+
+        authService.removeMember(1L, 1L, 5L);
+
+        verify(familyMembershipDao).delete(membership);
+        verify(userDao, never()).delete(any());
+        assertThat(member.getFamilyId()).isEqualTo(2L);
+        assertThat(member.getRole()).isEqualTo("OWNER");
+        verify(userDao).update(member);
+    }
+
+    @Test
+    void removeMember_leavesOtherFamilyUntouched_whenRemovedFamilyIsNotTheirActiveOne() {
+        User member = activeLocalUser();
+        member.setId(5L);
+        member.setFamilyId(2L); // active elsewhere; being removed from family 1 only
+        FamilyMembership membership = membership(5L, 1L, "MEMBER");
+        when(familyMembershipDao.selectByUserIdAndFamilyId(5L, 1L)).thenReturn(Optional.of(membership));
+        when(userDao.selectById(5L)).thenReturn(Optional.of(member));
+        when(familyMembershipDao.selectByUserId(5L)).thenReturn(List.of(membership(5L, 2L, "OWNER")));
+
+        authService.removeMember(1L, 1L, 5L);
+
+        verify(familyMembershipDao).delete(membership);
+        verify(userDao, never()).update(any());
+        verify(userDao, never()).delete(any());
     }
 
     @Test
@@ -294,34 +375,53 @@ class AuthServiceTest {
     }
 
     @Test
-    void removeMember_throwsNotFound_whenTargetInAnotherFamily() {
-        User member = activeLocalUser();
-        member.setId(5L);
-        member.setFamilyId(2L);
-        member.setRole("MEMBER");
-        when(userDao.selectById(5L)).thenReturn(Optional.of(member));
+    void removeMember_throwsNotFound_whenTargetHasNoMembershipInFamily() {
+        when(familyMembershipDao.selectByUserIdAndFamilyId(5L, 1L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.removeMember(1L, 1L, 5L)).isInstanceOf(NotFoundException.class);
     }
 
     @Test
     void removeMember_throwsBadRequest_whenTargetIsOwner() {
-        User owner = activeLocalUser();
-        owner.setId(5L);
-        owner.setRole("OWNER");
-        when(userDao.selectById(5L)).thenReturn(Optional.of(owner));
+        when(familyMembershipDao.selectByUserIdAndFamilyId(5L, 1L))
+                .thenReturn(Optional.of(membership(5L, 1L, "OWNER")));
 
         assertThatThrownBy(() -> authService.removeMember(1L, 1L, 5L)).isInstanceOf(BadRequestException.class);
-        verify(userDao, never()).delete(any());
+        verify(familyMembershipDao, never()).delete(any());
     }
 
     @Test
-    void inviteMember_throwsConflict_whenEmailAlreadyRegistered() {
-        when(userDao.selectByEmail("existing@b.com")).thenReturn(Optional.of(new User()));
+    void inviteMember_throwsConflict_whenEmailAlreadyMemberOfThisFamily() {
+        User existing = activeLocalUser();
+        existing.setId(20L);
+        when(userDao.selectByEmail("existing@b.com")).thenReturn(Optional.of(existing));
+        when(familyMembershipDao.selectByUserIdAndFamilyId(20L, 1L))
+                .thenReturn(Optional.of(membership(20L, 1L, "MEMBER")));
 
         assertThatThrownBy(() -> authService.inviteMember(1L, 10L, new InviteMemberRequest("existing@b.com")))
                 .isInstanceOf(ConflictException.class);
         verify(familyInviteDao, never()).insert(any());
+    }
+
+    @Test
+    void inviteMember_allowsInvitingExistingAccount_whenNotYetAMemberOfThisFamily() {
+        // The whole point of multi-family support: an email with an account elsewhere
+        // can still be invited into a different family.
+        User existing = activeLocalUser();
+        existing.setId(20L);
+        Family family = new Family();
+        family.setId(1L);
+        family.setName("Nhà Nguyễn");
+        User inviter = activeLocalUser();
+        inviter.setId(10L);
+        when(userDao.selectByEmail("existing@b.com")).thenReturn(Optional.of(existing));
+        when(familyMembershipDao.selectByUserIdAndFamilyId(20L, 1L)).thenReturn(Optional.empty());
+        when(familyDao.selectById(1L)).thenReturn(Optional.of(family));
+        when(userDao.selectById(10L)).thenReturn(Optional.of(inviter));
+
+        authService.inviteMember(1L, 10L, new InviteMemberRequest("existing@b.com"));
+
+        verify(familyInviteDao).insert(any());
     }
 
     @Test
@@ -385,7 +485,7 @@ class AuthServiceTest {
     }
 
     @Test
-    void acceptInvite_createsMemberUser_andMarksInviteAccepted_whenValid() {
+    void acceptInvite_createsMemberUser_andMarksInviteAccepted_whenEmailHasNoAccountYet() {
         FamilyInvite invite = validInvite();
         when(familyInviteDao.selectByToken("tok")).thenReturn(Optional.of(invite));
         when(userDao.selectByEmail("invitee@b.com")).thenReturn(Optional.empty());
@@ -397,21 +497,267 @@ class AuthServiceTest {
         verify(userDao).insert(userCaptor.capture());
         assertThat(userCaptor.getValue().getRole()).isEqualTo("MEMBER");
         assertThat(userCaptor.getValue().getFamilyId()).isEqualTo(invite.getFamilyId());
+        verify(familyMembershipDao).insert(any());
 
         assertThat(invite.getAcceptedAt()).isNotNull();
         verify(familyInviteDao).update(invite);
     }
 
     @Test
-    void acceptInvite_throwsConflict_whenEmailAlreadyRegistered() {
+    void acceptInvite_throwsBadRequest_whenNewAccountMissingDisplayNameOrPassword() {
         FamilyInvite invite = validInvite();
         when(familyInviteDao.selectByToken("tok")).thenReturn(Optional.of(invite));
-        when(userDao.selectByEmail("invitee@b.com")).thenReturn(Optional.of(new User()));
+        when(userDao.selectByEmail("invitee@b.com")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> authService.acceptInvite("tok", new AcceptInviteRequest("Invitee", "password1")))
-                .isInstanceOf(ConflictException.class);
+        assertThatThrownBy(() -> authService.acceptInvite("tok", new AcceptInviteRequest("", "password1")))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> authService.acceptInvite("tok", new AcceptInviteRequest("Invitee", "short")))
+                .isInstanceOf(BadRequestException.class);
         verify(userDao, never()).insert(any());
+    }
+
+    @Test
+    void acceptInvite_addsMembershipToExistingAccount_withoutCreatingNewUser() {
+        // The whole point of multi-family support: accepting an invite for an email
+        // that already has an account just adds a membership, not a second account.
+        FamilyInvite invite = validInvite();
+        User existing = activeLocalUser();
+        existing.setId(30L);
+        when(familyInviteDao.selectByToken("tok")).thenReturn(Optional.of(invite));
+        when(userDao.selectByEmail("invitee@b.com")).thenReturn(Optional.of(existing));
+        when(familyMembershipDao.selectByUserIdAndFamilyId(30L, invite.getFamilyId())).thenReturn(Optional.empty());
+
+        authService.acceptInvite("tok", new AcceptInviteRequest(null, null));
+
+        verify(userDao, never()).insert(any());
+        ArgumentCaptor<FamilyMembership> captor = ArgumentCaptor.forClass(FamilyMembership.class);
+        verify(familyMembershipDao).insert(captor.capture());
+        assertThat(captor.getValue().getUserId()).isEqualTo(30L);
+        assertThat(captor.getValue().getFamilyId()).isEqualTo(invite.getFamilyId());
+        assertThat(invite.getAcceptedAt()).isNotNull();
+        verify(familyInviteDao).update(invite);
+    }
+
+    @Test
+    void acceptInvite_throwsConflict_whenExistingAccountAlreadyMemberOfThisFamily() {
+        FamilyInvite invite = validInvite();
+        User existing = activeLocalUser();
+        existing.setId(30L);
+        when(familyInviteDao.selectByToken("tok")).thenReturn(Optional.of(invite));
+        when(userDao.selectByEmail("invitee@b.com")).thenReturn(Optional.of(existing));
+        when(familyMembershipDao.selectByUserIdAndFamilyId(30L, invite.getFamilyId()))
+                .thenReturn(Optional.of(membership(30L, invite.getFamilyId(), "MEMBER")));
+
+        assertThatThrownBy(() -> authService.acceptInvite("tok", new AcceptInviteRequest(null, null)))
+                .isInstanceOf(ConflictException.class);
+        verify(familyMembershipDao, never()).insert(any());
         verify(familyInviteDao, never()).update(any());
+    }
+
+    @Test
+    void setupTwoFactor_generatesAndStoresSecret_withoutEnablingYet() {
+        User user = activeLocalUser();
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(totpService.generateSecret()).thenReturn("SECRET123");
+        when(totpService.buildOtpAuthUri("SECRET123", "a@b.com")).thenReturn("otpauth://totp/x");
+
+        TwoFactorSetupResponse response = authService.setupTwoFactor(1L);
+
+        assertThat(response.secret()).isEqualTo("SECRET123");
+        assertThat(response.otpAuthUri()).isEqualTo("otpauth://totp/x");
+        assertThat(user.getTotpSecret()).isEqualTo("SECRET123");
+        assertThat(user.getTotpEnabled()).isFalse();
+        verify(userDao).update(user);
+    }
+
+    @Test
+    void confirmTwoFactor_enablesAndReturnsRecoveryCodes_whenCodeValid() {
+        User user = activeLocalUser();
+        user.setTotpSecret("SECRET123");
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(totpService.verifyCode("SECRET123", "123456")).thenReturn(true);
+        when(passwordEncoder.encode(any())).thenReturn("hashed-code");
+
+        TwoFactorConfirmResponse response = authService.confirmTwoFactor(1L, "123456");
+
+        assertThat(user.getTotpEnabled()).isTrue();
+        assertThat(response.recoveryCodes()).hasSize(8);
+        verify(twoFactorRecoveryCodeDao).deleteByUserId(1L);
+        verify(twoFactorRecoveryCodeDao, times(8)).insert(any());
+    }
+
+    @Test
+    void confirmTwoFactor_throwsBadRequest_whenCodeInvalid() {
+        User user = activeLocalUser();
+        user.setTotpSecret("SECRET123");
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(totpService.verifyCode("SECRET123", "000000")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.confirmTwoFactor(1L, "000000")).isInstanceOf(BadRequestException.class);
+        assertThat(user.getTotpEnabled()).isNull();
+    }
+
+    @Test
+    void disableTwoFactor_clearsSecretAndRecoveryCodes_whenPasswordCorrect() {
+        User user = activeLocalUser();
+        user.setTotpEnabled(true);
+        user.setTotpSecret("SECRET123");
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password1", "hashed")).thenReturn(true);
+
+        authService.disableTwoFactor(1L, "password1");
+
+        assertThat(user.getTotpEnabled()).isFalse();
+        assertThat(user.getTotpSecret()).isNull();
+        verify(twoFactorRecoveryCodeDao).deleteByUserId(1L);
+    }
+
+    @Test
+    void disableTwoFactor_throwsUnauthorized_whenPasswordWrong() {
+        User user = activeLocalUser();
+        user.setTotpEnabled(true);
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("wrong", "hashed")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.disableTwoFactor(1L, "wrong")).isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void verifyTwoFactorLogin_issuesTokens_whenTotpCodeValid() {
+        User user = activeLocalUser();
+        user.setTotpSecret("SECRET123");
+        when(twoFactorChallengeStore.consumeChallenge("challenge-token")).thenReturn(Optional.of(1L));
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(totpService.verifyCode("SECRET123", "123456")).thenReturn(true);
+        when(jwtUtil.generateToken(any(), any(), anyLong())).thenReturn("access-token");
+
+        var response = authService.verifyTwoFactorLogin("challenge-token", "123456", null, null);
+
+        assertThat(response.accessToken()).isEqualTo("access-token");
+        verify(refreshTokenDao).insert(any());
+    }
+
+    @Test
+    void verifyTwoFactorLogin_fallsBackToRecoveryCode_whenTotpCodeWrong() {
+        User user = activeLocalUser();
+        user.setTotpSecret("SECRET123");
+        when(twoFactorChallengeStore.consumeChallenge("challenge-token")).thenReturn(Optional.of(1L));
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(totpService.verifyCode("SECRET123", "recover1")).thenReturn(false);
+        TwoFactorRecoveryCode recoveryCode = new TwoFactorRecoveryCode();
+        recoveryCode.setId(9L);
+        recoveryCode.setUserId(1L);
+        recoveryCode.setCodeHash("hashed-recovery");
+        when(twoFactorRecoveryCodeDao.selectUnusedByUserId(1L)).thenReturn(List.of(recoveryCode));
+        when(passwordEncoder.matches("recover1", "hashed-recovery")).thenReturn(true);
+        when(jwtUtil.generateToken(any(), any(), anyLong())).thenReturn("access-token");
+
+        var response = authService.verifyTwoFactorLogin("challenge-token", "recover1", null, null);
+
+        assertThat(response.accessToken()).isEqualTo("access-token");
+        assertThat(recoveryCode.getUsedAt()).isNotNull();
+        verify(twoFactorRecoveryCodeDao).update(recoveryCode);
+    }
+
+    @Test
+    void verifyTwoFactorLogin_throwsUnauthorized_whenCodeInvalid() {
+        User user = activeLocalUser();
+        user.setTotpSecret("SECRET123");
+        when(twoFactorChallengeStore.consumeChallenge("challenge-token")).thenReturn(Optional.of(1L));
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(totpService.verifyCode("SECRET123", "000000")).thenReturn(false);
+        when(twoFactorRecoveryCodeDao.selectUnusedByUserId(1L)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> authService.verifyTwoFactorLogin("challenge-token", "000000", null, null))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void verifyTwoFactorLogin_throwsUnauthorized_whenChallengeExpiredOrUnknown() {
+        when(twoFactorChallengeStore.consumeChallenge("bad-token")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.verifyTwoFactorLogin("bad-token", "123456", null, null))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void listSessions_marksMatchingIdAsCurrent() {
+        RefreshToken t1 = refreshToken(1L, 5L);
+        RefreshToken t2 = refreshToken(2L, 5L);
+        when(refreshTokenDao.selectActiveByUserId(5L)).thenReturn(List.of(t1, t2));
+
+        var sessions = authService.listSessions(5L, 2L);
+
+        assertThat(sessions).hasSize(2);
+        assertThat(sessions.get(0).isCurrent()).isFalse();
+        assertThat(sessions.get(1).isCurrent()).isTrue();
+    }
+
+    @Test
+    void logout_revokesSessionAndMarksItInRedis_whenSessionIdPresent() {
+        authService.logout(5L, 2L);
+
+        verify(refreshTokenDao).revokeById(2L, 5L);
+        verify(revokedSessionStore).markRevoked(2L, 15 * 60 * 1000L);
+    }
+
+    @Test
+    void logout_doesNothing_whenSessionIdMissing() {
+        authService.logout(5L, null);
+
+        verify(refreshTokenDao, never()).revokeById(any(), any());
+        verify(revokedSessionStore, never()).markRevoked(any(), anyLong());
+    }
+
+    @Test
+    void revokeSession_revokesAndBlocksImmediately_whenOwnedByUser() {
+        when(refreshTokenDao.revokeById(2L, 5L)).thenReturn(1);
+
+        authService.revokeSession(5L, 2L);
+
+        verify(revokedSessionStore).markRevoked(2L, 15 * 60 * 1000L);
+    }
+
+    @Test
+    void revokeSession_throwsNotFound_whenNotOwnedByUserOrAlreadyRevoked() {
+        when(refreshTokenDao.revokeById(2L, 5L)).thenReturn(0);
+
+        assertThatThrownBy(() -> authService.revokeSession(5L, 2L)).isInstanceOf(NotFoundException.class);
+        verify(revokedSessionStore, never()).markRevoked(any(), anyLong());
+    }
+
+    @Test
+    void revokeAllOtherSessions_blocksEveryOtherActiveSession_butNotTheCurrentOne() {
+        RefreshToken current = refreshToken(2L, 5L);
+        RefreshToken other = refreshToken(3L, 5L);
+        when(refreshTokenDao.selectActiveByUserId(5L)).thenReturn(List.of(current, other));
+
+        authService.revokeAllOtherSessions(5L, 2L);
+
+        verify(refreshTokenDao).revokeAllByUserIdExcept(5L, 2L);
+        verify(revokedSessionStore).markRevoked(3L, 15 * 60 * 1000L);
+        verify(revokedSessionStore, never()).markRevoked(eq(2L), anyLong());
+    }
+
+    @Test
+    void revokeAllOtherSessions_doesNothing_whenNoOtherSessionsExist() {
+        RefreshToken current = refreshToken(2L, 5L);
+        when(refreshTokenDao.selectActiveByUserId(5L)).thenReturn(List.of(current));
+
+        authService.revokeAllOtherSessions(5L, 2L);
+
+        verify(refreshTokenDao, never()).revokeAllByUserIdExcept(any(), any());
+        verify(revokedSessionStore, never()).markRevoked(any(), anyLong());
+    }
+
+    private static RefreshToken refreshToken(Long id, Long userId) {
+        RefreshToken token = new RefreshToken();
+        token.setId(id);
+        token.setUserId(userId);
+        token.setRevoked(false);
+        token.setExpiresAt(LocalDateTime.now().plusDays(7));
+        token.setCreatedAt(LocalDateTime.now());
+        return token;
     }
 
     private static User activeLocalUser() {
@@ -425,6 +771,14 @@ class AuthServiceTest {
         user.setActive(true);
         user.setProvider("LOCAL");
         return user;
+    }
+
+    private static FamilyMembership membership(Long userId, Long familyId, String role) {
+        FamilyMembership membership = new FamilyMembership();
+        membership.setUserId(userId);
+        membership.setFamilyId(familyId);
+        membership.setRole(role);
+        return membership;
     }
 
     private static FamilyInvite validInvite() {

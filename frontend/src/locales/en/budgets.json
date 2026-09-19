@@ -1,0 +1,20 @@
+{
+  "title": "Budgets",
+  "subtitle": "Set spending limits per category for each month",
+  "editTitle": "Update budget",
+  "newTitle": "Set a new budget",
+  "noCategoriesMessage": "You need to create at least 1 expense category before setting a budget.",
+  "categoryLabel": "Category",
+  "monthLabel": "Month",
+  "limitLabel": "Limit",
+  "updateButton": "Update",
+  "createButton": "Set budget",
+  "listTitle": "Budget list",
+  "noBudgets": "No budgets yet",
+  "statusDanger": "Over budget",
+  "statusWarning": "Nearing limit",
+  "statusSafe": "Safe",
+  "saveFailed": "Failed to save budget",
+  "deleteConfirm": "Delete this budget?",
+  "deleteFailed": "Failed to delete budget"
+}

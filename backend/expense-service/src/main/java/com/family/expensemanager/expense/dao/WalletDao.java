@@ -27,4 +27,10 @@ public interface WalletDao {
 
     @Select
     Optional<Wallet> selectById(Long id);
+
+    @Select
+    List<Wallet> selectDeletedByFamilyId(Long familyId);
+
+    @Update(sqlFile = true)
+    int restore(Long id, Long familyId);
 }

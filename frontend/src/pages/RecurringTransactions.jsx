@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { EditIcon, TrashIcon } from "../components/AppIcons";
 import { formatCurrency } from "../utils/format";
@@ -15,6 +16,7 @@ const emptyForm = {
 };
 
 export default function RecurringTransactions() {
+  const { t } = useTranslation(["common", "recurringTransactions"]);
   const [rules, setRules] = useState([]);
   const [wallets, setWallets] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -83,18 +85,18 @@ export default function RecurringTransactions() {
       cancelEdit();
       load();
     } catch (err) {
-      setError(err.response?.data?.message || "Lưu giao dịch định kỳ thất bại");
+      setError(err.response?.data?.message || t("recurringTransactions:saveFailed"));
     }
   }
 
   async function handleDelete(id) {
-    if (!window.confirm("Xoá giao dịch định kỳ này? Các giao dịch đã tạo trước đó sẽ không bị xoá.")) return;
+    if (!window.confirm(t("recurringTransactions:deleteConfirm"))) return;
     setError("");
     try {
       await client.delete(`/expenses/recurring-transactions/${id}`);
       load();
     } catch (err) {
-      setError(err.response?.data?.message || "Xoá giao dịch định kỳ thất bại");
+      setError(err.response?.data?.message || t("recurringTransactions:deleteFailed"));
     }
   }
 
@@ -104,7 +106,7 @@ export default function RecurringTransactions() {
       await client.put(`/expenses/recurring-transactions/${rule.id}/active`, { active: !rule.active });
       load();
     } catch (err) {
-      setError(err.response?.data?.message || "Cập nhật thất bại");
+      setError(err.response?.data?.message || t("recurringTransactions:toggleFailed"));
     }
   }
 
@@ -120,27 +122,25 @@ export default function RecurringTransactions() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Giao dịch định kỳ</h1>
-          <p className="page-header-subtitle">
-            Tiền nhà, internet, subscription... tự động tạo giao dịch hàng tháng, không cần nhập tay lại
-          </p>
+          <h1>{t("recurringTransactions:title")}</h1>
+          <p className="page-header-subtitle">{t("recurringTransactions:subtitle")}</p>
         </div>
       </div>
 
       <div className="section-card">
-        <h2>{editingId ? "Cập nhật giao dịch định kỳ" : "Thêm giao dịch định kỳ mới"}</h2>
+        <h2>{editingId ? t("recurringTransactions:editTitle") : t("recurringTransactions:newTitle")}</h2>
         {wallets.length === 0 || categories.length === 0 ? (
           <p className="empty-state">
             {wallets.length === 0 && categories.length === 0
-              ? "Cần tạo ít nhất 1 ví và 1 danh mục trước."
+              ? t("recurringTransactions:noWalletsAndCategories")
               : wallets.length === 0
-                ? "Cần tạo ít nhất 1 ví trước."
-                : "Cần tạo ít nhất 1 danh mục trước."}
+                ? t("recurringTransactions:noWallets")
+                : t("recurringTransactions:noCategories")}
           </p>
         ) : (
           <form className="inline-form" onSubmit={handleSubmit}>
             <label className="field">
-              Ví
+              {t("recurringTransactions:walletLabel")}
               <select value={form.walletId} onChange={(e) => updateField("walletId", e.target.value)} required>
                 {wallets.map((w) => (
                   <option key={w.id} value={w.id}>
@@ -150,7 +150,7 @@ export default function RecurringTransactions() {
               </select>
             </label>
             <label className="field">
-              Danh mục
+              {t("recurringTransactions:categoryLabel")}
               <select value={form.categoryId} onChange={(e) => updateField("categoryId", e.target.value)} required>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -160,14 +160,14 @@ export default function RecurringTransactions() {
               </select>
             </label>
             <label className="field">
-              Loại
+              {t("recurringTransactions:typeLabel")}
               <select value={form.type} onChange={(e) => updateField("type", e.target.value)}>
-                <option value="EXPENSE">Chi tiêu</option>
-                <option value="INCOME">Thu nhập</option>
+                <option value="EXPENSE">{t("recurringTransactions:typeExpense")}</option>
+                <option value="INCOME">{t("recurringTransactions:typeIncome")}</option>
               </select>
             </label>
             <label className="field">
-              Số tiền
+              {t("recurringTransactions:amountLabel")}
               <input
                 type="number"
                 step="0.01"
@@ -178,7 +178,7 @@ export default function RecurringTransactions() {
               />
             </label>
             <label className="field">
-              Ngày trong tháng
+              {t("recurringTransactions:dayOfMonthLabel")}
               <input
                 type="number"
                 min="1"
@@ -189,7 +189,7 @@ export default function RecurringTransactions() {
               />
             </label>
             <label className="field">
-              Bắt đầu từ
+              {t("recurringTransactions:startDateLabel")}
               <input
                 type="date"
                 value={form.startDate}
@@ -198,17 +198,23 @@ export default function RecurringTransactions() {
               />
             </label>
             <label className="field">
-              Kết thúc (tuỳ chọn)
+              {t("recurringTransactions:endDateLabel")}
               <input type="date" value={form.endDate} onChange={(e) => updateField("endDate", e.target.value)} />
             </label>
             <label className="field">
-              Ghi chú
-              <input placeholder="Tuỳ chọn" value={form.note} onChange={(e) => updateField("note", e.target.value)} />
+              {t("recurringTransactions:noteLabel")}
+              <input
+                placeholder={t("recurringTransactions:optionalPlaceholder")}
+                value={form.note}
+                onChange={(e) => updateField("note", e.target.value)}
+              />
             </label>
-            <button type="submit">{editingId ? "Cập nhật" : "Thêm"}</button>
+            <button type="submit">
+              {editingId ? t("recurringTransactions:updateButton") : t("recurringTransactions:addButton")}
+            </button>
             {editingId && (
               <button type="button" className="btn-secondary" onClick={cancelEdit}>
-                Huỷ
+                {t("common:cancel")}
               </button>
             )}
           </form>
@@ -217,56 +223,66 @@ export default function RecurringTransactions() {
       </div>
 
       <div className="section-card">
-        <h2>Danh sách giao dịch định kỳ</h2>
+        <h2>{t("recurringTransactions:listTitle")}</h2>
         {rules.length === 0 ? (
-          <p className="empty-state">Chưa có giao dịch định kỳ nào</p>
+          <p className="empty-state">{t("recurringTransactions:noRules")}</p>
         ) : (
           <table>
             <thead>
               <tr>
-                <th>Ví</th>
-                <th>Danh mục</th>
-                <th>Loại</th>
-                <th>Số tiền</th>
-                <th>Ngày trong tháng</th>
-                <th>Lần kế tiếp</th>
-                <th>Trạng thái</th>
+                <th>{t("recurringTransactions:walletLabel")}</th>
+                <th>{t("recurringTransactions:categoryLabel")}</th>
+                <th>{t("recurringTransactions:typeLabel")}</th>
+                <th>{t("recurringTransactions:amountLabel")}</th>
+                <th>{t("recurringTransactions:dayOfMonthLabel")}</th>
+                <th>{t("recurringTransactions:nextRunLabel")}</th>
+                <th>{t("recurringTransactions:statusLabel")}</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {rules.map((r) => (
                 <tr key={r.id}>
-                  <td data-label="Ví">{walletName(r.walletId)}</td>
-                  <td data-label="Danh mục">{categoryName(r.categoryId)}</td>
-                  <td data-label="Loại">
+                  <td data-label={t("recurringTransactions:walletLabel")}>{walletName(r.walletId)}</td>
+                  <td data-label={t("recurringTransactions:categoryLabel")}>{categoryName(r.categoryId)}</td>
+                  <td data-label={t("recurringTransactions:typeLabel")}>
                     <span className={`badge ${r.type === "EXPENSE" ? "badge-expense" : "badge-income"}`}>
-                      {r.type === "EXPENSE" ? "Chi tiêu" : "Thu nhập"}
+                      {r.type === "EXPENSE" ? t("recurringTransactions:typeExpense") : t("recurringTransactions:typeIncome")}
                     </span>
                   </td>
-                  <td data-label="Số tiền" className={r.type === "EXPENSE" ? "amount-expense" : "amount-income"}>
+                  <td
+                    data-label={t("recurringTransactions:amountLabel")}
+                    className={r.type === "EXPENSE" ? "amount-expense" : "amount-income"}
+                  >
                     {r.type === "EXPENSE" ? "-" : "+"}
                     {formatCurrency(r.amount)}
                   </td>
-                  <td data-label="Ngày trong tháng">Ngày {r.dayOfMonth}</td>
-                  <td data-label="Lần kế tiếp">{r.active ? r.nextRunDate : "-"}</td>
-                  <td data-label="Trạng thái">
+                  <td data-label={t("recurringTransactions:dayOfMonthLabel")}>
+                    {t("recurringTransactions:dayPrefix")} {r.dayOfMonth}
+                  </td>
+                  <td data-label={t("recurringTransactions:nextRunLabel")}>{r.active ? r.nextRunDate : "-"}</td>
+                  <td data-label={t("recurringTransactions:statusLabel")}>
                     <span className={`badge ${r.active ? "badge-income" : "badge-expense"}`}>
-                      {r.active ? "Đang chạy" : "Tạm dừng"}
+                      {r.active ? t("recurringTransactions:statusActive") : t("recurringTransactions:statusPaused")}
                     </span>
                   </td>
                   <td className="row-actions">
                     <button type="button" className="btn-secondary" onClick={() => toggleActive(r)}>
-                      {r.active ? "Tạm dừng" : "Kích hoạt"}
+                      {r.active ? t("recurringTransactions:pauseButton") : t("recurringTransactions:activateButton")}
                     </button>
-                    <button type="button" className="icon-btn" onClick={() => startEdit(r)} aria-label="Sửa">
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      onClick={() => startEdit(r)}
+                      aria-label={t("common:edit")}
+                    >
                       <EditIcon />
                     </button>
                     <button
                       type="button"
                       className="icon-btn icon-btn-danger"
                       onClick={() => handleDelete(r.id)}
-                      aria-label="Xoá"
+                      aria-label={t("common:delete")}
                     >
                       <TrashIcon />
                     </button>

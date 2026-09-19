@@ -1,8 +1,10 @@
 package com.family.expensemanager.auth.service;
 
 import com.family.expensemanager.auth.dao.FamilyDao;
+import com.family.expensemanager.auth.dao.FamilyMembershipDao;
 import com.family.expensemanager.auth.dao.UserDao;
 import com.family.expensemanager.auth.domain.entity.Family;
+import com.family.expensemanager.auth.domain.entity.FamilyMembership;
 import com.family.expensemanager.auth.domain.entity.User;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
@@ -33,12 +35,14 @@ class AdminServiceTest {
     private FamilyDao familyDao;
     @Mock
     private UserDao userDao;
+    @Mock
+    private FamilyMembershipDao familyMembershipDao;
 
     private AdminService adminService;
 
     @BeforeEach
     void setUp() {
-        adminService = new AdminService(familyDao, userDao);
+        adminService = new AdminService(familyDao, userDao, familyMembershipDao);
     }
 
     @AfterEach
@@ -50,9 +54,10 @@ class AdminServiceTest {
     void listFamilies_includesMemberCountAndOwnerInfo() {
         Family family = family(1L, "Nhà Nguyễn");
         User owner = user(1L, 1L, "OWNER", "owner@b.com", "Chủ hộ");
-        User member = user(2L, 1L, "MEMBER", "member@b.com", "Thành viên");
         when(familyDao.selectAll()).thenReturn(List.of(family));
-        when(userDao.selectByFamilyId(1L)).thenReturn(List.of(owner, member));
+        when(familyMembershipDao.selectByFamilyId(1L))
+                .thenReturn(List.of(membership(1L, 1L, "OWNER"), membership(2L, 1L, "MEMBER")));
+        when(userDao.selectById(1L)).thenReturn(Optional.of(owner));
 
         var result = adminService.listFamilies();
 
@@ -121,6 +126,14 @@ class AdminServiceTest {
         user.setActive(true);
         user.setProvider("LOCAL");
         return user;
+    }
+
+    private static FamilyMembership membership(Long userId, Long familyId, String role) {
+        FamilyMembership membership = new FamilyMembership();
+        membership.setUserId(userId);
+        membership.setFamilyId(familyId);
+        membership.setRole(role);
+        return membership;
     }
 
     /** {@link CurrentUser#userId()} reads from the Spring SecurityContext, so stub it directly. */

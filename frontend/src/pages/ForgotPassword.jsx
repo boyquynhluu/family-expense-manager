@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { MailIcon } from "../components/AuthIcons";
 
 export default function ForgotPassword() {
+  const { t } = useTranslation("forgotPassword");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -16,9 +18,9 @@ export default function ForgotPassword() {
     setLoading(true);
     try {
       const res = await client.post("/auth/forgot-password", { email });
-      setMessage(res.data.data?.message || "Nếu email tồn tại, chúng tôi đã gửi link đặt lại mật khẩu.");
+      setMessage(res.data.data?.message || t("resetLinkSent"));
     } catch (err) {
-      setError(err.response?.data?.message || "Có lỗi xảy ra, vui lòng thử lại");
+      setError(err.response?.data?.message || t("genericError"));
     } finally {
       setLoading(false);
     }
@@ -27,11 +29,11 @@ export default function ForgotPassword() {
   return (
     <div className="auth-page">
       <form className="auth-form" onSubmit={handleSubmit}>
-        <h1 className="auth-title">Quên mật khẩu</h1>
+        <h1 className="auth-title">{t("title")}</h1>
 
         <div className="auth-card">
-          <p className="auth-card-title">Đặt lại mật khẩu</p>
-          <p className="auth-card-subtitle">Nhập email đã đăng ký, chúng tôi sẽ gửi link đặt lại mật khẩu cho bạn.</p>
+          <p className="auth-card-title">{t("cardTitle")}</p>
+          <p className="auth-card-subtitle">{t("subtitle")}</p>
 
           {error && <p className="error-text">{error}</p>}
           {message && <p className="success-text">{message}</p>}
@@ -46,21 +48,21 @@ export default function ForgotPassword() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Email@gmail.com"
+                  placeholder={t("emailPlaceholder")}
                   aria-label="Email"
                   required
                 />
               </div>
 
               <button type="submit" className="auth-submit" disabled={loading}>
-                {loading ? "Đang gửi..." : "Gửi link đặt lại mật khẩu"}
+                {loading ? t("sending") : t("submit")}
               </button>
             </>
           )}
         </div>
 
         <p className="auth-footer-text">
-          <Link to="/login">Quay lại đăng nhập</Link>
+          <Link to="/login">{t("backToLogin")}</Link>
         </p>
       </form>
     </div>

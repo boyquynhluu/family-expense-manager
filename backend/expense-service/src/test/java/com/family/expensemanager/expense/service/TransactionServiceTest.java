@@ -176,6 +176,48 @@ class TransactionServiceTest {
         verify(receiptStorageService, never()).delete(any());
     }
 
+    @Test
+    void delete_softDeletesRow_andKeepsReceiptFile() {
+        Transaction target = transaction(1L);
+        target.setReceiptPath("1/1-a.jpg");
+        when(transactionDao.selectById(1L)).thenReturn(Optional.of(target));
+
+        transactionService.delete(1L, 1L);
+
+        assertThat(target.getDeletedAt()).isNotNull();
+        verify(transactionDao).update(target);
+        verify(transactionDao, never()).delete(any());
+        verify(receiptStorageService, never()).delete(any());
+    }
+
+    @Test
+    void restore_clearsDeletedAt_whenRowExists() {
+        Transaction restored = transaction(1L);
+        when(transactionDao.restore(1L, 1L)).thenReturn(1);
+        when(transactionDao.selectById(1L)).thenReturn(Optional.of(restored));
+
+        transactionService.restore(1L, 1L);
+
+        verify(transactionDao).restore(1L, 1L);
+    }
+
+    @Test
+    void restore_throwsNotFound_whenRowMissingOrNotDeleted() {
+        when(transactionDao.restore(1L, 1L)).thenReturn(0);
+
+        assertThatThrownBy(() -> transactionService.restore(1L, 1L)).isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void listDeleted_returnsDeletedTransactions() {
+        when(transactionDao.selectDeletedByFamilyId(1L)).thenReturn(List.of(transaction(99L)));
+
+        var result = transactionService.listDeleted(1L);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).id()).isEqualTo(99L);
+    }
+
     private static Transaction transaction(Long id) {
         Transaction transaction = new Transaction();
         transaction.setId(id);

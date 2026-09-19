@@ -4,6 +4,7 @@ FROM
     TRANSACTIONS
 WHERE
     family_id = /* familyId */0
+    AND deleted_at IS NULL
 /*%if walletId != null */
     AND wallet_id = /* walletId */0
 /*%end*/

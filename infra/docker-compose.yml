@@ -7,6 +7,9 @@ networks:
 volumes:
   mysql-data:
   receipt-uploads:
+  prometheus-data:
+  grafana-data:
+  loki-data:
 
 services:
   mysql-db:
@@ -136,6 +139,8 @@ services:
       FEM_AUTH_DB_USER: ${FEM_AUTH_DB_USER}
       FEM_AUTH_DB_PASSWORD: ${FEM_AUTH_DB_PASSWORD}
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       JWT_SECRET: ${JWT_SECRET}
       APP_BASE_URL: ${APP_BASE_URL}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
@@ -150,6 +155,8 @@ services:
       mysql-db:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - fem-network
@@ -201,6 +208,8 @@ services:
       FEM_NOTIFY_DB_USER: ${FEM_NOTIFY_DB_USER}
       FEM_NOTIFY_DB_PASSWORD: ${FEM_NOTIFY_DB_PASSWORD}
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       JWT_SECRET: ${JWT_SECRET}
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
@@ -216,6 +225,8 @@ services:
       mysql-db:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - fem-network
@@ -245,3 +256,67 @@ services:
     networks:
       - fem-network
     restart: unless-stopped
+
+  # README "12. Observability sơ sài" — metrics half of the stack. Each service exposes
+  # Micrometer metrics at /actuator/prometheus (see prometheus/prometheus.yml for the
+  # scrape targets); this just polls them and stores the time series.
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: fem-prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - fem-network
+
+  # Log-aggregation half of the observability stack — Loki stores logs, Promtail (below)
+  # ships every container's stdout/stderr here so they're searchable from one place
+  # instead of `docker logs <container>` one at a time.
+  loki:
+    image: grafana/loki:latest
+    container_name: fem-loki
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - fem-network
+
+  # Auto-discovers every container on this host via the (read-only) Docker socket — no
+  # config change needed when a new service container is added later.
+  promtail:
+    image: grafana/promtail:latest
+    container_name: fem-promtail
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on:
+      - loki
+    networks:
+      - fem-network
+
+  # Single UI for both: Prometheus + Loki datasources and a starter dashboard are
+  # auto-provisioned from ./grafana/provisioning (see that folder) — no manual
+  # click-through setup needed after `docker compose up`. Default login admin/admin.
+  grafana:
+    image: grafana/grafana:latest
+    container_name: fem-grafana
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - fem-network

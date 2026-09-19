@@ -52,4 +52,17 @@ public class CategoryController {
         categoryService.delete(id, CurrentUser.familyId());
         return ApiResponse.ok();
     }
+
+    @GetMapping("/trash")
+    public ApiResponse<List<CategoryResponse>> trash() {
+        log.info("trash - start");
+        return ApiResponse.ok(categoryService.listDeleted(CurrentUser.familyId()));
+    }
+
+    @PostMapping("/{id}/restore")
+    public ApiResponse<Void> restore(@PathVariable Long id) {
+        log.info("restore - start, id={}", id);
+        categoryService.restore(id, CurrentUser.familyId());
+        return ApiResponse.ok();
+    }
 }

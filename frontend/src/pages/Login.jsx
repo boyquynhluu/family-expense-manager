@@ -1,24 +1,32 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import { useTranslation } from "react-i18next";
 import { oauth2AuthorizationUrl } from "../api/client";
 import { EyeIcon, EyeOffIcon, FacebookIcon, GithubIcon, GoogleIcon, KeyIcon, MailIcon } from "../components/AuthIcons";
 import { useAuth } from "../hooks/useAuth";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { t } = useTranslation("login");
+  const { login, verifyTwoFactor } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const [error, setError] = useState(location.state?.oauth2Error ? "Đăng nhập bằng mạng xã hội thất bại" : "");
+  const [error, setError] = useState(location.state?.oauth2Error ? t("oauth2Error") : "");
   const [loading, setLoading] = useState(false);
+
+  // Set only when the backend says the account has 2FA enabled (README "9. Không có
+  // 2FA") — while set, the form below switches to asking for the 6-digit code instead
+  // of email/password.
+  const [twoFactorToken, setTwoFactorToken] = useState(null);
+  const [totpCode, setTotpCode] = useState("");
 
   useEffect(() => {
     if (location.state?.passwordResetSuccess) {
-      toast.success("Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.");
+      toast.success(t("passwordResetSuccess"));
       navigate(location.pathname, { replace: true, state: {} });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -29,23 +37,82 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      await login(email, password, rememberMe);
-      navigate("/");
+      const result = await login(email, password, rememberMe);
+      if (result.requiresTwoFactor) {
+        setTwoFactorToken(result.twoFactorToken);
+      } else {
+        navigate("/");
+      }
     } catch (err) {
-      setError(err.response?.data?.message || "Đăng nhập thất bại");
+      setError(err.response?.data?.message || t("loginFailed"));
     } finally {
       setLoading(false);
     }
   }
 
+  async function handleTwoFactorSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      await verifyTwoFactor(twoFactorToken, totpCode, rememberMe);
+      navigate("/");
+    } catch (err) {
+      setError(err.response?.data?.message || t("twoFactorCodeInvalid"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (twoFactorToken) {
+    return (
+      <div className="auth-page">
+        <form className="auth-form" onSubmit={handleTwoFactorSubmit}>
+          <h1 className="auth-title">{t("twoFactorTitle")}</h1>
+
+          <div className="auth-card">
+            <p className="auth-card-title">{t("twoFactorCardTitle")}</p>
+            <p className="auth-card-subtitle">{t("twoFactorCardSubtitle")}</p>
+
+            {error && <p className="error-text">{error}</p>}
+
+            <div className="auth-input-group">
+              <span className="auth-input-icon">
+                <KeyIcon />
+              </span>
+              <input
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value)}
+                placeholder={t("twoFactorCodePlaceholder")}
+                aria-label={t("twoFactorCodePlaceholder")}
+                autoFocus
+                required
+              />
+            </div>
+
+            <button type="submit" className="auth-submit" disabled={loading}>
+              {loading ? t("verifying") : t("confirm")}
+            </button>
+          </div>
+
+          <p className="auth-footer-text">
+            <button type="button" className="auth-forgot" onClick={() => setTwoFactorToken(null)}>
+              {t("backToLogin")}
+            </button>
+          </p>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="auth-page">
       <form className="auth-form" onSubmit={handleSubmit}>
-        <h1 className="auth-title">Đăng nhập tài khoản</h1>
+        <h1 className="auth-title">{t("title")}</h1>
 
         <div className="auth-card">
-          <p className="auth-card-title">Chào mừng trở lại!</p>
-          <p className="auth-card-subtitle">Đăng nhập để tiếp tục quản lý chi tiêu của gia đình bạn.</p>
+          <p className="auth-card-title">{t("welcomeBack")}</p>
+          <p className="auth-card-subtitle">{t("subtitle")}</p>
 
           {error && <p className="error-text">{error}</p>}
 
@@ -57,7 +124,7 @@ export default function Login() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email@gmail.com"
+              placeholder={t("emailPlaceholder")}
               aria-label="Email"
               required
             />
@@ -71,15 +138,15 @@ export default function Login() {
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Mật khẩu"
-              aria-label="Mật khẩu"
+              placeholder={t("passwordPlaceholder")}
+              aria-label={t("passwordPlaceholder")}
               required
             />
             <button
               type="button"
               className="auth-input-toggle"
               onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+              aria-label={showPassword ? t("hidePassword") : t("showPassword")}
             >
               {showPassword ? <EyeOffIcon /> : <EyeIcon />}
             </button>
@@ -91,40 +158,40 @@ export default function Login() {
                 <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
                 <span className="auth-toggle-track" />
               </span>
-              Ghi nhớ đăng nhập
+              {t("rememberMe")}
             </label>
             <Link to="/forgot-password" className="auth-forgot">
-              Quên mật khẩu?
+              {t("forgotPassword")}
             </Link>
           </div>
 
           <button type="submit" className="auth-submit" disabled={loading}>
-            {loading ? "Đang đăng nhập..." : "Đăng nhập"}
+            {loading ? t("loggingIn") : t("submit")}
           </button>
         </div>
 
         <div className="auth-divider">
-          <span>hoặc tiếp tục với</span>
+          <span>{t("orContinueWith")}</span>
         </div>
 
         <div className="oauth2-row">
           <a
             className="oauth2-icon-button"
             href={oauth2AuthorizationUrl("google")}
-            title="Đăng nhập với Google"
+            title={t("loginWithGoogle")}
           >
             <span className="oauth2-icon-badge oauth2-badge-google">
               <GoogleIcon />
             </span>
             <span>Google</span>
           </a>
-          <span className="oauth2-icon-button is-disabled" title="Facebook đăng nhập sắp ra mắt">
+          <span className="oauth2-icon-button is-disabled" title={t("facebookComingSoon")}>
             <span className="oauth2-icon-badge oauth2-badge-facebook">
               <FacebookIcon />
             </span>
             <span>Facebook</span>
           </span>
-          <span className="oauth2-icon-button is-disabled" title="GitHub đăng nhập sắp ra mắt">
+          <span className="oauth2-icon-button is-disabled" title={t("githubComingSoon")}>
             <span className="oauth2-icon-badge oauth2-badge-github">
               <GithubIcon />
             </span>
@@ -133,7 +200,7 @@ export default function Login() {
         </div>
 
         <p className="auth-footer-text">
-          Chưa có tài khoản? <Link to="/register">Đăng ký gia đình mới</Link>
+          {t("noAccount")} <Link to="/register">{t("registerLink")}</Link>
         </p>
       </form>
     </div>
