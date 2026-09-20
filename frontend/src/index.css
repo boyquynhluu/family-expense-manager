@@ -86,6 +86,31 @@ select:focus {
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
 }
 
+/* Fields the user can't edit look grey so they read as locked, not as empty inputs. */
+input:disabled:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+input:read-only:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
+select:disabled,
+textarea:disabled {
+  background: #eceef2;
+  border-color: #d9dce3;
+  color: #6b7280;
+  -webkit-text-fill-color: #6b7280;
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+input:disabled:focus,
+input:read-only:focus,
+select:disabled:focus {
+  border-color: #d9dce3;
+  box-shadow: none;
+}
+
+.auth-input-group input:disabled:not([type="checkbox"]):not([type="radio"]):not([type="file"]) {
+  background: transparent;
+  border: none;
+}
+
 .error-text {
   color: #dc2626;
   font-weight: 600;
