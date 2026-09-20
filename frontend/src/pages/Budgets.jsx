@@ -160,74 +160,82 @@ export default function Budgets() {
         </div>
       </div>
 
-      <div className="section-card">
-        <h2>{editingId ? t("budgets:editTitle") : t("budgets:newTitle")}</h2>
-        <form className="inline-form" onSubmit={handleSubmit}>
-          <label className="field">
-            {t("budgets:categoryLabel")}
-            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value="">{t("budgets:overallOption")}</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>
-              {t("budgets:monthLabel")}
-              <span className="required-mark" aria-hidden="true"> *</span>
-            </span>
-            <input type="month" value={periodMonth} onChange={(e) => setPeriodMonth(e.target.value)} required />
-          </label>
-          <label className="field">
-            <span>
-              {t("budgets:limitLabel")}
-              <span className="required-mark" aria-hidden="true"> *</span>
-            </span>
-            <input
-              type="number"
-              step="0.01"
-              placeholder="0"
-              value={limitAmount}
-              onChange={(e) => setLimitAmount(e.target.value)}
-              required
-            />
-          </label>
-          <button type="submit">{editingId ? t("budgets:updateButton") : t("budgets:createButton")}</button>
-          {editingId && (
-            <button type="button" className="btn-secondary" onClick={cancelEdit}>
-              {t("common:cancel")}
-            </button>
-          )}
-        </form>
-        {error && <p className="error-text">{error}</p>}
-      </div>
+      {isOwner ? (
+        <>
+          <div className="section-card">
+            <h2>{editingId ? t("budgets:editTitle") : t("budgets:newTitle")}</h2>
+            <form className="inline-form" onSubmit={handleSubmit}>
+              <label className="field">
+                {t("budgets:categoryLabel")}
+                <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                  <option value="">{t("budgets:overallOption")}</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>
+                  {t("budgets:monthLabel")}
+                  <span className="required-mark" aria-hidden="true"> *</span>
+                </span>
+                <input type="month" value={periodMonth} onChange={(e) => setPeriodMonth(e.target.value)} required />
+              </label>
+              <label className="field">
+                <span>
+                  {t("budgets:limitLabel")}
+                  <span className="required-mark" aria-hidden="true"> *</span>
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="0"
+                  value={limitAmount}
+                  onChange={(e) => setLimitAmount(e.target.value)}
+                  required
+                />
+              </label>
+              <button type="submit">{editingId ? t("budgets:updateButton") : t("budgets:createButton")}</button>
+              {editingId && (
+                <button type="button" className="btn-secondary" onClick={cancelEdit}>
+                  {t("common:cancel")}
+                </button>
+              )}
+            </form>
+            {error && <p className="error-text">{error}</p>}
+          </div>
 
-      <div className="section-card">
-        <h2>{t("budgets:copyTitle")}</h2>
-        <p className="page-header-subtitle">{t("budgets:copyHint")}</p>
-        <form className="inline-form" onSubmit={handleCopy}>
-          <label className="field">
-            <span>
-              {t("budgets:copyFromLabel")}
-              <span className="required-mark" aria-hidden="true"> *</span>
-            </span>
-            <input type="month" value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)} required />
-          </label>
-          <label className="field">
-            <span>
-              {t("budgets:copyToLabel")}
-              <span className="required-mark" aria-hidden="true"> *</span>
-            </span>
-            <input type="month" value={copyTo} onChange={(e) => setCopyTo(e.target.value)} required />
-          </label>
-          <button type="submit" disabled={copying}>
-            {t("budgets:copyButton")}
-          </button>
-        </form>
-      </div>
+          <div className="section-card">
+            <h2>{t("budgets:copyTitle")}</h2>
+            <p className="page-header-subtitle">{t("budgets:copyHint")}</p>
+            <form className="inline-form" onSubmit={handleCopy}>
+              <label className="field">
+                <span>
+                  {t("budgets:copyFromLabel")}
+                  <span className="required-mark" aria-hidden="true"> *</span>
+                </span>
+                <input type="month" value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)} required />
+              </label>
+              <label className="field">
+                <span>
+                  {t("budgets:copyToLabel")}
+                  <span className="required-mark" aria-hidden="true"> *</span>
+                </span>
+                <input type="month" value={copyTo} onChange={(e) => setCopyTo(e.target.value)} required />
+              </label>
+              <button type="submit" disabled={copying}>
+                {t("budgets:copyButton")}
+              </button>
+            </form>
+          </div>
+        </>
+      ) : (
+        <div className="section-card">
+          <p className="page-header-subtitle">{t("budgets:ownerOnlyManage")}</p>
+        </div>
+      )}
 
       <div className="section-card">
         <h2>{t("budgets:listTitle")}</h2>
@@ -256,16 +264,16 @@ export default function Budgets() {
                             : t("budgets:statusSafe")}
                       </span>
                       {formatCurrency(spent)} / {formatCurrency(b.limitAmount)}
-                      <span className="row-actions">
-                        <button
-                          type="button"
-                          className="icon-btn"
-                          onClick={() => startEdit(b)}
-                          aria-label={t("common:edit")}
-                        >
-                          <EditIcon />
-                        </button>
-                        {isOwner && (
+                      {isOwner && (
+                        <span className="row-actions">
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            onClick={() => startEdit(b)}
+                            aria-label={t("common:edit")}
+                          >
+                            <EditIcon />
+                          </button>
                           <button
                             type="button"
                             className="icon-btn icon-btn-danger"
@@ -274,8 +282,8 @@ export default function Budgets() {
                           >
                             <TrashIcon />
                           </button>
-                        )}
-                      </span>
+                        </span>
+                      )}
                     </span>
                   </div>
                   <div className="category-bar-track">

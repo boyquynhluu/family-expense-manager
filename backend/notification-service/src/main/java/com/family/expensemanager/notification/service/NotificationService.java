@@ -22,8 +22,10 @@ public class NotificationService {
     private static final int MAX_PAGE_SIZE = 100;
 
     private final NotificationDao notificationDao;
+    private final NotificationPreferenceService preferenceService;
 
-    public PageResponse<NotificationResponse> listByFamilyPaged(Long familyId, int page, int size) {
+    /** Rows are per family; the caller's in-app opt-outs are filtered out here, at read time. */
+    public PageResponse<NotificationResponse> listByFamilyPaged(Long familyId, Long userId, int page, int size) {
         log.info("listByFamilyPaged - start, familyId={}, page={}, size={}", familyId, page, size);
         if (page < 0) {
             throw new BadRequestException("page phải >= 0");
@@ -31,16 +33,18 @@ public class NotificationService {
         if (size < 1 || size > MAX_PAGE_SIZE) {
             throw new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE);
         }
-        long totalElements = notificationDao.countByFamilyId(familyId);
-        List<NotificationResponse> content = notificationDao.selectByFamilyIdPaged(familyId, size, page * size).stream()
-                .map(NotificationResponse::from)
-                .toList();
+        List<String> excludedTypes = preferenceService.disabledInAppTypes(userId);
+        long totalElements = notificationDao.countByFamilyId(familyId, excludedTypes);
+        List<NotificationResponse> content =
+                notificationDao.selectByFamilyIdPaged(familyId, excludedTypes, size, page * size).stream()
+                        .map(NotificationResponse::from)
+                        .toList();
         return PageResponse.of(content, page, size, totalElements);
     }
 
-    public long countUnread(Long familyId) {
-        log.info("countUnread - start, familyId={}", familyId);
-        return notificationDao.countUnreadByFamilyId(familyId);
+    public long countUnread(Long familyId, Long userId) {
+        log.info("countUnread - start, familyId={}, userId={}", familyId, userId);
+        return notificationDao.countUnreadByFamilyId(familyId, preferenceService.disabledInAppTypes(userId));
     }
 
     @Transactional
@@ -63,6 +67,18 @@ public class NotificationService {
                     n.setIsRead(true);
                     notificationDao.update(n);
                 });
+    }
+
+    @Transactional
+    public void delete(Long notificationId, Long familyId) {
+        log.info("delete - start, notificationId={}, familyId={}", notificationId, familyId);
+        notificationDao.delete(requireOwnedByFamily(notificationId, familyId));
+    }
+
+    @Transactional
+    public void deleteRead(Long familyId) {
+        log.info("deleteRead - start, familyId={}", familyId);
+        notificationDao.deleteReadByFamilyId(familyId);
     }
 
     private Notification requireOwnedByFamily(Long notificationId, Long familyId) {

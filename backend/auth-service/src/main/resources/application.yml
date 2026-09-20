@@ -59,6 +59,7 @@ kafka:
     user-verification: user-verification
     password-reset: password-reset
     family-invite: family-invite
+    family-member-events: family-member-events
 
 management:
   endpoints:

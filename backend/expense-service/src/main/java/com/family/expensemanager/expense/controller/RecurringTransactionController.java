@@ -49,20 +49,26 @@ public class RecurringTransactionController {
     public ApiResponse<RecurringTransactionResponse> update(
             @PathVariable Long id, @Valid @RequestBody CreateRecurringTransactionRequest request) {
         log.info("update - start, id={}", id);
-        return ApiResponse.ok(recurringTransactionService.update(id, CurrentUser.familyId(), request));
+        return ApiResponse.ok(recurringTransactionService.update(
+                id, CurrentUser.familyId(), CurrentUser.userId(), isOwner(), request));
     }
 
     @PutMapping("/{id}/active")
     public ApiResponse<Void> setActive(@PathVariable Long id, @Valid @RequestBody SetActiveRequest request) {
         log.info("setActive - start, id={}", id);
-        recurringTransactionService.setActive(id, CurrentUser.familyId(), request.active());
+        recurringTransactionService.setActive(
+                id, CurrentUser.familyId(), CurrentUser.userId(), isOwner(), request.active());
         return ApiResponse.ok();
     }
 
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         log.info("delete - start, id={}", id);
-        recurringTransactionService.delete(id, CurrentUser.familyId());
+        recurringTransactionService.delete(id, CurrentUser.familyId(), CurrentUser.userId(), isOwner());
         return ApiResponse.ok();
+    }
+
+    private static boolean isOwner() {
+        return "OWNER".equals(CurrentUser.role());
     }
 }

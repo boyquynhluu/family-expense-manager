@@ -20,5 +20,6 @@
   "seedDefaultsButton": "Tạo ví & danh mục mẫu",
   "seedDefaultsSuccess": "Đã tạo ví và danh mục mẫu",
   "seedDefaultsNothingToDo": "Gia đình đã có sẵn ví và danh mục",
-  "seedDefaultsFailed": "Không thể tạo dữ liệu mẫu"
+  "seedDefaultsFailed": "Không thể tạo dữ liệu mẫu",
+  "seedDefaultsOwnerOnly": "Hãy nhờ chủ hộ tạo ví và danh mục."
 }

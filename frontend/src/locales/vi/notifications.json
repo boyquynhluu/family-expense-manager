@@ -5,5 +5,28 @@
   "noNotifications": "Chưa có thông báo nào",
   "loadFailed": "Không tải được thông báo",
   "markReadFailed": "Không đánh dấu được thông báo đã đọc",
-  "markAllReadFailed": "Không đánh dấu được tất cả đã đọc"
+  "markAllReadFailed": "Không đánh dấu được tất cả đã đọc",
+  "deleteReadButton": "Xoá đã đọc",
+  "deleteConfirm": "Xoá thông báo này? Thông báo sẽ bị xoá với cả gia đình.",
+  "deleteReadConfirm": "Xoá tất cả thông báo đã đọc của gia đình?",
+  "deleted": "Đã xoá thông báo",
+  "deleteFailed": "Không xoá được thông báo",
+  "deletedRead": "Đã xoá các thông báo đã đọc",
+  "deleteReadFailed": "Không xoá được các thông báo đã đọc",
+  "preferencesTitle": "Tuỳ chọn thông báo",
+  "preferencesSubtitle": "Chỉ áp dụng cho tài khoản của bạn",
+  "preferenceInApp": "Hiện trong app",
+  "preferenceEmail": "Gửi email",
+  "preferencesSave": "Lưu tuỳ chọn",
+  "preferencesSaved": "Đã lưu tuỳ chọn thông báo",
+  "preferencesSaveFailed": "Không lưu được tuỳ chọn thông báo",
+  "types": {
+    "BUDGET_EXCEEDED": "Vượt ngân sách",
+    "BUDGET_WARNING": "Sắp vượt ngân sách",
+    "RECURRING_EXECUTED": "Giao dịch định kỳ đã được ghi",
+    "RECURRING_FAILED": "Giao dịch định kỳ thất bại",
+    "MEMBER_JOINED": "Thành viên mới tham gia",
+    "MEMBER_LEFT": "Thành viên rời gia đình",
+    "MEMBER_REMOVED": "Thành viên bị xoá khỏi gia đình"
+  }
 }

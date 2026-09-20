@@ -13,8 +13,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -228,5 +230,19 @@ class BudgetServiceTest {
         budget.setPeriodMonth("2026-01");
         budget.setLimitAmount(BigDecimal.TEN);
         return budget;
+    }
+
+    @Test
+    void mutatingMethods_requireOwnerRole() {
+        for (String name : List.of("create", "update", "copy", "delete")) {
+            var methods = Arrays.stream(BudgetService.class.getDeclaredMethods())
+                    .filter(m -> m.getName().equals(name)).toList();
+            assertThat(methods).as(name).isNotEmpty();
+            assertThat(methods).as(name).allSatisfy(m -> {
+                PreAuthorize annotation = m.getAnnotation(PreAuthorize.class);
+                assertThat(annotation).isNotNull();
+                assertThat(annotation.value()).isEqualTo("hasRole('OWNER')");
+            });
+        }
     }
 }

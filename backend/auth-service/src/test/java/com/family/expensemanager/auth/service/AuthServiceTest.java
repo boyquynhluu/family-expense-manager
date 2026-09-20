@@ -27,6 +27,7 @@ import com.family.expensemanager.auth.dto.UpdateProfileRequest;
 import com.family.expensemanager.auth.security.TotpService;
 import com.family.expensemanager.auth.security.TwoFactorChallengeStore;
 import com.family.expensemanager.common.event.FamilyInviteEvent;
+import com.family.expensemanager.common.event.FamilyMemberEvent;
 import com.family.expensemanager.common.event.PasswordResetEvent;
 import com.family.expensemanager.common.event.UserVerificationEvent;
 import com.family.expensemanager.common.exception.BadRequestException;
@@ -332,6 +333,7 @@ class AuthServiceTest {
         verify(familyMembershipDao).delete(membership);
         verify(refreshTokenDao).deleteByUserId(5L);
         verify(userDao).delete(member);
+        assertMemberEventPublished(FamilyMemberEvent.MEMBER_REMOVED, 1L, 5L, "An");
     }
 
     @Test
@@ -504,6 +506,7 @@ class AuthServiceTest {
 
         assertThat(invite.getAcceptedAt()).isNotNull();
         verify(familyInviteDao).update(invite);
+        assertMemberEventPublished(FamilyMemberEvent.MEMBER_JOINED, invite.getFamilyId(), null, "Invitee");
     }
 
     @Test
@@ -539,6 +542,7 @@ class AuthServiceTest {
         assertThat(captor.getValue().getFamilyId()).isEqualTo(invite.getFamilyId());
         assertThat(invite.getAcceptedAt()).isNotNull();
         verify(familyInviteDao).update(invite);
+        assertMemberEventPublished(FamilyMemberEvent.MEMBER_JOINED, invite.getFamilyId(), 30L, "An");
     }
 
     @Test
@@ -871,6 +875,7 @@ class AuthServiceTest {
         verify(userDao).update(member);
         verify(familyDao, never()).insert(any());
         verify(revokedSessionStore).markRevoked(7L, 15 * 60 * 1000L);
+        assertMemberEventPublished(FamilyMemberEvent.MEMBER_LEFT, 1L, 5L, "An");
         assertThat(response.refreshToken()).isNotBlank();
     }
 
@@ -900,6 +905,7 @@ class AuthServiceTest {
         assertThat(membershipCaptor.getValue().getRole()).isEqualTo("OWNER");
         assertThat(member.getFamilyId()).isEqualTo(9L);
         assertThat(member.getRole()).isEqualTo("OWNER");
+        assertMemberEventPublished(FamilyMemberEvent.MEMBER_LEFT, 1L, 5L, "Bình");
         verify(userDao).update(member);
     }
 
@@ -1083,6 +1089,17 @@ class AuthServiceTest {
         token.setExpiresAt(LocalDateTime.now().plusDays(7));
         token.setCreatedAt(LocalDateTime.now());
         return token;
+    }
+
+    private void assertMemberEventPublished(String eventType, Long familyId, Long memberUserId,
+                                            String memberDisplayName) {
+        ArgumentCaptor<FamilyMemberEvent> captor = ArgumentCaptor.forClass(FamilyMemberEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        FamilyMemberEvent event = captor.getValue();
+        assertThat(event.eventType()).isEqualTo(eventType);
+        assertThat(event.familyId()).isEqualTo(familyId);
+        assertThat(event.memberUserId()).isEqualTo(memberUserId);
+        assertThat(event.memberDisplayName()).isEqualTo(memberDisplayName);
     }
 
     private static User activeLocalUser() {

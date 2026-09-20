@@ -152,57 +152,63 @@ export default function Wallets() {
         </div>
       </div>
 
-      <div className="section-card">
-        <h2>{editingId ? t("wallets:editTitle") : t("wallets:addTitle")}</h2>
-        <form className="inline-form" onSubmit={handleSubmit}>
-          <label className="field">
-            <span>
-              {t("wallets:nameLabel")}
-              <span className="required-mark" aria-hidden="true"> *</span>
-            </span>
-            <input
-              placeholder={t("wallets:namePlaceholder")}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-          </label>
-          <label className="field">
-            <span>
-              {t("wallets:currencyLabel")}
-              <span className="required-mark" aria-hidden="true"> *</span>
-            </span>
-            <input
-              placeholder={t("wallets:currencyPlaceholder")}
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value.toUpperCase())}
-              maxLength={3}
-              required
-            />
-          </label>
-          <label className="field">
-            <span>
-              {t("wallets:initialBalanceLabel")}
-              <span className="required-mark" aria-hidden="true"> *</span>
-            </span>
-            <input
-              type="number"
-              step="0.01"
-              placeholder="0"
-              value={initialBalance}
-              onChange={(e) => setInitialBalance(e.target.value)}
-              required
-            />
-          </label>
-          <button type="submit">{editingId ? t("wallets:submitUpdate") : t("wallets:submitAdd")}</button>
-          {editingId && (
-            <button type="button" className="btn-secondary" onClick={cancelEdit}>
-              {t("common:cancel")}
-            </button>
-          )}
-        </form>
-        {error && <p className="error-text">{error}</p>}
-      </div>
+      {isOwner ? (
+        <div className="section-card">
+          <h2>{editingId ? t("wallets:editTitle") : t("wallets:addTitle")}</h2>
+          <form className="inline-form" onSubmit={handleSubmit}>
+            <label className="field">
+              <span>
+                {t("wallets:nameLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
+              <input
+                placeholder={t("wallets:namePlaceholder")}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </label>
+            <label className="field">
+              <span>
+                {t("wallets:currencyLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
+              <input
+                placeholder={t("wallets:currencyPlaceholder")}
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+                maxLength={3}
+                required
+              />
+            </label>
+            <label className="field">
+              <span>
+                {t("wallets:initialBalanceLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="0"
+                value={initialBalance}
+                onChange={(e) => setInitialBalance(e.target.value)}
+                required
+              />
+            </label>
+            <button type="submit">{editingId ? t("wallets:submitUpdate") : t("wallets:submitAdd")}</button>
+            {editingId && (
+              <button type="button" className="btn-secondary" onClick={cancelEdit}>
+                {t("common:cancel")}
+              </button>
+            )}
+          </form>
+          {error && <p className="error-text">{error}</p>}
+        </div>
+      ) : (
+        <div className="section-card">
+          <p className="page-header-subtitle">{t("wallets:ownerOnlyManage")}</p>
+        </div>
+      )}
 
       <div className="section-card">
         <h2>{t("wallets:listTitle")}</h2>
@@ -237,18 +243,25 @@ export default function Wallets() {
                     <strong>{formatCurrency(w.currentBalance, w.currency)}</strong>
                   </td>
                   <td className="row-actions">
-                    <button type="button" className="icon-btn" onClick={() => startEdit(w)} aria-label={t("common:edit")}>
-                      <EditIcon />
-                    </button>
                     {isOwner && (
-                      <button
-                        type="button"
-                        className="icon-btn icon-btn-danger"
-                        onClick={() => handleDelete(w.id)}
-                        aria-label={t("common:delete")}
-                      >
-                        <TrashIcon />
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          onClick={() => startEdit(w)}
+                          aria-label={t("common:edit")}
+                        >
+                          <EditIcon />
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn icon-btn-danger"
+                          onClick={() => handleDelete(w.id)}
+                          aria-label={t("common:delete")}
+                        >
+                          <TrashIcon />
+                        </button>
+                      </>
                     )}
                   </td>
                 </tr>

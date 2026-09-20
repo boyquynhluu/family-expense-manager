@@ -43,5 +43,6 @@
   "colNote": "Note",
   "transferDeleteConfirm": "Delete this transfer? Both wallet balances will go back to what they were before the transfer.",
   "transferDeleted": "Transfer deleted",
-  "transferDeleteFailed": "Failed to delete transfer"
+  "transferDeleteFailed": "Failed to delete transfer",
+  "ownerOnlyManage": "Only the household owner can add, edit or delete wallets."
 }

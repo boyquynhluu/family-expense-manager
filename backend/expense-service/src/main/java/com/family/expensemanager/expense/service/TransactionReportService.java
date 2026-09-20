@@ -16,6 +16,7 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -59,6 +60,7 @@ public class TransactionReportService {
     }
 
     private List<TransactionReportRow> buildRows(Long familyId, TransactionReportFilter filter) {
+        filter.validate();
         Map<Long, String> walletNames = walletService.listByFamily(familyId).stream()
                 .collect(Collectors.toMap(w -> w.id(), w -> w.name()));
         Map<Long, String> categoryNames = categoryService.listByFamily(familyId).stream()
@@ -93,7 +95,14 @@ public class TransactionReportService {
         if (filter.toDate() != null && t.getOccurredAt().toLocalDate().isAfter(filter.toDate())) {
             return false;
         }
-        return true;
+        if (filter.minAmount() != null && t.getAmount().compareTo(filter.minAmount()) < 0) {
+            return false;
+        }
+        if (filter.maxAmount() != null && t.getAmount().compareTo(filter.maxAmount()) > 0) {
+            return false;
+        }
+        String query = filter.normalizedQuery();
+        return query == null || (t.getNote() != null && t.getNote().toLowerCase(Locale.ROOT).contains(query));
     }
 
     private List<ReportColumn<TransactionReportRow>> columns() {

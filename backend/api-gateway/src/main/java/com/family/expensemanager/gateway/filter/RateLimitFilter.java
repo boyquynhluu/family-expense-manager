@@ -61,7 +61,7 @@ public class RateLimitFilter extends OncePerRequestFilter implements Ordered {
             return;
         }
 
-        String key = clientIp(request) + ":" + rule.path();
+        String key = ClientIpResolver.resolve(request) + ":" + rule.path();
         Window window = windows.computeIfAbsent(key, k -> new Window());
 
         long now = System.currentTimeMillis();
@@ -101,11 +101,4 @@ public class RateLimitFilter extends OncePerRequestFilter implements Ordered {
         windows.entrySet().removeIf(e -> e.getValue().windowStart < staleCutoff);
     }
 
-    private String clientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
-        return request.getRemoteAddr();
-    }
 }

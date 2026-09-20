@@ -12,6 +12,7 @@ import com.family.expensemanager.expense.domain.entity.Transaction;
 import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.dto.TransactionReportFilter;
 import com.family.expensemanager.expense.dto.TransactionRequest;
+import com.family.expensemanager.expense.dto.TransactionResponse;
 
 import org.assertj.core.api.ThrowableAssert;
 import org.junit.jupiter.api.BeforeEach;
@@ -541,5 +542,36 @@ class TransactionServiceTest {
 
     private static Budget overallBudget(String limit) {
         return budget(null, limit);
+    }
+
+    @Test
+    void create_storesCreatorDisplayNameSnapshotOnTransaction() {
+        Transaction saved = createAndCaptureInsertedTransaction("Chủ hộ");
+
+        assertThat(saved.getCreatedByName()).isEqualTo("Chủ hộ");
+    }
+
+    @Test
+    void create_truncatesCreatorDisplayNameTo100Characters() {
+        Transaction saved = createAndCaptureInsertedTransaction("A".repeat(150));
+
+        assertThat(saved.getCreatedByName()).hasSize(100);
+    }
+
+    private Transaction createAndCaptureInsertedTransaction(String userDisplayName) {
+        Wallet wallet = new Wallet();
+        wallet.setId(5L);
+        Category category = new Category();
+        category.setId(7L);
+        when(walletService.requireOwnedByFamily(5L, 1L)).thenReturn(wallet);
+        when(categoryService.requireOwnedByFamily(7L, 1L)).thenReturn(category);
+
+        TransactionResponse response = transactionService.create(1L, CREATOR_ID, "user@b.com", userDisplayName,
+                new TransactionRequest(5L, 7L, "INCOME", BigDecimal.TEN, LocalDateTime.of(2026, 1, 15, 10, 0), null));
+
+        ArgumentCaptor<Transaction> captor = ArgumentCaptor.forClass(Transaction.class);
+        verify(transactionDao).insert(captor.capture());
+        assertThat(response.createdByName()).isEqualTo(captor.getValue().getCreatedByName());
+        return captor.getValue();
     }
 }

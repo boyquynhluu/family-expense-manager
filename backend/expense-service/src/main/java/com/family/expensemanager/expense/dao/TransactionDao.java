@@ -31,12 +31,13 @@ public interface TransactionDao {
     @Select
     List<Transaction> selectByFamilyIdFiltered(
             Long familyId, Long walletId, Long categoryId, String type,
-            LocalDate fromDate, LocalDate toDate, int limit, int offset);
+            LocalDate fromDate, LocalDate toDate, String notePattern, BigDecimal minAmount, BigDecimal maxAmount,
+            int limit, int offset);
 
     @Select
     long countByFamilyIdFiltered(
             Long familyId, Long walletId, Long categoryId, String type,
-            LocalDate fromDate, LocalDate toDate);
+            LocalDate fromDate, LocalDate toDate, String notePattern, BigDecimal minAmount, BigDecimal maxAmount);
 
     @Select
     Optional<Transaction> selectById(Long id);

@@ -48,6 +48,9 @@ public class Transaction {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    @Column(name = "created_by_name")
+    private String createdByName;
+
     public Long getId() {
         return id;
     }
@@ -142,5 +145,13 @@ public class Transaction {
 
     public void setDeletedAt(LocalDateTime deletedAt) {
         this.deletedAt = deletedAt;
+    }
+
+    public String getCreatedByName() {
+        return createdByName;
+    }
+
+    public void setCreatedByName(String createdByName) {
+        this.createdByName = createdByName;
     }
 }

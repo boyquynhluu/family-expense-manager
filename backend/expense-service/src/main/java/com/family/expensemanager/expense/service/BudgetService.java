@@ -33,6 +33,7 @@ public class BudgetService {
     private final CategoryService categoryService;
 
     @Transactional
+    @PreAuthorize("hasRole('OWNER')")
     public BudgetResponse create(Long familyId, CreateBudgetRequest request) {
         log.info("create - start, familyId={}, categoryId={}", familyId, request.categoryId());
         validateTarget(familyId, request, null);
@@ -62,6 +63,7 @@ public class BudgetService {
     }
 
     @Transactional
+    @PreAuthorize("hasRole('OWNER')")
     public BudgetResponse update(Long budgetId, Long familyId, CreateBudgetRequest request) {
         log.info("update - start, budgetId={}, familyId={}", budgetId, familyId);
         Budget budget = requireOwnedByFamily(budgetId, familyId);
@@ -74,6 +76,7 @@ public class BudgetService {
     }
 
     @Transactional
+    @PreAuthorize("hasRole('OWNER')")
     public CopyBudgetsResponse copy(Long familyId, CopyBudgetsRequest request) {
         log.info("copy - start, familyId={}, fromMonth={}, toMonth={}", familyId, request.fromMonth(),
                 request.toMonth());

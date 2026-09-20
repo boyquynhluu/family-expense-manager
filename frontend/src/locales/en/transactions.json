@@ -15,6 +15,7 @@
   "timeLabel": "Time",
   "noteLabel": "Note",
   "creatorLabel": "Created by",
+  "formerMember": "Former member",
   "notePlaceholder": "Optional",
   "submitAdd": "Add transaction",
   "submitUpdate": "Update",

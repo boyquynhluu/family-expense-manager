@@ -218,8 +218,8 @@ export default function Transactions() {
     return categories.find((c) => c.id === id)?.name ?? `#${id}`;
   }
 
-  function memberName(id) {
-    return members.find((m) => m.id === id)?.displayName ?? `#${id}`;
+  function memberName(row) {
+    return members.find((m) => m.id === row.userId)?.displayName ?? row.createdByName ?? t("transactions:formerMember");
   }
 
   function canModify(row) {
@@ -561,7 +561,7 @@ export default function Transactions() {
                     {formatCurrency(row.amount)}
                   </td>
                   <td data-label={t("transactions:noteLabel")}>{row.note}</td>
-                  <td data-label={t("transactions:creatorLabel")}>{memberName(row.userId)}</td>
+                  <td data-label={t("transactions:creatorLabel")}>{memberName(row)}</td>
                   <td className="row-actions">
                     {row.hasReceipt && (
                       <button

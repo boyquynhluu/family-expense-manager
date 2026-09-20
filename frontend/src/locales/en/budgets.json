@@ -25,5 +25,6 @@
   "copyButton": "Copy",
   "copyResult": "Copied {{copied}} budget(s), skipped {{skipped}} that already existed",
   "copySameMonth": "Source and target months must be different",
-  "copyFailed": "Failed to copy budgets"
+  "copyFailed": "Failed to copy budgets",
+  "ownerOnlyManage": "Only the household owner can add, edit, delete or copy budgets."
 }

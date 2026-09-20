@@ -25,5 +25,6 @@
   "copyButton": "Sao chép",
   "copyResult": "Đã sao chép {{copied}} ngân sách, bỏ qua {{skipped}} ngân sách đã tồn tại",
   "copySameMonth": "Tháng nguồn và tháng đích phải khác nhau",
-  "copyFailed": "Sao chép ngân sách thất bại"
+  "copyFailed": "Sao chép ngân sách thất bại",
+  "ownerOnlyManage": "Chỉ chủ hộ mới được thêm/sửa/xoá/sao chép ngân sách."
 }

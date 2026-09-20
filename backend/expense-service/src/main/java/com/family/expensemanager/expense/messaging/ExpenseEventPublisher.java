@@ -25,7 +25,8 @@ public class ExpenseEventPublisher {
         this.topic = topic;
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    // fallbackExecution: recurring-rule events are published from the scheduler, outside any transaction.
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onExpenseEvent(ExpenseEvent event) {
         kafkaTemplate.send(topic, String.valueOf(event.familyId()), event);
     }

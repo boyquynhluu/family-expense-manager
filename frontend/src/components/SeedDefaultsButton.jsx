@@ -2,6 +2,7 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
+import { useAuth } from "../hooks/useAuth";
 
 /**
  * Onboarding shortcut for empty states: asks the backend to create a default wallet and
@@ -9,6 +10,7 @@ import client from "../api/client";
  */
 export default function SeedDefaultsButton({ onDone }) {
   const { t } = useTranslation("common");
+  const { role } = useAuth();
   const [loading, setLoading] = useState(false);
 
   async function handleClick() {
@@ -25,6 +27,10 @@ export default function SeedDefaultsButton({ onDone }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (role !== "OWNER") {
+    return <p className="page-header-subtitle">{t("seedDefaultsOwnerOnly")}</p>;
   }
 
   return (

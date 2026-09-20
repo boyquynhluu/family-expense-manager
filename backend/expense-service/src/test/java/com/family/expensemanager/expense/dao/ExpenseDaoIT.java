@@ -127,6 +127,7 @@ class ExpenseDaoIT {
         transaction.setNote("IT test transaction");
         transaction.setReceiptPath("100/1-receipt.jpg");
         transaction.setReceiptContentType("image/jpeg");
+        transaction.setCreatedByName("Người Tạo IT");
         transactionDao.insert(transaction);
 
         assertThat(transaction.getId()).isNotNull();
@@ -134,6 +135,7 @@ class ExpenseDaoIT {
         Transaction loaded = transactionDao.selectById(transaction.getId()).orElseThrow();
         assertThat(loaded.getAmount()).isEqualByComparingTo("125000.00");
         assertThat(loaded.getReceiptPath()).isEqualTo("100/1-receipt.jpg");
+        assertThat(loaded.getCreatedByName()).isEqualTo("Người Tạo IT");
         assertThat(loaded.getDeletedAt()).isNull();
         assertThat(transactionDao.countByWalletId(wallet.getId())).isEqualTo(1);
 

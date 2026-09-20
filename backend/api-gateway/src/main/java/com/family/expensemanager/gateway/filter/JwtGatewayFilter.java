@@ -38,6 +38,7 @@ public class JwtGatewayFilter extends OncePerRequestFilter implements Ordered {
             "/api/auth/login",
             "/api/auth/refresh",
             "/api/auth/verify",
+            "/api/auth/verify-email-change",
             "/api/auth/forgot-password",
             "/api/auth/reset-password",
             // Only a short-lived 2FA challenge token is presented here, never a JWT —

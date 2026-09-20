@@ -34,6 +34,7 @@ public class CategoryService {
     private final RecurringTransactionDao recurringTransactionDao;
 
     @Transactional
+    @PreAuthorize("hasRole('OWNER')")
     public CategoryResponse create(Long familyId, CreateCategoryRequest request) {
         log.info("create - start, familyId={}, name={}", familyId, request.name());
         Category category = new Category();
@@ -52,6 +53,7 @@ public class CategoryService {
     }
 
     @Transactional
+    @PreAuthorize("hasRole('OWNER')")
     public CategoryResponse update(Long categoryId, Long familyId, CreateCategoryRequest request) {
         log.info("update - start, categoryId={}, familyId={}", categoryId, familyId);
         Category category = requireOwnedByFamily(categoryId, familyId);

@@ -5,6 +5,7 @@ import com.family.expensemanager.expense.dao.WalletDao;
 import com.family.expensemanager.expense.domain.entity.Category;
 import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.dto.SeedDefaultsResponse;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +47,7 @@ public class OnboardingService {
 
     /** Each half is independent and a no-op once the family already has that kind of data, so re-calling is safe. */
     @Transactional
+    @PreAuthorize("hasRole('OWNER')")
     public SeedDefaultsResponse seedDefaults(Long familyId) {
         log.info("seedDefaults - start, familyId={}", familyId);
         int categoriesCreated = 0;

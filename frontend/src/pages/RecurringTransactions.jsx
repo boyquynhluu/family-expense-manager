@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { EditIcon, TrashIcon } from "../components/AppIcons";
 import Pagination from "../components/Pagination";
+import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
 import { formatCurrency } from "../utils/format";
@@ -20,6 +21,8 @@ const emptyForm = {
 
 export default function RecurringTransactions() {
   const { t } = useTranslation(["common", "recurringTransactions"]);
+  const { role, userId } = useAuth();
+  const isOwner = role === "OWNER";
   const { pageData, setPage, reload } = usePagedList("/expenses/recurring-transactions");
   const rules = pageData.content;
   const [wallets, setWallets] = useState([]);
@@ -107,6 +110,10 @@ export default function RecurringTransactions() {
     } catch (err) {
       setError(err.response?.data?.message || t("recurringTransactions:toggleFailed"));
     }
+  }
+
+  function canModify(rule) {
+    return isOwner || String(rule.createdByUserId) === String(userId);
   }
 
   function walletName(id) {
@@ -289,25 +296,29 @@ export default function RecurringTransactions() {
                     </span>
                   </td>
                   <td className="row-actions">
-                    <button type="button" className="btn-secondary" onClick={() => toggleActive(r)}>
-                      {r.active ? t("recurringTransactions:pauseButton") : t("recurringTransactions:activateButton")}
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      onClick={() => startEdit(r)}
-                      aria-label={t("common:edit")}
-                    >
-                      <EditIcon />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn icon-btn-danger"
-                      onClick={() => handleDelete(r.id)}
-                      aria-label={t("common:delete")}
-                    >
-                      <TrashIcon />
-                    </button>
+                    {canModify(r) && (
+                      <>
+                        <button type="button" className="btn-secondary" onClick={() => toggleActive(r)}>
+                          {r.active ? t("recurringTransactions:pauseButton") : t("recurringTransactions:activateButton")}
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          onClick={() => startEdit(r)}
+                          aria-label={t("common:edit")}
+                        >
+                          <EditIcon />
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn icon-btn-danger"
+                          onClick={() => handleDelete(r.id)}
+                          aria-label={t("common:delete")}
+                        >
+                          <TrashIcon />
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}

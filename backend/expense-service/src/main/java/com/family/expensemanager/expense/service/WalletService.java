@@ -37,6 +37,7 @@ public class WalletService {
     private final WalletTransferDao walletTransferDao;
 
     @Transactional
+    @PreAuthorize("hasRole('OWNER')")
     public WalletResponse create(Long familyId, CreateWalletRequest request) {
         log.info("create - start, familyId={}, name={}", familyId, request.name());
         requireConsistentCurrency(familyId, request.currency(), null);
@@ -57,6 +58,7 @@ public class WalletService {
     }
 
     @Transactional
+    @PreAuthorize("hasRole('OWNER')")
     public WalletResponse update(Long walletId, Long familyId, CreateWalletRequest request) {
         log.info("update - start, walletId={}, familyId={}", walletId, familyId);
         Wallet wallet = requireOwnedByFamily(walletId, familyId);

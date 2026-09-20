@@ -43,5 +43,6 @@
   "colNote": "Ghi chú",
   "transferDeleteConfirm": "Xoá giao dịch chuyển tiền này? Số dư của hai ví sẽ được hoàn lại như trước khi chuyển.",
   "transferDeleted": "Đã xoá giao dịch chuyển tiền",
-  "transferDeleteFailed": "Xoá giao dịch chuyển tiền thất bại"
+  "transferDeleteFailed": "Xoá giao dịch chuyển tiền thất bại",
+  "ownerOnlyManage": "Chỉ chủ hộ mới được thêm/sửa/xoá ví."
 }

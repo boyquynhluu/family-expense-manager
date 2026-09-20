@@ -11,6 +11,7 @@ import com.family.expensemanager.expense.domain.entity.Budget;
 import com.family.expensemanager.expense.domain.entity.Category;
 import com.family.expensemanager.expense.domain.entity.Transaction;
 import com.family.expensemanager.expense.domain.entity.Wallet;
+import com.family.expensemanager.expense.dto.BulkDeleteResult;
 import com.family.expensemanager.expense.dto.ReceiptFile;
 import com.family.expensemanager.expense.dto.TransactionReportFilter;
 import com.family.expensemanager.expense.dto.TransactionRequest;
@@ -28,6 +29,7 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -43,6 +45,8 @@ public class TransactionService {
 
     private static final String TYPE_EXPENSE = "EXPENSE";
     private static final int MAX_PAGE_SIZE = 100;
+    private static final int MAX_BULK_DELETE = 100;
+    private static final int MAX_CREATOR_NAME_LENGTH = 100;
     private static final Set<String> ALLOWED_RECEIPT_CONTENT_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
 
     private final TransactionDao transactionDao;
@@ -65,6 +69,7 @@ public class TransactionService {
         transaction.setCategoryId(category.getId());
         transaction.setFamilyId(familyId);
         transaction.setUserId(userId);
+        transaction.setCreatedByName(truncateName(userDisplayName));
         transaction.setType(request.type());
         transaction.setAmount(request.amount());
         transaction.setOccurredAt(request.occurredAt());
@@ -104,11 +109,14 @@ public class TransactionService {
         if (size < 1 || size > MAX_PAGE_SIZE) {
             throw new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE);
         }
+        filter.validate();
+        String notePattern = filter.noteLikePattern();
         long totalElements = transactionDao.countByFamilyIdFiltered(
-                familyId, filter.walletId(), filter.categoryId(), filter.type(), filter.fromDate(), filter.toDate());
+                familyId, filter.walletId(), filter.categoryId(), filter.type(), filter.fromDate(), filter.toDate(),
+                notePattern, filter.minAmount(), filter.maxAmount());
         List<TransactionResponse> content = transactionDao.selectByFamilyIdFiltered(
                         familyId, filter.walletId(), filter.categoryId(), filter.type(), filter.fromDate(),
-                        filter.toDate(), size, page * size)
+                        filter.toDate(), notePattern, filter.minAmount(), filter.maxAmount(), size, page * size)
                 .stream().map(TransactionResponse::from).toList();
         return PageResponse.of(content, page, size, totalElements);
     }
@@ -159,6 +167,31 @@ public class TransactionService {
         transaction.setDeletedAt(LocalDateTime.now());
         transactionDao.update(transaction);
         evictCaches(familyId, periodMonthOf(transaction.getOccurredAt()));
+    }
+
+    @Transactional
+    public BulkDeleteResult bulkDelete(Long familyId, List<Long> ids, Long callerUserId, boolean callerIsOwner) {
+        log.info("bulkDelete - start, familyId={}, count={}", familyId, ids.size());
+        if (ids.size() > MAX_BULK_DELETE) {
+            throw new BadRequestException("Chỉ được xoá tối đa " + MAX_BULK_DELETE + " giao dịch mỗi lần");
+        }
+        int deleted = 0;
+        int skipped = 0;
+        int forbidden = 0;
+        for (Long id : new LinkedHashSet<>(ids)) {
+            try {
+                delete(familyId, id, callerUserId, callerIsOwner);
+                deleted++;
+            } catch (NotFoundException e) {
+                skipped++;
+            } catch (ApiException e) {
+                if (e.getStatus() != HttpStatus.FORBIDDEN) {
+                    throw e;
+                }
+                forbidden++;
+            }
+        }
+        return new BulkDeleteResult(deleted, skipped, forbidden);
     }
 
     public PageResponse<TransactionResponse> listDeletedPaged(Long familyId, int page, int size) {
@@ -288,6 +321,11 @@ public class TransactionService {
         eventPublisher.publishEvent(new ExpenseEvent(
                 eventType, familyId, userId, transaction.getId(), categoryId, transaction.getAmount(), periodMonth,
                 limit, totalAfter, categoryName, userEmail, userDisplayName, Instant.now()));
+    }
+
+    private String truncateName(String name) {
+        return name != null && name.length() > MAX_CREATOR_NAME_LENGTH
+                ? name.substring(0, MAX_CREATOR_NAME_LENGTH) : name;
     }
 
     private void requireCanModify(Transaction transaction, Long callerUserId, boolean callerIsOwner) {

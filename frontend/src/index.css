@@ -1597,3 +1597,43 @@ select:focus {
     border-top: 1px solid #f1f2f5;
   }
 }
+
+.notification-list li .icon-btn {
+  flex-shrink: 0;
+}
+
+.notification-preferences-list {
+  list-style: none;
+  margin: 1rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.notification-preferences-list li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+}
+
+.notification-preferences-label {
+  flex: 1 1 14rem;
+  font-size: 0.92rem;
+}
+
+.notification-preferences-list label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.88rem;
+  color: #4b5563;
+  cursor: pointer;
+}
+
+.notification-preferences-list input[type="checkbox"] {
+  accent-color: #4f46e5;
+  width: 15px;
+  height: 15px;
+}

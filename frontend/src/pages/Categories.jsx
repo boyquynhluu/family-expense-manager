@@ -77,45 +77,51 @@ export default function Categories() {
         </div>
       </div>
 
-      <div className="section-card">
-        <h2>{editingId ? t("categories:editTitle") : t("categories:addTitle")}</h2>
-        <form className="inline-form" onSubmit={handleSubmit}>
-          <label className="field">
-            <span>
-              {t("categories:nameLabel")}
-              <span className="required-mark" aria-hidden="true"> *</span>
-            </span>
-            <input
-              placeholder={t("categories:namePlaceholder")}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-          </label>
-          <label className="field">
-            {t("categories:typeLabel")}
-            <select value={type} onChange={(e) => setType(e.target.value)}>
-              <option value="EXPENSE">{t("categories:typeExpense")}</option>
-              <option value="INCOME">{t("categories:typeIncome")}</option>
-            </select>
-          </label>
-          <label className="field">
-            {t("categories:iconLabel")}
-            <input placeholder={t("categories:iconPlaceholder")} value={icon} onChange={(e) => setIcon(e.target.value)} />
-          </label>
-          <label className="field">
-            {t("categories:colorLabel")}
-            <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
-          </label>
-          <button type="submit">{editingId ? t("categories:submitUpdate") : t("categories:submitAdd")}</button>
-          {editingId && (
-            <button type="button" className="btn-secondary" onClick={cancelEdit}>
-              {t("common:cancel")}
-            </button>
-          )}
-        </form>
-        {error && <p className="error-text">{error}</p>}
-      </div>
+      {isOwner ? (
+        <div className="section-card">
+          <h2>{editingId ? t("categories:editTitle") : t("categories:addTitle")}</h2>
+          <form className="inline-form" onSubmit={handleSubmit}>
+            <label className="field">
+              <span>
+                {t("categories:nameLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
+              <input
+                placeholder={t("categories:namePlaceholder")}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </label>
+            <label className="field">
+              {t("categories:typeLabel")}
+              <select value={type} onChange={(e) => setType(e.target.value)}>
+                <option value="EXPENSE">{t("categories:typeExpense")}</option>
+                <option value="INCOME">{t("categories:typeIncome")}</option>
+              </select>
+            </label>
+            <label className="field">
+              {t("categories:iconLabel")}
+              <input placeholder={t("categories:iconPlaceholder")} value={icon} onChange={(e) => setIcon(e.target.value)} />
+            </label>
+            <label className="field">
+              {t("categories:colorLabel")}
+              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
+            </label>
+            <button type="submit">{editingId ? t("categories:submitUpdate") : t("categories:submitAdd")}</button>
+            {editingId && (
+              <button type="button" className="btn-secondary" onClick={cancelEdit}>
+                {t("common:cancel")}
+              </button>
+            )}
+          </form>
+          {error && <p className="error-text">{error}</p>}
+        </div>
+      ) : (
+        <div className="section-card">
+          <p className="page-header-subtitle">{t("categories:ownerOnlyManage")}</p>
+        </div>
+      )}
 
       <div className="section-card">
         <h2>{t("categories:listTitle")}</h2>
@@ -138,11 +144,11 @@ export default function Categories() {
                     {c.type === "EXPENSE" ? t("categories:typeExpense") : t("categories:typeIncome")}
                   </span>
                 </div>
-                <div className="row-actions">
-                  <button type="button" className="icon-btn" onClick={() => startEdit(c)} aria-label={t("common:edit")}>
-                    <EditIcon />
-                  </button>
-                  {isOwner && (
+                {isOwner && (
+                  <div className="row-actions">
+                    <button type="button" className="icon-btn" onClick={() => startEdit(c)} aria-label={t("common:edit")}>
+                      <EditIcon />
+                    </button>
                     <button
                       type="button"
                       className="icon-btn icon-btn-danger"
@@ -151,8 +157,8 @@ export default function Categories() {
                     >
                       <TrashIcon />
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

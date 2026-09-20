@@ -9,10 +9,14 @@ public record RecurringTransactionResponse(
         Long id,
         Long walletId,
         Long categoryId,
+        Long createdByUserId,
         String type,
         BigDecimal amount,
         String note,
+        String frequency,
         Integer dayOfMonth,
+        Integer dayOfWeek,
+        Integer monthOfYear,
         LocalDate startDate,
         LocalDate endDate,
         LocalDate nextRunDate,
@@ -21,8 +25,9 @@ public record RecurringTransactionResponse(
 
     public static RecurringTransactionResponse from(RecurringTransaction r) {
         return new RecurringTransactionResponse(
-                r.getId(), r.getWalletId(), r.getCategoryId(), r.getType(), r.getAmount(), r.getNote(),
-                r.getDayOfMonth(), r.getStartDate(), r.getEndDate(), r.getNextRunDate(), r.getLastRunDate(),
+                r.getId(), r.getWalletId(), r.getCategoryId(), r.getCreatedByUserId(), r.getType(), r.getAmount(), r.getNote(),
+                r.getFrequency(), r.getDayOfMonth(), r.getDayOfWeek(), r.getMonthOfYear(),
+                r.getStartDate(), r.getEndDate(), r.getNextRunDate(), r.getLastRunDate(),
                 r.getActive());
     }
 }

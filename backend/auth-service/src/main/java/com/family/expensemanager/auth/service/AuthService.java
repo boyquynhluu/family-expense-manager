@@ -59,6 +59,7 @@ import com.family.expensemanager.auth.security.TotpService;
 import com.family.expensemanager.auth.security.TwoFactorChallengeStore;
 import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.event.FamilyInviteEvent;
+import com.family.expensemanager.common.event.FamilyMemberEvent;
 import com.family.expensemanager.common.event.PasswordResetEvent;
 import com.family.expensemanager.common.event.UserVerificationEvent;
 import com.family.expensemanager.common.exception.BadRequestException;
@@ -466,6 +467,12 @@ public class AuthService {
             target.setRole(fallback.getRole());
             userDao.update(target);
         }
+        publishMemberEvent(FamilyMemberEvent.MEMBER_REMOVED, familyId, targetUserId, target.getDisplayName());
+    }
+
+    private void publishMemberEvent(String eventType, Long familyId, Long memberUserId, String memberDisplayName) {
+        eventPublisher.publishEvent(new FamilyMemberEvent(
+                eventType, familyId, memberUserId, memberDisplayName, Instant.now()));
     }
 
     @PreAuthorize("hasRole('OWNER')")
@@ -512,6 +519,7 @@ public class AuthService {
             user.setRole(ROLE_OWNER);
         }
         userDao.update(user);
+        publishMemberEvent(FamilyMemberEvent.MEMBER_LEFT, familyId, userId, user.getDisplayName());
 
         logout(userId, currentSessionId);
         return issueTokens(user, deviceInfo, ipAddress);
@@ -666,6 +674,8 @@ public class AuthService {
             addMembership(existingUser.getId(), invite.getFamilyId(), ROLE_MEMBER);
             invite.setAcceptedAt(LocalDateTime.now());
             familyInviteDao.update(invite);
+            publishMemberEvent(FamilyMemberEvent.MEMBER_JOINED, invite.getFamilyId(), existingUser.getId(),
+                    existingUser.getDisplayName());
             return;
         }
 
@@ -690,6 +700,7 @@ public class AuthService {
 
         invite.setAcceptedAt(LocalDateTime.now());
         familyInviteDao.update(invite);
+        publishMemberEvent(FamilyMemberEvent.MEMBER_JOINED, invite.getFamilyId(), user.getId(), user.getDisplayName());
     }
 
     private FamilyInvite requireValidInvite(String token) {

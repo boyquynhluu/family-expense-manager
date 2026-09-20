@@ -11,8 +11,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -97,5 +99,19 @@ class OnboardingServiceTest {
         assertThat(result.categoriesCreated()).isEqualTo(11);
         assertThat(result.walletsCreated()).isZero();
         verify(walletDao, never()).insert(any());
+    }
+
+    @Test
+    void mutatingMethods_requireOwnerRole() {
+        for (String name : List.of("seedDefaults")) {
+            var methods = Arrays.stream(OnboardingService.class.getDeclaredMethods())
+                    .filter(m -> m.getName().equals(name)).toList();
+            assertThat(methods).as(name).isNotEmpty();
+            assertThat(methods).as(name).allSatisfy(m -> {
+                PreAuthorize annotation = m.getAnnotation(PreAuthorize.class);
+                assertThat(annotation).isNotNull();
+                assertThat(annotation.value()).isEqualTo("hasRole('OWNER')");
+            });
+        }
     }
 }

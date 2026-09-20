@@ -1,5 +1,6 @@
 package com.family.expensemanager.expense.controller;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import org.springframework.http.HttpHeaders;
@@ -20,6 +21,8 @@ import com.family.expensemanager.common.dto.ApiResponse;
 import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.report.ReportFormat;
 import com.family.expensemanager.common.security.CurrentUser;
+import com.family.expensemanager.expense.dto.BulkDeleteRequest;
+import com.family.expensemanager.expense.dto.BulkDeleteResult;
 import com.family.expensemanager.expense.dto.ImportResult;
 import com.family.expensemanager.expense.dto.ReceiptFile;
 import com.family.expensemanager.expense.dto.TransactionReportFilter;
@@ -58,10 +61,14 @@ public class TransactionController {
             @RequestParam(required = false) String type,
             @RequestParam(required = false) LocalDate fromDate,
             @RequestParam(required = false) LocalDate toDate,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) BigDecimal minAmount,
+            @RequestParam(required = false) BigDecimal maxAmount,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         log.info("list - start, page={}, size={}", page, size);
-        TransactionReportFilter filter = new TransactionReportFilter(walletId, categoryId, type, fromDate, toDate);
+        TransactionReportFilter filter = new TransactionReportFilter(
+                walletId, categoryId, type, fromDate, toDate, q, minAmount, maxAmount);
         return ApiResponse.ok(transactionService.listByFamilyPaged(CurrentUser.familyId(), filter, page, size));
     }
 
@@ -83,6 +90,13 @@ public class TransactionController {
         log.info("delete - start, id={}", id);
         transactionService.delete(CurrentUser.familyId(), id, CurrentUser.userId(), isOwner());
         return ApiResponse.ok();
+    }
+
+    @PostMapping("/bulk-delete")
+    public ApiResponse<BulkDeleteResult> bulkDelete(@Valid @RequestBody BulkDeleteRequest request) {
+        log.info("bulkDelete - start, count={}", request.ids().size());
+        return ApiResponse.ok(transactionService.bulkDelete(
+                CurrentUser.familyId(), request.ids(), CurrentUser.userId(), isOwner()));
     }
 
     @GetMapping("/trash")
@@ -141,9 +155,13 @@ public class TransactionController {
             @RequestParam(required = false) String type,
             @RequestParam(required = false) LocalDate fromDate,
             @RequestParam(required = false) LocalDate toDate,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) BigDecimal minAmount,
+            @RequestParam(required = false) BigDecimal maxAmount,
             @RequestParam(defaultValue = "CSV") ReportFormat format) {
         log.info("export - start, format={}", format);
-        TransactionReportFilter filter = new TransactionReportFilter(walletId, categoryId, type, fromDate, toDate);
+        TransactionReportFilter filter = new TransactionReportFilter(
+                walletId, categoryId, type, fromDate, toDate, q, minAmount, maxAmount);
         byte[] content = transactionReportService.export(CurrentUser.familyId(), filter, format);
 
         boolean excel = format == ReportFormat.EXCEL;
