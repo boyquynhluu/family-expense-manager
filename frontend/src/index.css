@@ -260,11 +260,11 @@ select:focus {
 
 /* Auth inputs have no <label>, only a placeholder, so mark required ones with a red
    asterisk between the input and the show/hide-password toggle. */
-.auth-input-group:has(input:required) input {
+.auth-input-group:not(.no-required-mark):has(input:required) input {
   order: 1;
 }
 
-.auth-input-group:has(input:required)::after {
+.auth-input-group:not(.no-required-mark):has(input:required)::after {
   content: "*";
   order: 2;
   color: #b91c1c;
@@ -273,7 +273,7 @@ select:focus {
   line-height: 1;
 }
 
-.auth-input-group:has(input:required) .auth-input-toggle {
+.auth-input-group:not(.no-required-mark):has(input:required) .auth-input-toggle {
   order: 3;
 }
 

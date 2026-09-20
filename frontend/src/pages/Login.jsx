@@ -82,7 +82,7 @@ export default function Login() {
 
             {error && <p className="error-text">{error}</p>}
 
-            <div className="auth-input-group">
+            <div className="auth-input-group no-required-mark">
               <span className="auth-input-icon">
                 <KeyIcon />
               </span>
@@ -123,7 +123,7 @@ export default function Login() {
 
           {error && <p className="error-text">{error}</p>}
 
-          <div className="auth-input-group">
+          <div className="auth-input-group no-required-mark">
             <span className="auth-input-icon">
               <MailIcon />
             </span>
@@ -137,7 +137,7 @@ export default function Login() {
             />
           </div>
 
-          <div className="auth-input-group">
+          <div className="auth-input-group no-required-mark">
             <span className="auth-input-icon">
               <KeyIcon />
             </span>
