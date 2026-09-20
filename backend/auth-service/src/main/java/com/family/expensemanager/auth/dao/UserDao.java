@@ -33,6 +33,9 @@ public interface UserDao {
     Optional<User> selectById(Long id);
 
     @Select
+    List<User> selectAllWithTotpSecret();
+
+    @Select
     Optional<User> selectByVerificationToken(String verificationToken);
 
     @Select
