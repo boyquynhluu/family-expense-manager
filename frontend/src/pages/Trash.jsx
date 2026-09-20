@@ -2,7 +2,7 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import Pagination from "../components/Pagination";
-import { formatCurrency } from "../utils/format";
+import { formatCurrency, formatServerDateTime } from "../utils/format";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
 
@@ -34,7 +34,7 @@ export default function Trash() {
 
   function formatDateTime(value) {
     if (!value) return "-";
-    return new Date(value).toLocaleString("vi-VN");
+    return formatServerDateTime(value);
   }
 
   return (

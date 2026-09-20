@@ -8,6 +8,7 @@ import { EyeIcon, EyeOffIcon } from "../components/AuthIcons";
 import Pagination from "../components/Pagination";
 import { usePagedList } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
+import { formatServerDateTime } from "../utils/format";
 
 // The stored value is always this fixed Vietnamese word regardless of UI language —
 // only the displayed label is translated (see relationshipLabelFor below) — otherwise
@@ -150,7 +151,7 @@ export default function Profile() {
 
   function formatDateTime(value) {
     if (!value) return t("notAvailable");
-    return new Date(value).toLocaleString("vi-VN");
+    return formatServerDateTime(value);
   }
 
   async function handleRemoveMember(member) {
