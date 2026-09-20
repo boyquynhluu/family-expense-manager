@@ -50,6 +50,37 @@ class TotpSecretCipherTest {
     }
 
     @Test
+    void decrypt_fallsBackToPreviousKey_afterRotation() {
+        String newKey = Base64.getEncoder().encodeToString(new byte[32]);
+        String encryptedWithOldKey = cipher.encrypt("JBSWY3DPEHPK3PXP");
+        TotpSecretCipher rotated = new TotpSecretCipher(newKey, KEY);
+
+        assertThat(rotated.decrypt(encryptedWithOldKey)).isEqualTo("JBSWY3DPEHPK3PXP");
+        assertThat(new TotpSecretCipher(newKey).isEncrypted(encryptedWithOldKey)).isTrue();
+        assertThatThrownBy(() -> new TotpSecretCipher(newKey).decrypt(encryptedWithOldKey))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void reencryptIfNeeded_movesOldKeyAndPlaintextToCurrentKey_andLeavesCurrentAlone() {
+        String newKey = Base64.getEncoder().encodeToString(new byte[32]);
+        TotpSecretCipher rotated = new TotpSecretCipher(newKey, KEY);
+        String encryptedWithOldKey = cipher.encrypt("JBSWY3DPEHPK3PXP");
+
+        String moved = rotated.reencryptIfNeeded(encryptedWithOldKey);
+        assertThat(moved).isNotNull().isNotEqualTo(encryptedWithOldKey);
+        assertThat(new TotpSecretCipher(newKey).decrypt(moved)).isEqualTo("JBSWY3DPEHPK3PXP");
+
+        assertThat(rotated.reencryptIfNeeded(moved)).isNull();
+
+        String fromPlaintext = rotated.reencryptIfNeeded("JBSWY3DPEHPK3PXP");
+        assertThat(fromPlaintext).startsWith("enc:v1:");
+        assertThat(rotated.decrypt(fromPlaintext)).isEqualTo("JBSWY3DPEHPK3PXP");
+
+        assertThat(rotated.reencryptIfNeeded(null)).isNull();
+    }
+
+    @Test
     void constructor_rejectsKeyThatIsNot32Bytes() {
         String shortKey = Base64.getEncoder().encodeToString(new byte[16]);
 
