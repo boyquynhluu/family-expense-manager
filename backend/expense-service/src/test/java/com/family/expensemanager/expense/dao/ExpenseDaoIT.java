@@ -141,7 +141,8 @@ class ExpenseDaoIT {
         transactionDao.update(transaction);
         assertThat(transactionDao.selectById(transaction.getId())).isEmpty();
         assertThat(transactionDao.countByWalletId(wallet.getId())).isEqualTo(0);
-        assertThat(transactionDao.selectDeletedByFamilyId(familyId))
+        assertThat(transactionDao.countDeletedByFamilyId(familyId)).isGreaterThanOrEqualTo(1);
+        assertThat(transactionDao.selectDeletedByFamilyIdPaged(familyId, 100, 0))
                 .extracting(Transaction::getId)
                 .contains(transaction.getId());
 

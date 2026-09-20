@@ -44,8 +44,5 @@
   "emptyState": "Chưa có giao dịch nào",
   "viewReceiptAria": "Xem hoá đơn",
   "deleteReceiptAria": "Xoá ảnh hoá đơn",
-  "attachReceiptAria": "Đính kèm hoá đơn",
-  "paginationInfo": "{{total}} giao dịch — Trang {{page}}/{{totalPages}}",
-  "prevPage": "Trước",
-  "nextPage": "Sau"
+  "attachReceiptAria": "Đính kèm hoá đơn"
 }

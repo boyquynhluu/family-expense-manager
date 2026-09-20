@@ -20,3 +20,4 @@ FROM
     USERS
 ORDER BY
     id
+LIMIT /* limit */20 OFFSET /* offset */0

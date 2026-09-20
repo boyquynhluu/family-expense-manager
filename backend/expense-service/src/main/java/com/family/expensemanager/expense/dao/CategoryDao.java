@@ -32,7 +32,10 @@ public interface CategoryDao {
     Optional<Category> selectById(Long id);
 
     @Select
-    List<Category> selectDeletedByFamilyId(Long familyId);
+    long countDeletedByFamilyId(Long familyId);
+
+    @Select
+    List<Category> selectDeletedByFamilyIdPaged(Long familyId, int limit, int offset);
 
     @Update(sqlFile = true)
     int restore(Long id, Long familyId);

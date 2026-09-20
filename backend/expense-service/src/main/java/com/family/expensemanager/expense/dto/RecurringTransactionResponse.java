@@ -16,11 +16,13 @@ public record RecurringTransactionResponse(
         LocalDate startDate,
         LocalDate endDate,
         LocalDate nextRunDate,
+        LocalDate lastRunDate,
         Boolean active) {
 
     public static RecurringTransactionResponse from(RecurringTransaction r) {
         return new RecurringTransactionResponse(
                 r.getId(), r.getWalletId(), r.getCategoryId(), r.getType(), r.getAmount(), r.getNote(),
-                r.getDayOfMonth(), r.getStartDate(), r.getEndDate(), r.getNextRunDate(), r.getActive());
+                r.getDayOfMonth(), r.getStartDate(), r.getEndDate(), r.getNextRunDate(), r.getLastRunDate(),
+                r.getActive());
     }
 }

@@ -29,7 +29,10 @@ public interface WalletDao {
     Optional<Wallet> selectById(Long id);
 
     @Select
-    List<Wallet> selectDeletedByFamilyId(Long familyId);
+    long countDeletedByFamilyId(Long familyId);
+
+    @Select
+    List<Wallet> selectDeletedByFamilyIdPaged(Long familyId, int limit, int offset);
 
     @Update(sqlFile = true)
     int restore(Long id, Long familyId);

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { EditIcon, TrashIcon } from "../components/AppIcons";
+import { confirmDialog } from "../utils/confirm";
 import { useAuth } from "../hooks/useAuth";
 
 export default function Categories() {
@@ -56,7 +57,7 @@ export default function Categories() {
   }
 
   async function handleDelete(id) {
-    if (!window.confirm(t("categories:deleteConfirm"))) return;
+    if (!(await confirmDialog(t("categories:deleteConfirm")))) return;
     setError("");
     try {
       await client.delete(`/expenses/categories/${id}`);

@@ -18,5 +18,8 @@ public interface FamilyDao {
     Optional<Family> selectById(Long id);
 
     @Select
-    List<Family> selectAll();
+    long countAll();
+
+    @Select
+    List<Family> selectAllPaged(int limit, int offset);
 }

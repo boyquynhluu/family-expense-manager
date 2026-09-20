@@ -24,6 +24,13 @@ public interface RefreshTokenDao {
     @Select
     List<RefreshToken> selectActiveByUserId(Long userId);
 
+    @Select
+    long countActiveByUserId(Long userId);
+
+    /** One page of {@link #selectActiveByUserId}; ties broken by id so paging is stable. */
+    @Select
+    List<RefreshToken> selectActiveByUserIdPaged(Long userId, int limit, int offset);
+
     @Update
     int update(RefreshToken refreshToken);
 

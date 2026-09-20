@@ -209,13 +209,33 @@ class TransactionServiceTest {
     }
 
     @Test
-    void listDeleted_returnsDeletedTransactions() {
-        when(transactionDao.selectDeletedByFamilyId(1L)).thenReturn(List.of(transaction(99L)));
+    void listDeletedPaged_returnsPageWithOffset() {
+        when(transactionDao.countDeletedByFamilyId(1L)).thenReturn(12L);
+        when(transactionDao.selectDeletedByFamilyIdPaged(1L, 5, 10))
+                .thenReturn(List.of(transaction(98L), transaction(99L)));
 
-        var result = transactionService.listDeleted(1L);
+        var result = transactionService.listDeletedPaged(1L, 2, 5);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).id()).isEqualTo(99L);
+        assertThat(result.content()).hasSize(2);
+        assertThat(result.content().get(1).id()).isEqualTo(99L);
+        assertThat(result.page()).isEqualTo(2);
+        assertThat(result.size()).isEqualTo(5);
+        assertThat(result.totalElements()).isEqualTo(12L);
+        assertThat(result.totalPages()).isEqualTo(3);
+    }
+
+    @Test
+    void listDeletedPaged_rejectsNegativePage() {
+        assertThatThrownBy(() -> transactionService.listDeletedPaged(1L, -1, 5))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void listDeletedPaged_rejectsOutOfRangeSize() {
+        assertThatThrownBy(() -> transactionService.listDeletedPaged(1L, 0, 0))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> transactionService.listDeletedPaged(1L, 0, 101))
+                .isInstanceOf(BadRequestException.class);
     }
 
     private static Transaction transaction(Long id) {

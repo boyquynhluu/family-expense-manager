@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { EditIcon, TrashIcon } from "../components/AppIcons";
+import Pagination from "../components/Pagination";
+import { usePagedList } from "../hooks/usePagedList";
+import { confirmDialog } from "../utils/confirm";
 import { formatCurrency } from "../utils/format";
 
 const emptyForm = {
@@ -17,19 +20,15 @@ const emptyForm = {
 
 export default function RecurringTransactions() {
   const { t } = useTranslation(["common", "recurringTransactions"]);
-  const [rules, setRules] = useState([]);
+  const { pageData, setPage, reload } = usePagedList("/expenses/recurring-transactions");
+  const rules = pageData.content;
   const [wallets, setWallets] = useState([]);
   const [categories, setCategories] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
 
-  function load() {
-    client.get("/expenses/recurring-transactions").then((res) => setRules(res.data.data));
-  }
-
   useEffect(() => {
-    load();
     client.get("/expenses/wallets").then((res) => {
       setWallets(res.data.data);
       setForm((f) => ({ ...f, walletId: f.walletId || String(res.data.data[0]?.id ?? "") }));
@@ -83,18 +82,18 @@ export default function RecurringTransactions() {
         await client.post("/expenses/recurring-transactions", payload);
       }
       cancelEdit();
-      load();
+      reload();
     } catch (err) {
       setError(err.response?.data?.message || t("recurringTransactions:saveFailed"));
     }
   }
 
   async function handleDelete(id) {
-    if (!window.confirm(t("recurringTransactions:deleteConfirm"))) return;
+    if (!(await confirmDialog(t("recurringTransactions:deleteConfirm")))) return;
     setError("");
     try {
       await client.delete(`/expenses/recurring-transactions/${id}`);
-      load();
+      reload();
     } catch (err) {
       setError(err.response?.data?.message || t("recurringTransactions:deleteFailed"));
     }
@@ -104,7 +103,7 @@ export default function RecurringTransactions() {
     setError("");
     try {
       await client.put(`/expenses/recurring-transactions/${rule.id}/active`, { active: !rule.active });
-      load();
+      reload();
     } catch (err) {
       setError(err.response?.data?.message || t("recurringTransactions:toggleFailed"));
     }
@@ -236,6 +235,7 @@ export default function RecurringTransactions() {
                 <th>{t("recurringTransactions:amountLabel")}</th>
                 <th>{t("recurringTransactions:dayOfMonthLabel")}</th>
                 <th>{t("recurringTransactions:nextRunLabel")}</th>
+                <th>{t("recurringTransactions:executionStatusLabel")}</th>
                 <th>{t("recurringTransactions:statusLabel")}</th>
                 <th></th>
               </tr>
@@ -261,6 +261,13 @@ export default function RecurringTransactions() {
                     {t("recurringTransactions:dayPrefix")} {r.dayOfMonth}
                   </td>
                   <td data-label={t("recurringTransactions:nextRunLabel")}>{r.active ? r.nextRunDate : "-"}</td>
+                  <td data-label={t("recurringTransactions:executionStatusLabel")}>
+                    <span className={`badge ${r.lastRunDate ? "badge-income" : "badge-neutral"}`}>
+                      {r.lastRunDate
+                        ? t("recurringTransactions:executionCompleted")
+                        : t("recurringTransactions:executionPending")}
+                    </span>
+                  </td>
                   <td data-label={t("recurringTransactions:statusLabel")}>
                     <span className={`badge ${r.active ? "badge-income" : "badge-expense"}`}>
                       {r.active ? t("recurringTransactions:statusActive") : t("recurringTransactions:statusPaused")}
@@ -292,6 +299,7 @@ export default function RecurringTransactions() {
             </tbody>
           </table>
         )}
+        <Pagination pageData={pageData} onPageChange={setPage} />
       </div>
     </div>
   );

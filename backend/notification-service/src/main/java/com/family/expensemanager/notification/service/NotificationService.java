@@ -1,5 +1,7 @@
 package com.family.expensemanager.notification.service;
 
+import com.family.expensemanager.common.dto.PageResponse;
+import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.notification.dao.NotificationDao;
 import com.family.expensemanager.notification.domain.entity.Notification;
@@ -17,11 +19,23 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j(topic = "NotificationService")
 public class NotificationService {
 
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final NotificationDao notificationDao;
 
-    public List<NotificationResponse> listByFamily(Long familyId) {
-        log.info("listByFamily - start, familyId={}", familyId);
-        return notificationDao.selectByFamilyId(familyId).stream().map(NotificationResponse::from).toList();
+    public PageResponse<NotificationResponse> listByFamilyPaged(Long familyId, int page, int size) {
+        log.info("listByFamilyPaged - start, familyId={}, page={}, size={}", familyId, page, size);
+        if (page < 0) {
+            throw new BadRequestException("page phải >= 0");
+        }
+        if (size < 1 || size > MAX_PAGE_SIZE) {
+            throw new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE);
+        }
+        long totalElements = notificationDao.countByFamilyId(familyId);
+        List<NotificationResponse> content = notificationDao.selectByFamilyIdPaged(familyId, size, page * size).stream()
+                .map(NotificationResponse::from)
+                .toList();
+        return PageResponse.of(content, page, size, totalElements);
     }
 
     public long countUnread(Long familyId) {

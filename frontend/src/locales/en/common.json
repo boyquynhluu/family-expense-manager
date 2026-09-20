@@ -7,10 +7,14 @@
   "edit": "Edit",
   "delete": "Delete",
   "confirm": "Confirm",
+  "confirmTitle": "Confirm action",
   "loading": "Loading...",
   "saving": "Saving...",
   "close": "Close",
   "back": "Back",
   "yes": "Yes",
-  "no": "No"
+  "no": "No",
+  "paginationInfo": "{{total}} items — Page {{page}}/{{totalPages}}",
+  "prevPage": "Previous",
+  "nextPage": "Next"
 }

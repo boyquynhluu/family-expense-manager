@@ -13,6 +13,7 @@ SELECT
     start_date,
     end_date,
     next_run_date,
+    last_run_date,
     active,
     created_at
 FROM
@@ -21,3 +22,4 @@ WHERE
     family_id = /* familyId */0
 ORDER BY
     id
+LIMIT /* limit */20 OFFSET /* offset */0

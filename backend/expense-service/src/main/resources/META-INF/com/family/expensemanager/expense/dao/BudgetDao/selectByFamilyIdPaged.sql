@@ -10,3 +10,4 @@ WHERE
     family_id = /* familyId */0
 ORDER BY
     period_month DESC, id
+LIMIT /* limit */20 OFFSET /* offset */0

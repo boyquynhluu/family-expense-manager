@@ -23,7 +23,10 @@ public interface BudgetDao {
     int delete(Budget budget);
 
     @Select
-    List<Budget> selectByFamilyId(Long familyId);
+    long countByFamilyId(Long familyId);
+
+    @Select
+    List<Budget> selectByFamilyIdPaged(Long familyId, int limit, int offset);
 
     @Select
     Optional<Budget> selectById(Long id);

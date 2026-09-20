@@ -44,8 +44,5 @@
   "emptyState": "No transactions yet",
   "viewReceiptAria": "View receipt",
   "deleteReceiptAria": "Delete receipt image",
-  "attachReceiptAria": "Attach receipt",
-  "paginationInfo": "{{total}} transactions — Page {{page}}/{{totalPages}}",
-  "prevPage": "Previous",
-  "nextPage": "Next"
+  "attachReceiptAria": "Attach receipt"
 }

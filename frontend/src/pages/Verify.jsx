@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
+import LanguageSwitcher from "../components/LanguageSwitcher";
 
 // Landed on from the verification link emailed after registration (see
 // notification-service UserVerificationEventListener). Calls the API to activate the
@@ -40,6 +41,7 @@ export default function Verify() {
 
   return (
     <div className="auth-page">
+      <LanguageSwitcher variant="floating" />
       <div className="auth-form">
         {status === "verifying" && <p className="verify-message">{t("verifying")}</p>}
         {status === "error" && (

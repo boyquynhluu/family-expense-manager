@@ -7,8 +7,6 @@
   "updateAdminFailed": "Cập nhật thất bại",
 
   "swalTitle": "Cập nhật quyền Admin?",
-  "swalConfirmButtonText": "Đồng ý",
-  "swalCancelButtonText": "Hủy",
 
   "title": "Quản trị hệ thống",
   "subtitle": "Xem toàn bộ gia đình và người dùng, cấp quyền admin",

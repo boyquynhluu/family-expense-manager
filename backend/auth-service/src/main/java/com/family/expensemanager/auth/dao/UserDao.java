@@ -42,7 +42,10 @@ public interface UserDao {
     Optional<User> selectByProviderAndProviderId(String provider, String providerId);
 
     @Select
-    List<User> selectAll();
+    long countAll();
+
+    @Select
+    List<User> selectAllPaged(int limit, int offset);
 
     @Select
     long countByFamilyId(Long familyId);

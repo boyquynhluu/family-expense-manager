@@ -7,8 +7,6 @@
   "updateAdminFailed": "Update failed",
 
   "swalTitle": "Update admin privileges?",
-  "swalConfirmButtonText": "Confirm",
-  "swalCancelButtonText": "Cancel",
 
   "title": "System administration",
   "subtitle": "View all families and users, and grant admin privileges",

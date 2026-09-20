@@ -6,15 +6,15 @@ import com.family.expensemanager.auth.dto.SetSystemAdminRequest;
 import com.family.expensemanager.auth.dto.UserAdminResponse;
 import com.family.expensemanager.auth.service.AdminService;
 import com.family.expensemanager.common.dto.ApiResponse;
+import com.family.expensemanager.common.dto.PageResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,15 +33,17 @@ public class AdminController {
     private final AdminService adminService;
 
     @GetMapping("/families")
-    public ApiResponse<List<FamilyAdminResponse>> families() {
-        log.info("families - start");
-        return ApiResponse.ok(adminService.listFamilies());
+    public ApiResponse<PageResponse<FamilyAdminResponse>> families(@RequestParam(defaultValue = "0") int page,
+                                                                   @RequestParam(defaultValue = "5") int size) {
+        log.info("families - start, page={}, size={}", page, size);
+        return ApiResponse.ok(adminService.listFamiliesPaged(page, size));
     }
 
     @GetMapping("/users")
-    public ApiResponse<List<UserAdminResponse>> users() {
-        log.info("users - start");
-        return ApiResponse.ok(adminService.listUsers());
+    public ApiResponse<PageResponse<UserAdminResponse>> users(@RequestParam(defaultValue = "0") int page,
+                                                              @RequestParam(defaultValue = "5") int size) {
+        log.info("users - start, page={}, size={}", page, size);
+        return ApiResponse.ok(adminService.listUsersPaged(page, size));
     }
 
     @PutMapping("/users/{id}/system-admin")

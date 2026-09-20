@@ -24,7 +24,10 @@ public interface RecurringTransactionDao {
     int delete(RecurringTransaction recurringTransaction);
 
     @Select
-    List<RecurringTransaction> selectByFamilyId(Long familyId);
+    long countByFamilyId(Long familyId);
+
+    @Select
+    List<RecurringTransaction> selectByFamilyIdPaged(Long familyId, int limit, int offset);
 
     @Select
     Optional<RecurringTransaction> selectById(Long id);

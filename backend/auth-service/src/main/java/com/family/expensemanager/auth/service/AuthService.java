@@ -54,6 +54,7 @@ import com.family.expensemanager.auth.dto.UpdateProfileRequest;
 import com.family.expensemanager.auth.dto.UserProfileResponse;
 import com.family.expensemanager.auth.security.TotpService;
 import com.family.expensemanager.auth.security.TwoFactorChallengeStore;
+import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.event.FamilyInviteEvent;
 import com.family.expensemanager.common.event.PasswordResetEvent;
 import com.family.expensemanager.common.event.UserVerificationEvent;
@@ -74,6 +75,7 @@ public class AuthService {
     private static final String ROLE_OWNER = "OWNER";
     private static final String ROLE_MEMBER = "MEMBER";
     private static final String PROVIDER_LOCAL = "LOCAL";
+    private static final int MAX_PAGE_SIZE = 100;
 
     private static final int RECOVERY_CODE_COUNT = 8;
 
@@ -399,14 +401,27 @@ public class AuthService {
     }
 
     /** The real member list for this family — unlike USERS.family_id, which only tracks each user's currently-active one. */
-    public List<UserProfileResponse> getFamilyMembers(Long familyId) {
-        log.info("getFamilyMembers - start, familyId={}", familyId);
-        return familyMembershipDao.selectByFamilyId(familyId).stream()
+    public PageResponse<UserProfileResponse> getFamilyMembersPaged(Long familyId, int page, int size) {
+        log.info("getFamilyMembersPaged - start, familyId={}, page={}, size={}", familyId, page, size);
+        validatePage(page, size);
+        long totalElements = familyMembershipDao.countByFamilyId(familyId);
+        // User lookup only runs for this page's memberships.
+        List<UserProfileResponse> content = familyMembershipDao.selectByFamilyIdPaged(familyId, size, page * size).stream()
                 .map(m -> userDao.selectById(m.getUserId())
                         .map(u -> UserProfileResponse.from(u, familyId, m.getRole()))
                         .orElse(null))
                 .filter(Objects::nonNull)
                 .toList();
+        return PageResponse.of(content, page, size, totalElements);
+    }
+
+    private static void validatePage(int page, int size) {
+        if (page < 0) {
+            throw new BadRequestException("page phải >= 0");
+        }
+        if (size < 1 || size > MAX_PAGE_SIZE) {
+            throw new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE);
+        }
     }
 
     @PreAuthorize("hasRole('OWNER')")
@@ -669,11 +684,14 @@ public class AuthService {
     }
 
     /** Every active login session for a user — backs the "phiên đăng nhập" list (README "8"). */
-    public List<SessionResponse> listSessions(Long userId, Long currentSessionId) {
-        log.info("listSessions - start, userId={}", userId);
-        return refreshTokenDao.selectActiveByUserId(userId).stream()
+    public PageResponse<SessionResponse> listSessionsPaged(Long userId, Long currentSessionId, int page, int size) {
+        log.info("listSessionsPaged - start, userId={}, page={}, size={}", userId, page, size);
+        validatePage(page, size);
+        long totalElements = refreshTokenDao.countActiveByUserId(userId);
+        List<SessionResponse> content = refreshTokenDao.selectActiveByUserIdPaged(userId, size, page * size).stream()
                 .map(t -> SessionResponse.from(t, currentSessionId))
                 .toList();
+        return PageResponse.of(content, page, size, totalElements);
     }
 
     /** Logs out the session the current access token belongs to, blocking it immediately. */

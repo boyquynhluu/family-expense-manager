@@ -31,7 +31,7 @@ export default function ResetPassword() {
 
   return (
     <div className="auth-page">
-      <LanguageSwitcher variant="light" />
+      <LanguageSwitcher variant="floating" />
       <form className="auth-form" onSubmit={handleSubmit}>
         <h1 className="auth-title">{t("title")}</h1>
 

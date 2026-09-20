@@ -1,5 +1,7 @@
 package com.family.expensemanager.expense.service;
 
+import com.family.expensemanager.common.dto.PageResponse;
+import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.expense.dao.BudgetDao;
@@ -23,6 +25,8 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 @Slf4j(topic = "CategoryService")
 public class CategoryService {
+
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final CategoryDao categoryDao;
     private final TransactionDao transactionDao;
@@ -75,9 +79,19 @@ public class CategoryService {
         categoryDao.update(category);
     }
 
-    public List<CategoryResponse> listDeleted(Long familyId) {
-        log.info("listDeleted - start, familyId={}", familyId);
-        return categoryDao.selectDeletedByFamilyId(familyId).stream().map(CategoryResponse::from).toList();
+    public PageResponse<CategoryResponse> listDeletedPaged(Long familyId, int page, int size) {
+        log.info("listDeletedPaged - start, familyId={}, page={}, size={}", familyId, page, size);
+        if (page < 0) {
+            throw new BadRequestException("page phải >= 0");
+        }
+        if (size < 1 || size > MAX_PAGE_SIZE) {
+            throw new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE);
+        }
+        long totalElements = categoryDao.countDeletedByFamilyId(familyId);
+        List<CategoryResponse> content = categoryDao.selectDeletedByFamilyIdPaged(familyId, size, page * size).stream()
+                .map(CategoryResponse::from)
+                .toList();
+        return PageResponse.of(content, page, size, totalElements);
     }
 
     @Transactional

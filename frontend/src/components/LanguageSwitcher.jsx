@@ -1,20 +1,36 @@
 import { useTranslation } from "react-i18next";
 
+const LANGUAGES = [
+  { code: "vi", label: "VI" },
+  { code: "en", label: "EN" },
+];
+
 /**
  * README "13. Không i18n" — persists the choice (see i18n.js's localStorage detector).
- * `variant="light"` is for placing this over a dark/photo background (auth pages) —
- * the default styling assumes the dark sidebar it was originally built for.
+ * `variant="floating"` pins it to the top-right corner (used on the public auth pages,
+ * which have no sidebar to put it in) — the default renders inline wherever it's placed
+ * (the authenticated sidebar).
  */
 export default function LanguageSwitcher({ variant }) {
   const { t, i18n } = useTranslation("common");
 
   return (
-    <label className={`language-switcher${variant ? ` language-switcher-${variant}` : ""}`}>
-      {t("language")}
-      <select value={i18n.language} onChange={(e) => i18n.changeLanguage(e.target.value)}>
-        <option value="vi">{t("languageVi")}</option>
-        <option value="en">{t("languageEn")}</option>
-      </select>
-    </label>
+    <div
+      className={`language-toggle${variant ? ` language-toggle-${variant}` : ""}`}
+      role="group"
+      aria-label={t("language")}
+    >
+      {LANGUAGES.map((lang) => (
+        <button
+          key={lang.code}
+          type="button"
+          className={`language-toggle-btn${i18n.language === lang.code ? " is-active" : ""}`}
+          onClick={() => i18n.changeLanguage(lang.code)}
+          aria-pressed={i18n.language === lang.code}
+        >
+          {lang.label}
+        </button>
+      ))}
+    </div>
   );
 }

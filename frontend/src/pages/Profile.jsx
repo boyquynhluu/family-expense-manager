@@ -5,6 +5,9 @@ import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { TrashIcon } from "../components/AppIcons";
 import { EyeIcon, EyeOffIcon } from "../components/AuthIcons";
+import Pagination from "../components/Pagination";
+import { usePagedList } from "../hooks/usePagedList";
+import { confirmDialog } from "../utils/confirm";
 
 // The stored value is always this fixed Vietnamese word regardless of UI language —
 // only the displayed label is translated (see relationshipLabelFor below) — otherwise
@@ -46,12 +49,14 @@ export default function Profile() {
   const [passwordError, setPasswordError] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
 
-  const [members, setMembers] = useState([]);
+  const { pageData: membersPage, setPage: setMembersPage, reload: loadMembers } = usePagedList("/auth/family/members");
+  const members = membersPage.content;
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteError, setInviteError] = useState("");
   const [inviting, setInviting] = useState(false);
 
-  const [sessions, setSessions] = useState([]);
+  const { pageData: sessionsPage, setPage: setSessionsPage, reload: loadSessions } = usePagedList("/auth/sessions");
+  const sessions = sessionsPage.content;
   const [revokingOthers, setRevokingOthers] = useState(false);
 
   const [twoFactorSetup, setTwoFactorSetup] = useState(null); // { secret, otpAuthUri, qrDataUrl }
@@ -64,26 +69,16 @@ export default function Profile() {
   const [disableError, setDisableError] = useState("");
   const [savingTwoFactor, setSavingTwoFactor] = useState(false);
 
-  function loadMembers() {
-    client.get("/auth/family/members").then((res) => setMembers(res.data.data));
-  }
-
-  function loadSessions() {
-    client.get("/auth/sessions").then((res) => setSessions(res.data.data));
-  }
-
   useEffect(() => {
     client.get("/auth/me").then((res) => {
       setProfile(res.data.data);
       setDisplayName(res.data.data.displayName);
       setRelationship(res.data.data.relationship ?? "");
     });
-    loadMembers();
-    loadSessions();
   }, []);
 
   async function handleRevokeSession(session) {
-    if (!window.confirm(t("revokeSessionConfirm"))) return;
+    if (!(await confirmDialog(t("revokeSessionConfirm")))) return;
     try {
       await client.delete(`/auth/sessions/${session.id}`);
       toast.success(t("sessionRevoked"));
@@ -94,7 +89,7 @@ export default function Profile() {
   }
 
   async function handleRevokeOtherSessions() {
-    if (!window.confirm(t("revokeOtherSessionsConfirm"))) return;
+    if (!(await confirmDialog(t("revokeOtherSessionsConfirm")))) return;
     setRevokingOthers(true);
     try {
       await client.post("/auth/sessions/revoke-others");
@@ -159,7 +154,7 @@ export default function Profile() {
   }
 
   async function handleRemoveMember(member) {
-    if (!window.confirm(t("removeMemberConfirm", { name: member.displayName }))) return;
+    if (!(await confirmDialog(t("removeMemberConfirm", { name: member.displayName })))) return;
     try {
       await client.delete(`/auth/family/members/${member.id}`);
       toast.success(t("memberRemoved"));
@@ -360,6 +355,7 @@ export default function Profile() {
             </tbody>
           </table>
         )}
+        <Pagination pageData={membersPage} onPageChange={setMembersPage} />
 
         {profile.role === "OWNER" && (
           <>
@@ -426,7 +422,8 @@ export default function Profile() {
             </tbody>
           </table>
         )}
-        {sessions.some((s) => !s.isCurrent) && (
+        <Pagination pageData={sessionsPage} onPageChange={setSessionsPage} />
+        {(sessionsPage.totalElements > 1 || sessions.some((s) => !s.isCurrent)) && (
           <button type="button" onClick={handleRevokeOtherSessions} disabled={revokingOthers}>
             {revokingOthers ? t("revokingOthersLoading") : t("revokeOtherSessionsButton")}
           </button>

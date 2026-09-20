@@ -28,4 +28,11 @@ public interface FamilyMembershipDao {
     /** Every member of this family — the real member list, unlike USERS.family_id which only tracks each user's currently-active one. */
     @Select
     List<FamilyMembership> selectByFamilyId(Long familyId);
+
+    @Select
+    long countByFamilyId(Long familyId);
+
+    /** One page of this family's members, same ordering as {@link #selectByFamilyId}. */
+    @Select
+    List<FamilyMembership> selectByFamilyIdPaged(Long familyId, int limit, int offset);
 }

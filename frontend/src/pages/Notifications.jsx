@@ -2,48 +2,63 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { BellIcon } from "../components/AppIcons";
+import Pagination from "../components/Pagination";
+import { usePagedList } from "../hooks/usePagedList";
 
 export default function Notifications() {
   const { t } = useTranslation("notifications");
-  const [notifications, setNotifications] = useState([]);
+  const { pageData, setPage, reload } = usePagedList("/notifications");
+  const notifications = pageData.content;
+  const [unreadCount, setUnreadCount] = useState(0);
   const [error, setError] = useState("");
 
-  function load() {
+  // "Mark all as read" must reflect unread items on every page, not just the visible
+  // one, so the count comes from the dedicated unread-count endpoint.
+  function loadUnreadCount() {
     client
-      .get("/notifications")
-      .then((res) => setNotifications(res.data.data))
-      .catch((err) => setError(err.response?.data?.message || t("loadFailed")));
+      .get("/notifications/unread-count")
+      .then((res) => setUnreadCount(res.data.data.count))
+      .catch(() => {});
+  }
+
+  function refresh() {
+    reload();
+    loadUnreadCount();
   }
 
   useEffect(() => {
-    load();
-    // Polling instead of a persistent connection keeps this simple and matches the
-    // rest of the app's request/response style — good enough at this app's scale.
-    const interval = setInterval(load, 15_000);
-    return () => clearInterval(interval);
+    loadUnreadCount();
   }, []);
 
+  useEffect(() => {
+    // Polling instead of a persistent connection keeps this simple and matches the
+    // rest of the app's request/response style — good enough at this app's scale.
+    const interval = setInterval(refresh, 15_000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reload]);
+
   async function markAsRead(id) {
-    setNotifications((list) => list.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
+    setError("");
     try {
       await client.put(`/notifications/${id}/read`);
     } catch (err) {
       setError(err.response?.data?.message || t("markReadFailed"));
-      load();
     }
+    refresh();
   }
 
   async function markAllAsRead() {
-    setNotifications((list) => list.map((n) => ({ ...n, isRead: true })));
+    setError("");
     try {
       await client.put("/notifications/read-all");
     } catch (err) {
       setError(err.response?.data?.message || t("markAllReadFailed"));
-      load();
     }
+    refresh();
   }
 
-  const hasUnread = notifications.some((n) => !n.isRead);
+  const hasUnread = unreadCount > 0;
 
   return (
     <div>
@@ -87,6 +102,7 @@ export default function Notifications() {
           ))}
         </ul>
       )}
+      <Pagination pageData={pageData} onPageChange={setPage} />
     </div>
   );
 }

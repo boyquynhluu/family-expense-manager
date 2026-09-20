@@ -1,6 +1,7 @@
 package com.family.expensemanager.expense.controller;
 
 import com.family.expensemanager.common.dto.ApiResponse;
+import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.security.CurrentUser;
 import com.family.expensemanager.expense.dto.BudgetResponse;
 import com.family.expensemanager.expense.dto.CreateBudgetRequest;
@@ -13,9 +14,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,9 +35,10 @@ public class BudgetController {
     }
 
     @GetMapping
-    public ApiResponse<List<BudgetResponse>> list() {
-        log.info("list - start");
-        return ApiResponse.ok(budgetService.listByFamily(CurrentUser.familyId()));
+    public ApiResponse<PageResponse<BudgetResponse>> list(
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "5") int size) {
+        log.info("list - start, page={}, size={}", page, size);
+        return ApiResponse.ok(budgetService.listByFamilyPaged(CurrentUser.familyId(), page, size));
     }
 
     @PutMapping("/{id}")

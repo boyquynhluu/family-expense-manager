@@ -25,6 +25,7 @@ import com.family.expensemanager.auth.dto.UserProfileResponse;
 import com.family.expensemanager.auth.security.RequestMetadataUtil;
 import com.family.expensemanager.auth.service.AuthService;
 import com.family.expensemanager.common.dto.ApiResponse;
+import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.security.CurrentUser;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -150,9 +151,10 @@ public class AuthController {
     }
 
     @GetMapping("/family/members")
-    public ApiResponse<List<UserProfileResponse>> familyMembers() {
-        log.info("familyMembers - start");
-        return ApiResponse.ok(authService.getFamilyMembers(CurrentUser.familyId()));
+    public ApiResponse<PageResponse<UserProfileResponse>> familyMembers(@RequestParam(defaultValue = "0") int page,
+                                                                        @RequestParam(defaultValue = "5") int size) {
+        log.info("familyMembers - start, page={}, size={}", page, size);
+        return ApiResponse.ok(authService.getFamilyMembersPaged(CurrentUser.familyId(), page, size));
     }
 
     @DeleteMapping("/family/members/{userId}")
@@ -176,9 +178,10 @@ public class AuthController {
     }
 
     @GetMapping("/sessions")
-    public ApiResponse<List<SessionResponse>> sessions() {
-        log.info("sessions - start");
-        return ApiResponse.ok(authService.listSessions(CurrentUser.userId(), CurrentUser.sessionId()));
+    public ApiResponse<PageResponse<SessionResponse>> sessions(@RequestParam(defaultValue = "0") int page,
+                                                               @RequestParam(defaultValue = "5") int size) {
+        log.info("sessions - start, page={}, size={}", page, size);
+        return ApiResponse.ok(authService.listSessionsPaged(CurrentUser.userId(), CurrentUser.sessionId(), page, size));
     }
 
     @DeleteMapping("/sessions/{sessionId}")

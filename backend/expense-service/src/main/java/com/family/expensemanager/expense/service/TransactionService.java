@@ -155,9 +155,18 @@ public class TransactionService {
         evictCaches(familyId, periodMonthOf(transaction.getOccurredAt()));
     }
 
-    public List<TransactionResponse> listDeleted(Long familyId) {
-        log.info("listDeleted - start, familyId={}", familyId);
-        return transactionDao.selectDeletedByFamilyId(familyId).stream().map(TransactionResponse::from).toList();
+    public PageResponse<TransactionResponse> listDeletedPaged(Long familyId, int page, int size) {
+        log.info("listDeletedPaged - start, familyId={}, page={}, size={}", familyId, page, size);
+        if (page < 0) {
+            throw new BadRequestException("page phải >= 0");
+        }
+        if (size < 1 || size > MAX_PAGE_SIZE) {
+            throw new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE);
+        }
+        long totalElements = transactionDao.countDeletedByFamilyId(familyId);
+        List<TransactionResponse> content = transactionDao.selectDeletedByFamilyIdPaged(familyId, size, page * size)
+                .stream().map(TransactionResponse::from).toList();
+        return PageResponse.of(content, page, size, totalElements);
     }
 
     @Transactional

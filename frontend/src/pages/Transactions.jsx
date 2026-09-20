@@ -3,6 +3,9 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { CloseIcon, EditIcon, ImageIcon, TrashIcon } from "../components/AppIcons";
+import Pagination from "../components/Pagination";
+import { PAGE_SIZE } from "../hooks/usePagedList";
+import { confirmDialog } from "../utils/confirm";
 import { formatCurrency } from "../utils/format";
 
 const emptyForm = {
@@ -21,8 +24,6 @@ const emptyFilter = {
   fromDate: "",
   toDate: "",
 };
-
-const PAGE_SIZE = 20;
 
 const emptyPage = { content: [], page: 0, size: PAGE_SIZE, totalElements: 0, totalPages: 0 };
 
@@ -122,7 +123,7 @@ export default function Transactions() {
   }
 
   async function handleDelete(id) {
-    if (!window.confirm(t("transactions:deleteConfirm"))) return;
+    if (!(await confirmDialog(t("transactions:deleteConfirm")))) return;
     setError("");
     try {
       await client.delete(`/expenses/transactions/${id}`);
@@ -167,7 +168,7 @@ export default function Transactions() {
   }
 
   async function handleDeleteReceipt(id) {
-    if (!window.confirm(t("transactions:deleteReceiptConfirm"))) return;
+    if (!(await confirmDialog(t("transactions:deleteReceiptConfirm")))) return;
     setError("");
     try {
       await client.delete(`/expenses/transactions/${id}/receipt`);
@@ -521,35 +522,7 @@ export default function Transactions() {
           </table>
         )}
 
-        {pageData.totalPages > 1 && (
-          <div className="pagination">
-            <span className="pagination-info">
-              {t("transactions:paginationInfo", {
-                total: pageData.totalElements,
-                page: pageData.page + 1,
-                totalPages: pageData.totalPages,
-              })}
-            </span>
-            <div className="pagination-controls">
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={pageData.page === 0}
-              >
-                {t("transactions:prevPage")}
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setPage((p) => Math.min(pageData.totalPages - 1, p + 1))}
-                disabled={pageData.page >= pageData.totalPages - 1}
-              >
-                {t("transactions:nextPage")}
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination pageData={pageData} onPageChange={setPage} />
       </div>
     </div>
   );

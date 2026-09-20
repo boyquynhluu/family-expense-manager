@@ -1,35 +1,26 @@
-import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
+import Pagination from "../components/Pagination";
 import { formatCurrency } from "../utils/format";
 import { useAuth } from "../hooks/useAuth";
+import { usePagedList } from "../hooks/usePagedList";
 
 export default function Trash() {
   const { t } = useTranslation("trash");
   const { role } = useAuth();
   const isOwner = role === "OWNER";
-  const [wallets, setWallets] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [transactions, setTransactions] = useState([]);
-
-  function loadWallets() {
-    client.get("/expenses/wallets/trash").then((res) => setWallets(res.data.data));
-  }
-
-  function loadCategories() {
-    client.get("/expenses/categories/trash").then((res) => setCategories(res.data.data));
-  }
-
-  function loadTransactions() {
-    client.get("/expenses/transactions/trash").then((res) => setTransactions(res.data.data));
-  }
-
-  useEffect(() => {
-    loadWallets();
-    loadCategories();
-    loadTransactions();
-  }, []);
+  // One usePagedList per table: each keeps its own page state, so paging one table
+  // never refetches (or resets) the other two.
+  const { pageData: walletsPage, setPage: setWalletsPage, reload: loadWallets } =
+    usePagedList("/expenses/wallets/trash");
+  const { pageData: categoriesPage, setPage: setCategoriesPage, reload: loadCategories } =
+    usePagedList("/expenses/categories/trash");
+  const { pageData: transactionsPage, setPage: setTransactionsPage, reload: loadTransactions } =
+    usePagedList("/expenses/transactions/trash");
+  const wallets = walletsPage.content;
+  const categories = categoriesPage.content;
+  const transactions = transactionsPage.content;
 
   async function handleRestore(kind, id, reload) {
     try {
@@ -87,6 +78,7 @@ export default function Trash() {
             </tbody>
           </table>
         )}
+        <Pagination pageData={walletsPage} onPageChange={setWalletsPage} />
       </div>
 
       <div className="section-card">
@@ -121,6 +113,7 @@ export default function Trash() {
             </tbody>
           </table>
         )}
+        <Pagination pageData={categoriesPage} onPageChange={setCategoriesPage} />
       </div>
 
       <div className="section-card">
@@ -157,6 +150,7 @@ export default function Trash() {
             </tbody>
           </table>
         )}
+        <Pagination pageData={transactionsPage} onPageChange={setTransactionsPage} />
       </div>
     </div>
   );

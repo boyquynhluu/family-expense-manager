@@ -1,7 +1,10 @@
 package com.family.expensemanager.auth.service;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -16,6 +19,7 @@ import com.family.expensemanager.auth.domain.entity.FamilyMembership;
 import com.family.expensemanager.auth.domain.entity.User;
 import com.family.expensemanager.auth.dto.FamilyAdminResponse;
 import com.family.expensemanager.auth.dto.UserAdminResponse;
+import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.common.security.CurrentUser;
@@ -36,25 +40,52 @@ import lombok.extern.slf4j.Slf4j;
 public class AdminService {
 
     private static final String ROLE_OWNER = "OWNER";
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final FamilyDao familyDao;
     private final UserDao userDao;
     private final FamilyMembershipDao familyMembershipDao;
 
     @PreAuthorize("hasRole('ADMIN')")
-    public List<FamilyAdminResponse> listFamilies() {
-        log.info("listFamilies - start");
-        return familyDao.selectAll().stream().map(this::toFamilyAdminResponse).toList();
+    public PageResponse<FamilyAdminResponse> listFamiliesPaged(int page, int size) {
+        log.info("listFamiliesPaged - start, page={}, size={}", page, size);
+        validatePage(page, size);
+        long totalElements = familyDao.countAll();
+        // Per-row enrichment (memberships + owner lookup) only runs for this page's rows.
+        List<FamilyAdminResponse> content = familyDao.selectAllPaged(size, page * size).stream()
+                .map(this::toFamilyAdminResponse)
+                .toList();
+        return PageResponse.of(content, page, size, totalElements);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
-    public List<UserAdminResponse> listUsers() {
-        log.info("listUsers - start");
-        Map<Long, String> familyNames = familyDao.selectAll().stream()
-                .collect(Collectors.toMap(Family::getId, Family::getName));
-        return userDao.selectAll().stream()
+    public PageResponse<UserAdminResponse> listUsersPaged(int page, int size) {
+        log.info("listUsersPaged - start, page={}, size={}", page, size);
+        validatePage(page, size);
+        long totalElements = userDao.countAll();
+        List<User> users = userDao.selectAllPaged(size, page * size);
+        // Resolve family names only for the families referenced by this page's users.
+        Map<Long, String> familyNames = new HashMap<>();
+        Set<Long> familyIds = users.stream()
+                .map(User::getFamilyId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        for (Long familyId : familyIds) {
+            familyDao.selectById(familyId).ifPresent(f -> familyNames.put(f.getId(), f.getName()));
+        }
+        List<UserAdminResponse> content = users.stream()
                 .map(u -> UserAdminResponse.from(u, familyNames.get(u.getFamilyId())))
                 .toList();
+        return PageResponse.of(content, page, size, totalElements);
+    }
+
+    private static void validatePage(int page, int size) {
+        if (page < 0) {
+            throw new BadRequestException("page phải >= 0");
+        }
+        if (size < 1 || size > MAX_PAGE_SIZE) {
+            throw new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE);
+        }
     }
 
     @PreAuthorize("hasRole('ADMIN')")

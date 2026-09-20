@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { AlertIcon, EditIcon, TrashIcon } from "../components/AppIcons";
+import Pagination from "../components/Pagination";
+import { confirmDialog } from "../utils/confirm";
 import { formatCurrency } from "../utils/format";
 import { useAuth } from "../hooks/useAuth";
+import { usePagedList } from "../hooks/usePagedList";
 
 function currentYearMonth() {
   const now = new Date();
@@ -22,7 +25,8 @@ export default function Budgets() {
   const { t } = useTranslation(["common", "budgets"]);
   const { role } = useAuth();
   const isOwner = role === "OWNER";
-  const [budgets, setBudgets] = useState([]);
+  const { pageData, setPage, reload } = usePagedList("/expenses/budgets");
+  const budgets = pageData.content;
   const [categories, setCategories] = useState([]);
   const [categoryId, setCategoryId] = useState("");
   const [periodMonth, setPeriodMonth] = useState(currentYearMonth());
@@ -31,8 +35,7 @@ export default function Budgets() {
   const [spentByMonth, setSpentByMonth] = useState({});
   const [error, setError] = useState("");
 
-  function load() {
-    client.get("/expenses/budgets").then((res) => setBudgets(res.data.data));
+  useEffect(() => {
     client.get("/expenses/categories").then((res) => {
       const expenseCategories = res.data.data.filter((c) => c.type === "EXPENSE");
       setCategories(expenseCategories);
@@ -40,9 +43,7 @@ export default function Budgets() {
         setCategoryId((prev) => prev || String(expenseCategories[0].id));
       }
     });
-  }
-
-  useEffect(load, []);
+  }, []);
 
   // Budgets can span different months, so fetch the actual-spend report once per
   // distinct month that appears in the budget list (reuses the Dashboard's endpoint).
@@ -90,18 +91,18 @@ export default function Budgets() {
         await client.post("/expenses/budgets", payload);
       }
       cancelEdit();
-      load();
+      reload();
     } catch (err) {
       setError(err.response?.data?.message || t("budgets:saveFailed"));
     }
   }
 
   async function handleDelete(id) {
-    if (!window.confirm(t("budgets:deleteConfirm"))) return;
+    if (!(await confirmDialog(t("budgets:deleteConfirm")))) return;
     setError("");
     try {
       await client.delete(`/expenses/budgets/${id}`);
-      load();
+      reload();
     } catch (err) {
       setError(err.response?.data?.message || t("budgets:deleteFailed"));
     }
@@ -222,6 +223,7 @@ export default function Budgets() {
             })}
           </div>
         )}
+        <Pagination pageData={pageData} onPageChange={setPage} />
       </div>
     </div>
   );

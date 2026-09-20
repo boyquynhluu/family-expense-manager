@@ -681,16 +681,72 @@ class AuthServiceTest {
     }
 
     @Test
-    void listSessions_marksMatchingIdAsCurrent() {
+    void listSessionsPaged_marksMatchingIdAsCurrent() {
         RefreshToken t1 = refreshToken(1L, 5L);
         RefreshToken t2 = refreshToken(2L, 5L);
-        when(refreshTokenDao.selectActiveByUserId(5L)).thenReturn(List.of(t1, t2));
+        when(refreshTokenDao.countActiveByUserId(5L)).thenReturn(2L);
+        when(refreshTokenDao.selectActiveByUserIdPaged(5L, 5, 0)).thenReturn(List.of(t1, t2));
 
-        var sessions = authService.listSessions(5L, 2L);
+        var result = authService.listSessionsPaged(5L, 2L, 0, 5);
 
-        assertThat(sessions).hasSize(2);
-        assertThat(sessions.get(0).isCurrent()).isFalse();
-        assertThat(sessions.get(1).isCurrent()).isTrue();
+        assertThat(result.content()).hasSize(2);
+        assertThat(result.content().get(0).isCurrent()).isFalse();
+        assertThat(result.content().get(1).isCurrent()).isTrue();
+        assertThat(result.totalElements()).isEqualTo(2L);
+        assertThat(result.totalPages()).isEqualTo(1);
+    }
+
+    @Test
+    void listSessionsPaged_returnsPageWithOffset() {
+        when(refreshTokenDao.countActiveByUserId(5L)).thenReturn(12L);
+        when(refreshTokenDao.selectActiveByUserIdPaged(5L, 5, 10))
+                .thenReturn(List.of(refreshToken(11L, 5L), refreshToken(12L, 5L)));
+
+        var result = authService.listSessionsPaged(5L, 1L, 2, 5);
+
+        assertThat(result.content()).hasSize(2);
+        assertThat(result.page()).isEqualTo(2);
+        assertThat(result.size()).isEqualTo(5);
+        assertThat(result.totalElements()).isEqualTo(12L);
+        assertThat(result.totalPages()).isEqualTo(3);
+    }
+
+    @Test
+    void listSessionsPaged_rejectsInvalidPageOrSize() {
+        assertThatThrownBy(() -> authService.listSessionsPaged(5L, 1L, -1, 5))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> authService.listSessionsPaged(5L, 1L, 0, 0))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> authService.listSessionsPaged(5L, 1L, 0, 101))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void getFamilyMembersPaged_returnsPageWithOffset() {
+        User user = activeLocalUser();
+        user.setId(21L);
+        when(familyMembershipDao.countByFamilyId(1L)).thenReturn(7L);
+        when(familyMembershipDao.selectByFamilyIdPaged(1L, 5, 5))
+                .thenReturn(List.of(membership(21L, 1L, "MEMBER"), membership(22L, 1L, "MEMBER")));
+        when(userDao.selectById(21L)).thenReturn(Optional.of(user));
+        when(userDao.selectById(22L)).thenReturn(Optional.empty());
+
+        var result = authService.getFamilyMembersPaged(1L, 1, 5);
+
+        assertThat(result.content()).hasSize(1);
+        assertThat(result.page()).isEqualTo(1);
+        assertThat(result.totalElements()).isEqualTo(7L);
+        assertThat(result.totalPages()).isEqualTo(2);
+    }
+
+    @Test
+    void getFamilyMembersPaged_rejectsInvalidPageOrSize() {
+        assertThatThrownBy(() -> authService.getFamilyMembersPaged(1L, -1, 5))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> authService.getFamilyMembersPaged(1L, 0, 0))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> authService.getFamilyMembersPaged(1L, 0, 101))
+                .isInstanceOf(BadRequestException.class);
     }
 
     @Test

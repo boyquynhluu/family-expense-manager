@@ -68,7 +68,7 @@ export default function Login() {
   if (twoFactorToken) {
     return (
       <div className="auth-page">
-        <LanguageSwitcher variant="light" />
+        <LanguageSwitcher variant="floating" />
         <form className="auth-form" onSubmit={handleTwoFactorSubmit}>
           <h1 className="auth-title">{t("twoFactorTitle")}</h1>
 
@@ -109,7 +109,7 @@ export default function Login() {
 
   return (
     <div className="auth-page">
-      <LanguageSwitcher variant="light" />
+      <LanguageSwitcher variant="floating" />
       <form className="auth-form" onSubmit={handleSubmit}>
         <h1 className="auth-title">{t("title")}</h1>
 

@@ -1,5 +1,7 @@
 package com.family.expensemanager.expense.service;
 
+import com.family.expensemanager.common.dto.PageResponse;
+import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.expense.dao.RecurringTransactionDao;
 import com.family.expensemanager.expense.domain.entity.RecurringTransaction;
@@ -31,6 +33,8 @@ public class RecurringTransactionService {
     /** Caps how many missed months a single run backfills for one rule, so a rule left
      *  inactive for years can't spawn years of back-dated transactions in one go. */
     private static final int MAX_CATCH_UP_RUNS = 24;
+
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final RecurringTransactionDao recurringTransactionDao;
     private final WalletService walletService;
@@ -68,11 +72,20 @@ public class RecurringTransactionService {
         return RecurringTransactionResponse.from(r);
     }
 
-    public List<RecurringTransactionResponse> listByFamily(Long familyId) {
-        log.info("listByFamily - start, familyId={}", familyId);
-        return recurringTransactionDao.selectByFamilyId(familyId).stream()
-                .map(RecurringTransactionResponse::from)
-                .toList();
+    public PageResponse<RecurringTransactionResponse> listByFamilyPaged(Long familyId, int page, int size) {
+        log.info("listByFamilyPaged - start, familyId={}, page={}, size={}", familyId, page, size);
+        if (page < 0) {
+            throw new BadRequestException("page phải >= 0");
+        }
+        if (size < 1 || size > MAX_PAGE_SIZE) {
+            throw new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE);
+        }
+        long totalElements = recurringTransactionDao.countByFamilyId(familyId);
+        List<RecurringTransactionResponse> content =
+                recurringTransactionDao.selectByFamilyIdPaged(familyId, size, page * size).stream()
+                        .map(RecurringTransactionResponse::from)
+                        .toList();
+        return PageResponse.of(content, page, size, totalElements);
     }
 
     @Transactional
@@ -145,6 +158,9 @@ public class RecurringTransactionService {
             transactionService.create(
                     r.getFamilyId(), r.getCreatedByUserId(), r.getCreatedByEmail(), r.getCreatedByDisplayName(),
                     request);
+            // Frontend status badge ("Chưa thực hiện" vs "Hoàn thành") is null-vs-not-null
+            // on this field — set only once a transaction actually got created above.
+            r.setLastRunDate(runDate);
             runDate = nextOccurrence(runDate, r.getDayOfMonth());
             runs++;
         }
@@ -155,9 +171,19 @@ public class RecurringTransactionService {
         recurringTransactionDao.update(r);
     }
 
+    /**
+     * A brand-new (or just-edited) rule's first run must never land in the past — a
+     * {@code startDate} months behind "today" used to make {@link #generateDueTransactions}
+     * treat it as a stale rule that missed runs, backfilling one transaction per missed
+     * month the very first time the job saw it. {@code startDate} is still honored for a
+     * genuinely future date (or today); a past one is simply floored to today so the rule
+     * only starts generating from its next real occurrence onward.
+     */
     private LocalDate firstOccurrenceOnOrAfter(LocalDate startDate, int dayOfMonth) {
-        LocalDate candidate = withClampedDay(startDate, dayOfMonth);
-        return candidate.isBefore(startDate) ? nextOccurrence(startDate, dayOfMonth) : candidate;
+        LocalDate today = LocalDate.now(clock);
+        LocalDate effectiveStart = startDate.isBefore(today) ? today : startDate;
+        LocalDate candidate = withClampedDay(effectiveStart, dayOfMonth);
+        return candidate.isBefore(effectiveStart) ? nextOccurrence(effectiveStart, dayOfMonth) : candidate;
     }
 
     private LocalDate nextOccurrence(LocalDate from, int dayOfMonth) {

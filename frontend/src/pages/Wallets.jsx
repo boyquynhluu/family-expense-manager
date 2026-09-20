@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { EditIcon, TrashIcon, WalletIcon } from "../components/AppIcons";
+import { confirmDialog } from "../utils/confirm";
 import { formatCurrency } from "../utils/format";
 import { useAuth } from "../hooks/useAuth";
 
@@ -58,7 +59,7 @@ export default function Wallets() {
   }
 
   async function handleDelete(id) {
-    if (!window.confirm(t("wallets:deleteConfirm"))) return;
+    if (!(await confirmDialog(t("wallets:deleteConfirm")))) return;
     setError("");
     try {
       await client.delete(`/expenses/wallets/${id}`);

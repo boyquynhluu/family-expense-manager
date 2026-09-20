@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
-import Swal from "sweetalert2";
 import client from "../api/client";
+import Pagination from "../components/Pagination";
+import { confirmDialog } from "../utils/confirm";
 import { useAuth } from "../hooks/useAuth";
+import { usePagedList } from "../hooks/usePagedList";
 
 function formatDate(value) {
   if (!value) return "-";
@@ -13,60 +14,24 @@ function formatDate(value) {
 export default function AdminPanel() {
   const { t } = useTranslation(["adminPanel", "common"]);
   const { userId } = useAuth();
-  const [families, setFamilies] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [error, setError] = useState("");
-
-  function load() {
-    client
-      .get("/admin/families")
-      .then((res) => setFamilies(res.data.data))
-      .catch((err) => setError(err.response?.data?.message || t("loadFamiliesFailed")));
-    client
-      .get("/admin/users")
-      .then((res) => setUsers(res.data.data))
-      .catch((err) => setError(err.response?.data?.message || t("loadUsersFailed")));
-  }
-
-  useEffect(load, []);
+  const { pageData: familiesPage, setPage: setFamiliesPage } = usePagedList("/admin/families");
+  const { pageData: usersPage, setPage: setUsersPage, reload: reloadUsers } = usePagedList("/admin/users");
+  const families = familiesPage.content;
+  const users = usersPage.content;
 
   async function toggleSystemAdmin(user) {
     const nextValue = !user.isSystemAdmin;
     const confirmMessage = nextValue
       ? t("grantAdminConfirm", { email: user.email })
       : t("revokeAdminConfirm", { email: user.email });
-    const result = await confirmUpdate(confirmMessage);
-    if(!result.isConfirmed) return;
+    if (!(await confirmDialog(confirmMessage, { title: t("swalTitle") }))) return;
     try {
       await client.put(`/admin/users/${user.id}/system-admin`, { isSystemAdmin: nextValue });
       toast.success(t("updateAdminSuccess"));
-      load();
+      reloadUsers();
     } catch (err) {
       toast.error(err.response?.data?.message || t("updateAdminFailed"));
     }
-  }
-
-  async function confirmUpdate(confirmMessage) {
-    return Swal.fire({
-        title: t("swalTitle"),
-        text: confirmMessage,
-        icon: "warning",
-        showCancelButton: true,
-
-        confirmButtonText: t("swalConfirmButtonText"),
-        cancelButtonText: t("swalCancelButtonText"),
-
-        customClass: {
-            popup: "custom-swal-popup",
-            title: "custom-swal-title",
-            htmlContainer: "custom-swal-text",
-            confirmButton: "custom-swal-confirm",
-            cancelButton: "custom-swal-cancel",
-            icon: "custom-swal-icon",
-        },
-
-        buttonsStyling: false,
-    });
   }
 
   return (
@@ -78,10 +43,8 @@ export default function AdminPanel() {
         </div>
       </div>
 
-      {error && <p className="error-text">{error}</p>}
-
       <div className="section-card">
-        <h2>{t("familyListTitle", { count: families.length })}</h2>
+        <h2>{t("familyListTitle", { count: familiesPage.totalElements })}</h2>
         {families.length === 0 ? (
           <p className="empty-state">{t("noFamilies")}</p>
         ) : (
@@ -108,10 +71,11 @@ export default function AdminPanel() {
             </tbody>
           </table>
         )}
+        <Pagination pageData={familiesPage} onPageChange={setFamiliesPage} />
       </div>
 
       <div className="section-card">
-        <h2>{t("userListTitle", { count: users.length })}</h2>
+        <h2>{t("userListTitle", { count: usersPage.totalElements })}</h2>
         {users.length === 0 ? (
           <p className="empty-state">{t("noUsers")}</p>
         ) : (
@@ -155,6 +119,7 @@ export default function AdminPanel() {
             </tbody>
           </table>
         )}
+        <Pagination pageData={usersPage} onPageChange={setUsersPage} />
       </div>
     </div>
   );
