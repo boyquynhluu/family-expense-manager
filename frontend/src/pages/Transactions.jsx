@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { CloseIcon, EditIcon, ImageIcon, TrashIcon } from "../components/AppIcons";
 import Pagination from "../components/Pagination";
+import SeedDefaultsButton from "../components/SeedDefaultsButton";
+import { useAuth } from "../hooks/useAuth";
 import { PAGE_SIZE } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
 import { formatCurrency } from "../utils/format";
@@ -23,24 +25,50 @@ const emptyFilter = {
   type: "",
   fromDate: "",
   toDate: "",
+  q: "",
+  minAmount: "",
+  maxAmount: "",
 };
+
+// <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" in the browser's local time.
+function nowForDateTimeInput() {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  return now.toISOString().slice(0, 16);
+}
+
+function CopyIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <rect x="9" y="9" width="11" height="11" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 15V6a2 2 0 0 1 2-2h9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 const emptyPage = { content: [], page: 0, size: PAGE_SIZE, totalElements: 0, totalPages: 0 };
 
 export default function Transactions() {
   const { t } = useTranslation(["common", "transactions"]);
+  const { role, userId } = useAuth();
   const [pageData, setPageData] = useState(emptyPage);
   const [wallets, setWallets] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [members, setMembers] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [filter, setFilter] = useState(emptyFilter);
   const [page, setPage] = useState(0);
   const [error, setError] = useState("");
+  const [receiptFile, setReceiptFile] = useState(null);
+  const [receiptInputKey, setReceiptInputKey] = useState(0);
   const fileInputRef = useRef(null);
   const [uploadTargetId, setUploadTargetId] = useState(null);
   const importInputRef = useRef(null);
   const [importing, setImporting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const formCardRef = useRef(null);
 
   // Filtering/paging happens on the backend now (see README "1. Phân trang/lọc chỉ làm
   // ở frontend") — the client only ever holds the current page's rows.
@@ -51,22 +79,33 @@ export default function Transactions() {
     if (filter.type) params.type = filter.type;
     if (filter.fromDate) params.fromDate = filter.fromDate;
     if (filter.toDate) params.toDate = filter.toDate;
+    if (filter.q.trim()) params.q = filter.q.trim();
+    if (filter.minAmount !== "") params.minAmount = filter.minAmount;
+    if (filter.maxAmount !== "") params.maxAmount = filter.maxAmount;
 
-    client.get("/expenses/transactions", { params }).then((res) => {
-      const data = res.data.data;
-      // Deleting the last row on a page beyond the first leaves it empty — step back
-      // one page rather than showing a stranded "no results" screen.
-      if (data.content.length === 0 && data.page > 0 && data.totalElements > 0) {
-        setPage(data.page - 1);
-      } else {
-        setPageData(data);
-      }
-    });
+    client
+      .get("/expenses/transactions", { params })
+      .then((res) => {
+        const data = res.data.data;
+        // Deleting the last row on a page beyond the first leaves it empty — step back
+        // one page rather than showing a stranded "no results" screen.
+        if (data.content.length === 0 && data.page > 0 && data.totalElements > 0) {
+          setPage(data.page - 1);
+        } else {
+          setPageData(data);
+          setSelectedIds((prev) => {
+            const visible = new Set(data.content.map((r) => r.id));
+            return new Set([...prev].filter((id) => visible.has(id)));
+          });
+        }
+      })
+      .catch((err) => toast.error(err.response?.data?.message || t("transactions:loadFailed")));
   }
 
+  useEffect(() => setSelectedIds(new Set()), [filter, page]);
   useEffect(load, [filter, page]);
 
-  useEffect(() => {
+  function loadWalletsAndCategories() {
     client.get("/expenses/wallets").then((res) => {
       setWallets(res.data.data);
       setForm((f) => ({ ...f, walletId: f.walletId || String(res.data.data[0]?.id ?? "") }));
@@ -75,6 +114,14 @@ export default function Transactions() {
       setCategories(res.data.data);
       setForm((f) => ({ ...f, categoryId: f.categoryId || String(res.data.data[0]?.id ?? "") }));
     });
+  }
+
+  useEffect(() => {
+    loadWalletsAndCategories();
+    client
+      .get("/auth/family/members", { params: { page: 0, size: 100 } })
+      .then((res) => setMembers(res.data.data.content))
+      .catch(() => {});
   }, []);
 
   function updateField(field, value) {
@@ -95,7 +142,59 @@ export default function Transactions() {
 
   function cancelEdit() {
     setEditingId(null);
+    setReceiptFile(null);
+    setReceiptInputKey((k) => k + 1);
     setForm((f) => ({ ...emptyForm, walletId: f.walletId, categoryId: f.categoryId }));
+  }
+
+  function startDuplicate(transaction) {
+    setEditingId(null);
+    setReceiptFile(null);
+    setReceiptInputKey((k) => k + 1);
+    setForm({
+      walletId: String(transaction.walletId),
+      categoryId: String(transaction.categoryId),
+      type: transaction.type,
+      amount: String(transaction.amount),
+      occurredAt: nowForDateTimeInput(),
+      note: transaction.note ?? "",
+    });
+    formCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function toggleSelected(id) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    const selectableIds = pageData.content.filter(canModify).map((r) => r.id);
+    const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
+    setSelectedIds(allSelected ? new Set() : new Set(selectableIds));
+  }
+
+  async function handleBulkDelete() {
+    if (selectedIds.size === 0) return;
+    if (!(await confirmDialog(t("transactions:bulkDeleteConfirm", { count: selectedIds.size })))) return;
+    setError("");
+    setBulkDeleting(true);
+    try {
+      const res = await client.post("/expenses/transactions/bulk-delete", { ids: [...selectedIds] });
+      const { deleted, skipped, forbidden } = res.data.data;
+      const message = t("transactions:bulkDeleteResult", { deleted, skipped, forbidden });
+      if (deleted > 0) toast.success(message);
+      else toast.error(message);
+      setSelectedIds(new Set());
+      load();
+    } catch (err) {
+      setError(err.response?.data?.message || t("transactions:deleteFailed"));
+    } finally {
+      setBulkDeleting(false);
+    }
   }
 
   async function handleSubmit(e) {
@@ -109,17 +208,33 @@ export default function Transactions() {
       occurredAt: form.occurredAt,
       note: form.note || null,
     };
+    let savedId;
     try {
       if (editingId) {
         await client.put(`/expenses/transactions/${editingId}`, payload);
+        savedId = editingId;
       } else {
-        await client.post("/expenses/transactions", payload);
+        const res = await client.post("/expenses/transactions", payload);
+        savedId = res.data.data.id;
       }
-      cancelEdit();
-      load();
     } catch (err) {
       setError(err.response?.data?.message || t("transactions:saveFailed"));
+      return;
     }
+
+    if (receiptFile) {
+      const formData = new FormData();
+      formData.append("file", receiptFile);
+      try {
+        await client.post(`/expenses/transactions/${savedId}/receipt`, formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      } catch (err) {
+        setError(err.response?.data?.message || t("transactions:uploadReceiptFailed"));
+      }
+    }
+    cancelEdit();
+    load();
   }
 
   async function handleDelete(id) {
@@ -186,6 +301,14 @@ export default function Transactions() {
     return categories.find((c) => c.id === id)?.name ?? `#${id}`;
   }
 
+  function memberName(row) {
+    return members.find((m) => m.id === row.userId)?.displayName ?? row.createdByName ?? t("transactions:formerMember");
+  }
+
+  function canModify(row) {
+    return role === "OWNER" || String(row.userId) === String(userId);
+  }
+
   function updateFilter(field, value) {
     setFilter((f) => ({ ...f, [field]: value }));
     setPage(0);
@@ -197,6 +320,8 @@ export default function Transactions() {
   }
 
   const hasActiveFilter = Object.values(filter).some(Boolean);
+  const selectableRows = pageData.content.filter(canModify);
+  const allSelectableSelected = selectableRows.length > 0 && selectableRows.every((r) => selectedIds.has(r.id));
 
   async function exportReport(format) {
     setError("");
@@ -206,6 +331,9 @@ export default function Transactions() {
     if (filter.type) params.type = filter.type;
     if (filter.fromDate) params.fromDate = filter.fromDate;
     if (filter.toDate) params.toDate = filter.toDate;
+    if (filter.q.trim()) params.q = filter.q.trim();
+    if (filter.minAmount !== "") params.minAmount = filter.minAmount;
+    if (filter.maxAmount !== "") params.maxAmount = filter.maxAmount;
 
     try {
       const res = await client.get("/expenses/transactions/export", { params, responseType: "blob" });
@@ -274,20 +402,26 @@ export default function Transactions() {
         </div>
       </div>
 
-      <div className="section-card">
+      <div className="section-card" ref={formCardRef}>
         <h2>{editingId ? t("transactions:editFormTitle") : t("transactions:addFormTitle")}</h2>
         {wallets.length === 0 || categories.length === 0 ? (
-          <p className="empty-state">
-            {wallets.length === 0 && categories.length === 0
-              ? t("transactions:needWalletAndCategory")
-              : wallets.length === 0
-                ? t("transactions:needWallet")
-                : t("transactions:needCategory")}
-          </p>
+          <>
+            <p className="empty-state">
+              {wallets.length === 0 && categories.length === 0
+                ? t("transactions:needWalletAndCategory")
+                : wallets.length === 0
+                  ? t("transactions:needWallet")
+                  : t("transactions:needCategory")}
+            </p>
+            <SeedDefaultsButton onDone={loadWalletsAndCategories} />
+          </>
         ) : (
           <form className="inline-form" onSubmit={handleSubmit}>
             <label className="field">
-              {t("transactions:walletLabel")}
+              <span>
+                {t("transactions:walletLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <select value={form.walletId} onChange={(e) => updateField("walletId", e.target.value)} required>
                 {wallets.map((w) => (
                   <option key={w.id} value={w.id}>
@@ -297,7 +431,10 @@ export default function Transactions() {
               </select>
             </label>
             <label className="field">
-              {t("transactions:categoryLabel")}
+              <span>
+                {t("transactions:categoryLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <select value={form.categoryId} onChange={(e) => updateField("categoryId", e.target.value)} required>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -314,7 +451,10 @@ export default function Transactions() {
               </select>
             </label>
             <label className="field">
-              {t("transactions:amountLabel")}
+              <span>
+                {t("transactions:amountLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <input
                 type="number"
                 step="0.01"
@@ -325,7 +465,10 @@ export default function Transactions() {
               />
             </label>
             <label className="field">
-              {t("transactions:timeLabel")}
+              <span>
+                {t("transactions:timeLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <input
                 type="datetime-local"
                 value={form.occurredAt}
@@ -341,6 +484,37 @@ export default function Transactions() {
                 onChange={(e) => updateField("note", e.target.value)}
               />
             </label>
+            <div className="field">
+              {t("transactions:receiptLabel")}
+              <div className={`file-picker${receiptFile ? " has-file" : ""}`}>
+                <label className="file-picker-trigger">
+                  <input
+                    key={receiptInputKey}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
+                  />
+                  <ImageIcon />
+                  <span className="file-picker-name">
+                    {receiptFile ? receiptFile.name : t("transactions:chooseReceipt")}
+                  </span>
+                </label>
+                {receiptFile && (
+                  <button
+                    type="button"
+                    className="file-picker-clear"
+                    onClick={() => {
+                      setReceiptFile(null);
+                      setReceiptInputKey((k) => k + 1);
+                    }}
+                    aria-label={t("transactions:clearReceipt")}
+                    title={t("transactions:clearReceipt")}
+                  >
+                    <CloseIcon />
+                  </button>
+                )}
+              </div>
+            </div>
             <button type="submit">{editingId ? t("transactions:submitUpdate") : t("transactions:submitAdd")}</button>
             {editingId && (
               <button type="button" className="btn-secondary" onClick={cancelEdit}>
@@ -424,6 +598,37 @@ export default function Transactions() {
             </select>
           </label>
           <label className="field">
+            {t("transactions:searchLabel")}
+            <input
+              type="search"
+              placeholder={t("transactions:searchPlaceholder")}
+              value={filter.q}
+              onChange={(e) => updateFilter("q", e.target.value)}
+            />
+          </label>
+          <label className="field">
+            {t("transactions:minAmountLabel")}
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0"
+              value={filter.minAmount}
+              onChange={(e) => updateFilter("minAmount", e.target.value)}
+            />
+          </label>
+          <label className="field">
+            {t("transactions:maxAmountLabel")}
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0"
+              value={filter.maxAmount}
+              onChange={(e) => updateFilter("maxAmount", e.target.value)}
+            />
+          </label>
+          <label className="field">
             {t("transactions:fromDateLabel")}
             <input type="date" value={filter.fromDate} onChange={(e) => updateFilter("fromDate", e.target.value)} />
           </label>
@@ -438,6 +643,26 @@ export default function Transactions() {
           )}
         </form>
 
+        {selectedIds.size > 0 && (
+          <div className="row-actions" style={{ marginBottom: "0.75rem" }}>
+            <span className="page-header-subtitle">
+              {t("transactions:selectedCount", { count: selectedIds.size })}
+            </span>
+            <button
+              type="button"
+              className="btn-secondary"
+              style={{ color: "#dc2626" }}
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+            >
+              {t("transactions:bulkDeleteButton")}
+            </button>
+            <button type="button" className="btn-secondary" onClick={() => setSelectedIds(new Set())}>
+              {t("transactions:clearSelection")}
+            </button>
+          </div>
+        )}
+
         {pageData.content.length === 0 ? (
           <p className="empty-state">
             {hasActiveFilter ? t("transactions:noMatchFilter") : t("transactions:emptyState")}
@@ -446,18 +671,37 @@ export default function Transactions() {
           <table>
             <thead>
               <tr>
+                <th>
+                  <input
+                    type="checkbox"
+                    checked={allSelectableSelected}
+                    disabled={selectableRows.length === 0}
+                    onChange={toggleSelectAll}
+                    aria-label={t("transactions:selectAllAria")}
+                  />
+                </th>
                 <th>{t("transactions:timeLabel")}</th>
                 <th>{t("transactions:walletLabel")}</th>
                 <th>{t("transactions:categoryLabel")}</th>
                 <th>{t("transactions:typeLabel")}</th>
                 <th>{t("transactions:amountLabel")}</th>
                 <th>{t("transactions:noteLabel")}</th>
+                <th>{t("transactions:creatorLabel")}</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {pageData.content.map((row) => (
                 <tr key={row.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(row.id)}
+                      disabled={!canModify(row)}
+                      onChange={() => toggleSelected(row.id)}
+                      aria-label={t("transactions:selectRowAria")}
+                    />
+                  </td>
                   <td data-label={t("transactions:timeLabel")}>{row.occurredAt.replace("T", " ")}</td>
                   <td data-label={t("transactions:walletLabel")}>{walletName(row.walletId)}</td>
                   <td data-label={t("transactions:categoryLabel")}>{categoryName(row.categoryId)}</td>
@@ -474,47 +718,68 @@ export default function Transactions() {
                     {formatCurrency(row.amount)}
                   </td>
                   <td data-label={t("transactions:noteLabel")}>{row.note}</td>
+                  <td data-label={t("transactions:creatorLabel")}>{memberName(row)}</td>
                   <td className="row-actions">
-                    {row.hasReceipt ? (
-                      <>
-                        <button
-                          type="button"
-                          className="icon-btn"
-                          onClick={() => viewReceipt(row.id)}
-                          aria-label={t("transactions:viewReceiptAria")}
-                        >
-                          <ImageIcon />
-                        </button>
-                        <button
-                          type="button"
-                          className="icon-btn icon-btn-danger"
-                          onClick={() => handleDeleteReceipt(row.id)}
-                          aria-label={t("transactions:deleteReceiptAria")}
-                        >
-                          <CloseIcon />
-                        </button>
-                      </>
-                    ) : (
+                    {row.hasReceipt && (
                       <button
                         type="button"
                         className="icon-btn"
-                        onClick={() => triggerUpload(row.id)}
-                        aria-label={t("transactions:attachReceiptAria")}
+                        onClick={() => viewReceipt(row.id)}
+                        aria-label={t("transactions:viewReceiptAria")}
+                        title={t("transactions:viewReceiptAria")}
                       >
                         <ImageIcon />
                       </button>
                     )}
-                    <button type="button" className="icon-btn" onClick={() => startEdit(row)} aria-label={t("common:edit")}>
-                      <EditIcon />
-                    </button>
                     <button
                       type="button"
-                      className="icon-btn icon-btn-danger"
-                      onClick={() => handleDelete(row.id)}
-                      aria-label={t("common:delete")}
+                      className="icon-btn"
+                      onClick={() => startDuplicate(row)}
+                      aria-label={t("transactions:duplicateAria")}
+                      title={t("transactions:duplicateAria")}
                     >
-                      <TrashIcon />
+                      <CopyIcon />
                     </button>
+                    {canModify(row) && (
+                      <>
+                        {row.hasReceipt ? (
+                          <button
+                            type="button"
+                            className="icon-btn icon-btn-danger"
+                            onClick={() => handleDeleteReceipt(row.id)}
+                            aria-label={t("transactions:deleteReceiptAria")}
+                          >
+                            <CloseIcon />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            onClick={() => triggerUpload(row.id)}
+                            aria-label={t("transactions:attachReceiptAria")}
+                            title={t("transactions:attachReceiptAria")}
+                          >
+                            <ImageIcon />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          onClick={() => startEdit(row)}
+                          aria-label={t("common:edit")}
+                        >
+                          <EditIcon />
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn icon-btn-danger"
+                          onClick={() => handleDelete(row.id)}
+                          aria-label={t("common:delete")}
+                        >
+                          <TrashIcon />
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}

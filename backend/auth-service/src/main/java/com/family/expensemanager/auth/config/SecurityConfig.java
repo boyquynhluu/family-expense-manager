@@ -39,7 +39,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/verify",
+                        .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/verify", "/api/auth/verify-email-change",
                                 "/api/auth/forgot-password", "/api/auth/reset-password", "/api/auth/2fa/verify-login").permitAll()
                         .requestMatchers("/api/auth/oauth2/**", "/api/auth/login/oauth2/**").permitAll()
                         // Viewing/accepting a family invite needs no prior login — only sending one

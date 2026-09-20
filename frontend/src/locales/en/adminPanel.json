@@ -29,5 +29,16 @@
   "activated": "Activated",
   "notActivated": "Not activated",
   "revokeAdminButton": "Revoke admin",
-  "grantAdminButton": "Grant admin"
+  "grantAdminButton": "Grant admin",
+
+  "locked": "Locked",
+  "lockButton": "Lock",
+  "unlockButton": "Unlock",
+  "lockConfirm": "Lock the account {{email}}? They will be signed out of every device and cannot log in until unlocked.",
+  "unlockConfirm": "Unlock the account {{email}}?",
+  "lockSwalTitle": "Lock account?",
+  "unlockSwalTitle": "Unlock account?",
+  "lockSuccess": "Account locked",
+  "unlockSuccess": "Account unlocked",
+  "lockFailed": "Failed to update the lock status"
 }

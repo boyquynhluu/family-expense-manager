@@ -14,6 +14,7 @@ import com.family.expensemanager.common.doma.AppDomaConfig;
 import com.family.expensemanager.expense.domain.entity.Category;
 import com.family.expensemanager.expense.domain.entity.Transaction;
 import com.family.expensemanager.expense.domain.entity.Wallet;
+import com.family.expensemanager.expense.domain.entity.WalletTransfer;
 import com.zaxxer.hikari.HikariDataSource;
 
 import org.seasar.doma.jdbc.Config;
@@ -126,6 +127,7 @@ class ExpenseDaoIT {
         transaction.setNote("IT test transaction");
         transaction.setReceiptPath("100/1-receipt.jpg");
         transaction.setReceiptContentType("image/jpeg");
+        transaction.setCreatedByName("Người Tạo IT");
         transactionDao.insert(transaction);
 
         assertThat(transaction.getId()).isNotNull();
@@ -133,6 +135,7 @@ class ExpenseDaoIT {
         Transaction loaded = transactionDao.selectById(transaction.getId()).orElseThrow();
         assertThat(loaded.getAmount()).isEqualByComparingTo("125000.00");
         assertThat(loaded.getReceiptPath()).isEqualTo("100/1-receipt.jpg");
+        assertThat(loaded.getCreatedByName()).isEqualTo("Người Tạo IT");
         assertThat(loaded.getDeletedAt()).isNull();
         assertThat(transactionDao.countByWalletId(wallet.getId())).isEqualTo(1);
 
@@ -150,5 +153,47 @@ class ExpenseDaoIT {
         assertThat(restored).isEqualTo(1);
         assertThat(transactionDao.selectById(transaction.getId())).isPresent();
         assertThat(transactionDao.countByWalletId(wallet.getId())).isEqualTo(1);
+    }
+
+    @Test
+    void walletTransferInsert_sumsAndPaging_workEndToEnd() {
+        WalletDao walletDao = new WalletDaoImpl(domaConfig);
+        WalletTransferDao transferDao = new WalletTransferDaoImpl(domaConfig);
+        Long familyId = 300L;
+
+        Wallet from = insertWallet(walletDao, familyId, "Ví nguồn IT");
+        Wallet to = insertWallet(walletDao, familyId, "Ví đích IT");
+
+        WalletTransfer first = insertTransfer(transferDao, familyId, from, to, "100.00", LocalDateTime.of(2026, 1, 1, 8, 0));
+        WalletTransfer second = insertTransfer(transferDao, familyId, from, to, "50.50", LocalDateTime.of(2026, 1, 2, 8, 0));
+
+        assertThat(transferDao.sumAmountIntoWallet(to.getId())).isEqualByComparingTo("150.50");
+        assertThat(transferDao.sumAmountFromWallet(from.getId())).isEqualByComparingTo("150.50");
+        assertThat(transferDao.sumAmountIntoWallet(from.getId())).isEqualByComparingTo("0");
+        assertThat(transferDao.countByWalletId(from.getId())).isEqualTo(2);
+        assertThat(transferDao.countByFamilyId(familyId)).isEqualTo(2);
+        assertThat(transferDao.selectByFamilyIdPaged(familyId, 10, 0))
+                .extracting(WalletTransfer::getId)
+                .containsExactly(second.getId(), first.getId());
+        assertThat(transferDao.selectById(first.getId())).isPresent();
+
+        transferDao.delete(first);
+        assertThat(transferDao.selectById(first.getId())).isEmpty();
+        assertThat(transferDao.sumAmountFromWallet(from.getId())).isEqualByComparingTo("50.50");
+    }
+
+    private WalletTransfer insertTransfer(
+            WalletTransferDao transferDao, Long familyId, Wallet from, Wallet to, String amount,
+            LocalDateTime occurredAt) {
+        WalletTransfer transfer = new WalletTransfer();
+        transfer.setFamilyId(familyId);
+        transfer.setFromWalletId(from.getId());
+        transfer.setToWalletId(to.getId());
+        transfer.setAmount(new BigDecimal(amount));
+        transfer.setOccurredAt(occurredAt);
+        transfer.setCreatedByUserId(1L);
+        transfer.setCreatedAt(LocalDateTime.now().withNano(0));
+        transferDao.insert(transfer);
+        return transfer;
     }
 }

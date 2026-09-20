@@ -26,5 +26,7 @@
   "facebookComingSoon": "Facebook login coming soon",
   "githubComingSoon": "GitHub login coming soon",
   "noAccount": "Don't have an account?",
-  "registerLink": "Register a new family"
+  "registerLink": "Register a new family",
+
+  "accountLocked": "Your account has been locked by an administrator"
 }

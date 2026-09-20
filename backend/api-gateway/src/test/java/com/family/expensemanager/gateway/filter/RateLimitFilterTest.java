@@ -69,6 +69,43 @@ class RateLimitFilterTest {
         }
     }
 
+    @Test
+    void forgedLeftmostForwardedFor_fromPublicRemote_doesNotCreateSeparateBuckets() throws Exception {
+        for (int i = 0; i < 10; i++) {
+            MockHttpServletRequest request = loginRequest("203.0.113.9");
+            request.addHeader("X-Forwarded-For", "9.9.9." + i);
+            filter.doFilter(request, new MockHttpServletResponse(), chain);
+        }
+
+        MockHttpServletRequest forged = loginRequest("203.0.113.9");
+        forged.addHeader("X-Forwarded-For", "9.9.9.200");
+        MockHttpServletResponse blocked = new MockHttpServletResponse();
+        filter.doFilter(forged, blocked, chain);
+
+        assertThat(blocked.getStatus()).isEqualTo(429);
+    }
+
+    @Test
+    void privateRemote_keysBucketByRightmostForwardedEntry() throws Exception {
+        for (int i = 0; i < 10; i++) {
+            MockHttpServletRequest request = loginRequest("172.18.0.1");
+            request.addHeader("X-Forwarded-For", "spoofed-" + i + ", 198.51.100.4");
+            filter.doFilter(request, new MockHttpServletResponse(), chain);
+        }
+
+        MockHttpServletRequest sameReal = loginRequest("172.18.0.1");
+        sameReal.addHeader("X-Forwarded-For", "spoofed-x, 198.51.100.4");
+        MockHttpServletResponse blocked = new MockHttpServletResponse();
+        filter.doFilter(sameReal, blocked, chain);
+        assertThat(blocked.getStatus()).isEqualTo(429);
+
+        MockHttpServletRequest otherReal = loginRequest("172.18.0.1");
+        otherReal.addHeader("X-Forwarded-For", "spoofed-x, 198.51.100.5");
+        MockHttpServletResponse allowed = new MockHttpServletResponse();
+        filter.doFilter(otherReal, allowed, chain);
+        assertThat(allowed.getStatus()).isEqualTo(200);
+    }
+
     private static MockHttpServletRequest loginRequest(String ip) {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/login");
         request.setRemoteAddr(ip);

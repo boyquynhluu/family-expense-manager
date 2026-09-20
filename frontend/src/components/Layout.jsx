@@ -17,6 +17,7 @@ import {
   ShieldIcon,
   TagIcon,
   TrashIcon,
+  TrendUpIcon,
   UserIcon,
   WalletIcon,
 } from "./AppIcons";
@@ -35,6 +36,7 @@ export default function Layout() {
     { to: "/transactions", label: t("nav.transactions"), icon: ReceiptIcon },
     { to: "/recurring-transactions", label: t("nav.recurringTransactions"), icon: RepeatIcon },
     { to: "/budgets", label: t("nav.budgets"), icon: PieChartIcon },
+    { to: "/reports", label: t("nav.reports"), icon: TrendUpIcon },
     { to: "/notifications", label: t("nav.notifications"), icon: BellIcon },
     { to: "/trash", label: t("nav.trash"), icon: TrashIcon },
     { to: "/profile", label: t("nav.profile"), icon: UserIcon },

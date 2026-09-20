@@ -3,6 +3,8 @@ package com.family.expensemanager.notification.config;
 import com.family.expensemanager.common.doma.AppDomaConfig;
 import com.family.expensemanager.notification.dao.NotificationDao;
 import com.family.expensemanager.notification.dao.NotificationDaoImpl;
+import com.family.expensemanager.notification.dao.NotificationPreferenceDao;
+import com.family.expensemanager.notification.dao.NotificationPreferenceDaoImpl;
 import org.seasar.doma.jdbc.Config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,5 +23,10 @@ public class DomaConfiguration {
     @Bean
     public NotificationDao notificationDao(Config domaConfig) {
         return new NotificationDaoImpl(domaConfig);
+    }
+
+    @Bean
+    public NotificationPreferenceDao notificationPreferenceDao(Config domaConfig) {
+        return new NotificationPreferenceDaoImpl(domaConfig);
     }
 }

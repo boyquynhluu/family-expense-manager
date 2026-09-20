@@ -6,6 +6,7 @@ import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.expense.dao.RecurringTransactionDao;
 import com.family.expensemanager.expense.dao.TransactionDao;
 import com.family.expensemanager.expense.dao.WalletDao;
+import com.family.expensemanager.expense.dao.WalletTransferDao;
 import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.dto.CreateWalletRequest;
 
@@ -14,8 +15,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,12 +39,14 @@ class WalletServiceTest {
     private TransactionDao transactionDao;
     @Mock
     private RecurringTransactionDao recurringTransactionDao;
+    @Mock
+    private WalletTransferDao walletTransferDao;
 
     private WalletService walletService;
 
     @BeforeEach
     void setUp() {
-        walletService = new WalletService(walletDao, transactionDao, recurringTransactionDao);
+        walletService = new WalletService(walletDao, transactionDao, recurringTransactionDao, walletTransferDao);
     }
 
     @Test
@@ -92,6 +97,8 @@ class WalletServiceTest {
         when(walletDao.selectById(1L)).thenReturn(Optional.of(target));
         when(walletDao.selectByFamilyId(1L)).thenReturn(List.of(target));
         when(transactionDao.sumAmountByWalletAndType(eq(1L), any())).thenReturn(BigDecimal.ZERO);
+        when(walletTransferDao.sumAmountIntoWallet(1L)).thenReturn(BigDecimal.ZERO);
+        when(walletTransferDao.sumAmountFromWallet(1L)).thenReturn(BigDecimal.ZERO);
 
         var response = walletService.update(1L, 1L, new CreateWalletRequest("Ví chính (đổi tên)", "VND", BigDecimal.TEN));
 
@@ -194,11 +201,54 @@ class WalletServiceTest {
         when(walletDao.selectByFamilyId(1L)).thenReturn(List.of(target));
         when(transactionDao.sumAmountByWalletAndType(1L, "INCOME")).thenReturn(BigDecimal.valueOf(50));
         when(transactionDao.sumAmountByWalletAndType(1L, "EXPENSE")).thenReturn(BigDecimal.valueOf(30));
+        when(walletTransferDao.sumAmountIntoWallet(1L)).thenReturn(BigDecimal.ZERO);
+        when(walletTransferDao.sumAmountFromWallet(1L)).thenReturn(BigDecimal.ZERO);
 
         var responses = walletService.listByFamily(1L);
 
         assertThat(responses).hasSize(1);
         assertThat(responses.get(0).currentBalance()).isEqualByComparingTo(BigDecimal.valueOf(120));
+    }
+
+    @Test
+    void listByFamily_addsIncomingTransfers_andSubtractsOutgoingTransfers() {
+        Wallet target = wallet(1L, 1L, "VND");
+        target.setInitialBalance(BigDecimal.valueOf(100));
+        when(walletDao.selectByFamilyId(1L)).thenReturn(List.of(target));
+        when(transactionDao.sumAmountByWalletAndType(1L, "INCOME")).thenReturn(BigDecimal.valueOf(50));
+        when(transactionDao.sumAmountByWalletAndType(1L, "EXPENSE")).thenReturn(BigDecimal.valueOf(30));
+        when(walletTransferDao.sumAmountIntoWallet(1L)).thenReturn(BigDecimal.valueOf(200));
+        when(walletTransferDao.sumAmountFromWallet(1L)).thenReturn(BigDecimal.valueOf(70));
+
+        var responses = walletService.listByFamily(1L);
+
+        assertThat(responses.get(0).currentBalance()).isEqualByComparingTo(BigDecimal.valueOf(250));
+    }
+
+    @Test
+    void listByFamily_allowsNegativeBalance_whenOutgoingTransfersExceedFunds() {
+        Wallet target = wallet(1L, 1L, "VND");
+        when(walletDao.selectByFamilyId(1L)).thenReturn(List.of(target));
+        when(transactionDao.sumAmountByWalletAndType(1L, "INCOME")).thenReturn(BigDecimal.ZERO);
+        when(transactionDao.sumAmountByWalletAndType(1L, "EXPENSE")).thenReturn(BigDecimal.ZERO);
+        when(walletTransferDao.sumAmountIntoWallet(1L)).thenReturn(BigDecimal.ZERO);
+        when(walletTransferDao.sumAmountFromWallet(1L)).thenReturn(BigDecimal.valueOf(40));
+
+        var responses = walletService.listByFamily(1L);
+
+        assertThat(responses.get(0).currentBalance()).isEqualByComparingTo(BigDecimal.valueOf(-40));
+    }
+
+    @Test
+    void delete_throwsConflict_whenWalletHasTransfers() {
+        Wallet target = wallet(1L, 1L, "VND");
+        when(walletDao.selectById(1L)).thenReturn(Optional.of(target));
+        when(transactionDao.countByWalletId(1L)).thenReturn(0L);
+        when(recurringTransactionDao.countByWalletId(1L)).thenReturn(0L);
+        when(walletTransferDao.countByWalletId(1L)).thenReturn(2L);
+
+        assertThatThrownBy(() -> walletService.delete(1L, 1L)).isInstanceOf(ConflictException.class);
+        verify(walletDao, never()).update(any());
     }
 
     private static Wallet wallet(Long id, Long familyId, String currency) {
@@ -209,5 +259,19 @@ class WalletServiceTest {
         wallet.setCurrency(currency);
         wallet.setInitialBalance(BigDecimal.ZERO);
         return wallet;
+    }
+
+    @Test
+    void mutatingMethods_requireOwnerRole() {
+        for (String name : List.of("create", "update", "delete", "restore")) {
+            var methods = Arrays.stream(WalletService.class.getDeclaredMethods())
+                    .filter(m -> m.getName().equals(name)).toList();
+            assertThat(methods).as(name).isNotEmpty();
+            assertThat(methods).as(name).allSatisfy(m -> {
+                PreAuthorize annotation = m.getAnnotation(PreAuthorize.class);
+                assertThat(annotation).isNotNull();
+                assertThat(annotation.value()).isEqualTo("hasRole('OWNER')");
+            });
+        }
     }
 }

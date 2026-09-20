@@ -1,9 +1,32 @@
 {
   "title": "Notifications",
-  "subtitle": "Budget overrun alerts and other updates",
+  "subtitle": "Budget alerts and other updates",
   "markAllReadButton": "Mark all as read",
   "noNotifications": "No notifications yet",
   "loadFailed": "Failed to load notifications",
   "markReadFailed": "Failed to mark notification as read",
-  "markAllReadFailed": "Failed to mark all as read"
+  "markAllReadFailed": "Failed to mark all as read",
+  "deleteReadButton": "Delete read",
+  "deleteConfirm": "Delete this notification? It will be removed for the whole family.",
+  "deleteReadConfirm": "Delete all read notifications of the family?",
+  "deleted": "Notification deleted",
+  "deleteFailed": "Failed to delete notification",
+  "deletedRead": "Read notifications deleted",
+  "deleteReadFailed": "Failed to delete read notifications",
+  "preferencesTitle": "Notification preferences",
+  "preferencesSubtitle": "Applies to your account only",
+  "preferenceInApp": "Show in app",
+  "preferenceEmail": "Send email",
+  "preferencesSave": "Save preferences",
+  "preferencesSaved": "Notification preferences saved",
+  "preferencesSaveFailed": "Failed to save notification preferences",
+  "types": {
+    "BUDGET_EXCEEDED": "Budget exceeded",
+    "BUDGET_WARNING": "Budget almost exceeded",
+    "RECURRING_EXECUTED": "Recurring transaction recorded",
+    "RECURRING_FAILED": "Recurring transaction failed",
+    "MEMBER_JOINED": "New member joined",
+    "MEMBER_LEFT": "Member left the family",
+    "MEMBER_REMOVED": "Member removed from the family"
+  }
 }

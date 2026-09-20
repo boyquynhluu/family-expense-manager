@@ -1,8 +1,45 @@
 package com.family.expensemanager.expense.dto;
 
-import java.time.LocalDate;
+import com.family.expensemanager.common.exception.BadRequestException;
 
-/** Same filter set the Transactions page applies client-side, now accepted by the export endpoint. */
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.Locale;
+
+/** Same filter set the Transactions page applies, shared by the paged list and the export endpoint. */
 public record TransactionReportFilter(
-        Long walletId, Long categoryId, String type, LocalDate fromDate, LocalDate toDate) {
+        Long walletId, Long categoryId, String type, LocalDate fromDate, LocalDate toDate,
+        String q, BigDecimal minAmount, BigDecimal maxAmount) {
+
+    private static final char LIKE_ESCAPE = '!';
+
+    public void validate() {
+        if (minAmount != null && maxAmount != null && minAmount.compareTo(maxAmount) > 0) {
+            throw new BadRequestException("Số tiền tối thiểu không được lớn hơn số tiền tối đa");
+        }
+    }
+
+    /** Lower-cased, trimmed search text, or null when there is nothing to search for. */
+    public String normalizedQuery() {
+        if (q == null || q.isBlank()) {
+            return null;
+        }
+        return q.trim().toLowerCase(Locale.ROOT);
+    }
+
+    /** LIKE pattern for the note column; pair with {@code ESCAPE '!'} in SQL. */
+    public String noteLikePattern() {
+        String query = normalizedQuery();
+        if (query == null) {
+            return null;
+        }
+        StringBuilder pattern = new StringBuilder("%");
+        for (char c : query.toCharArray()) {
+            if (c == LIKE_ESCAPE || c == '%' || c == '_') {
+                pattern.append(LIKE_ESCAPE);
+            }
+            pattern.append(c);
+        }
+        return pattern.append('%').toString();
+    }
 }

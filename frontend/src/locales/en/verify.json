@@ -3,5 +3,9 @@
   "verifySuccess": "Your email has been verified.",
   "verifyFailed": "Email verification failed. The token may have expired.",
   "verifying": "Verifying your email...",
-  "backToLogin": "Back to login"
+  "backToLogin": "Back to login",
+
+  "emailChangeVerifying": "Confirming your new email...",
+  "emailChangeSuccess": "Your email was changed. Please log in again with the new email.",
+  "emailChangeFailed": "Email change failed. The link may have expired or the email is already in use."
 }

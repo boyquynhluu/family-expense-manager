@@ -15,7 +15,10 @@ public record CreateRecurringTransactionRequest(
         @NotNull @Pattern(regexp = "INCOME|EXPENSE") String type,
         @NotNull @DecimalMin(value = "0.01") BigDecimal amount,
         String note,
-        @NotNull @Min(1) @Max(31) Integer dayOfMonth,
+        @Pattern(regexp = "MONTHLY|WEEKLY|YEARLY") String frequency,
+        @Min(1) @Max(31) Integer dayOfMonth,
+        @Min(1) @Max(7) Integer dayOfWeek,
+        @Min(1) @Max(12) Integer monthOfYear,
         @NotNull LocalDate startDate,
         LocalDate endDate) {
 }

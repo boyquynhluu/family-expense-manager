@@ -14,11 +14,15 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,7 +40,9 @@ import com.family.expensemanager.auth.domain.entity.TwoFactorRecoveryCode;
 import com.family.expensemanager.auth.domain.entity.User;
 import com.family.expensemanager.auth.dto.AcceptInviteRequest;
 import com.family.expensemanager.auth.dto.AuthResponse;
+import com.family.expensemanager.auth.dto.ChangeEmailRequest;
 import com.family.expensemanager.auth.dto.ChangePasswordRequest;
+import com.family.expensemanager.auth.dto.DeleteAccountRequest;
 import com.family.expensemanager.auth.dto.FamilyMembershipResponse;
 import com.family.expensemanager.auth.dto.ForgotPasswordRequest;
 import com.family.expensemanager.auth.dto.InviteDetailsResponse;
@@ -44,20 +50,28 @@ import com.family.expensemanager.auth.dto.InviteMemberRequest;
 import com.family.expensemanager.auth.dto.LoginRequest;
 import com.family.expensemanager.auth.dto.LoginResponse;
 import com.family.expensemanager.auth.dto.MessageResponse;
+import com.family.expensemanager.auth.dto.PendingInviteResponse;
+import com.family.expensemanager.auth.dto.PersonalDataExportResponse;
 import com.family.expensemanager.auth.dto.RefreshRequest;
 import com.family.expensemanager.auth.dto.RegisterRequest;
+import com.family.expensemanager.auth.dto.RenameFamilyRequest;
 import com.family.expensemanager.auth.dto.ResetPasswordRequest;
 import com.family.expensemanager.auth.dto.SessionResponse;
+import com.family.expensemanager.auth.dto.TransferOwnershipRequest;
 import com.family.expensemanager.auth.dto.TwoFactorConfirmResponse;
 import com.family.expensemanager.auth.dto.TwoFactorSetupResponse;
 import com.family.expensemanager.auth.dto.UpdateProfileRequest;
 import com.family.expensemanager.auth.dto.UserProfileResponse;
+import com.family.expensemanager.auth.security.LoginAttemptStore;
+import com.family.expensemanager.auth.security.TotpSecretCipher;
 import com.family.expensemanager.auth.security.TotpService;
 import com.family.expensemanager.auth.security.TwoFactorChallengeStore;
 import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.event.FamilyInviteEvent;
+import com.family.expensemanager.common.event.FamilyMemberEvent;
 import com.family.expensemanager.common.event.PasswordResetEvent;
 import com.family.expensemanager.common.event.UserVerificationEvent;
+import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
@@ -79,6 +93,13 @@ public class AuthService {
 
     private static final int RECOVERY_CODE_COUNT = 8;
 
+    private static final String BAD_CREDENTIALS_MESSAGE = "Email hoặc mật khẩu không đúng";
+    private static final String ACCOUNT_LOCKED_MESSAGE = "Tài khoản đã bị khoá bởi quản trị viên";
+    private static final String INVALID_TWO_FACTOR_CODE_MESSAGE = "Mã xác thực không đúng hoặc đã được sử dụng";
+    /** Lets the shared /verify link (built by notification-service) tell an e-mail change token from a registration token; base64url never contains '.'. */
+    private static final String EMAIL_CHANGE_TOKEN_PREFIX = "ec.";
+    public static final String OAUTH2_ACCOUNT_LOCKED_ERROR = "account_locked";
+
     private final FamilyDao familyDao;
     private final UserDao userDao;
     private final RefreshTokenDao refreshTokenDao;
@@ -90,6 +111,8 @@ public class AuthService {
     private final RevokedSessionStore revokedSessionStore;
     private final TotpService totpService;
     private final TwoFactorChallengeStore twoFactorChallengeStore;
+    private final LoginAttemptStore loginAttemptStore;
+    private final TotpSecretCipher totpSecretCipher;
     private final ApplicationEventPublisher eventPublisher;
     private final long accessTokenTtlMillis;
     private final Duration refreshTokenTtl;
@@ -108,6 +131,8 @@ public class AuthService {
                         RevokedSessionStore revokedSessionStore,
                         TotpService totpService,
                         TwoFactorChallengeStore twoFactorChallengeStore,
+                        LoginAttemptStore loginAttemptStore,
+                        TotpSecretCipher totpSecretCipher,
                         ApplicationEventPublisher eventPublisher,
                         @Value("${jwt.access-token-ttl-minutes}") long accessTokenTtlMinutes,
                         @Value("${jwt.refresh-token-ttl-days}") long refreshTokenTtlDays,
@@ -125,6 +150,8 @@ public class AuthService {
         this.revokedSessionStore = revokedSessionStore;
         this.totpService = totpService;
         this.twoFactorChallengeStore = twoFactorChallengeStore;
+        this.loginAttemptStore = loginAttemptStore;
+        this.totpSecretCipher = totpSecretCipher;
         this.eventPublisher = eventPublisher;
         this.accessTokenTtlMillis = Duration.ofMinutes(accessTokenTtlMinutes).toMillis();
         this.refreshTokenTtl = Duration.ofDays(refreshTokenTtlDays);
@@ -156,6 +183,7 @@ public class AuthService {
         user.setProvider(PROVIDER_LOCAL);
         user.setIsSystemAdmin(Boolean.FALSE);
         user.setTotpEnabled(Boolean.FALSE);
+        user.setLocked(Boolean.FALSE);
         user.setVerificationToken(verificationToken);
         user.setVerificationTokenExpiresAt(LocalDateTime.now().plus(verificationTokenTtl));
         userDao.insert(user);
@@ -185,8 +213,15 @@ public class AuthService {
 
     public LoginResponse login(LoginRequest request, String deviceInfo, String ipAddress) {
         log.info("login - start, email={}", request.email());
-        User user = userDao.selectByEmail(request.email())
-                .orElseThrow(() -> new UnauthorizedException("Email hoặc mật khẩu không đúng"));
+        String email = request.email();
+        requireNotLockedOut(email);
+
+        // Unknown email and wrong password share one message and both count toward the lockout.
+        User user = userDao.selectByEmail(email).orElse(null);
+        if (user == null) {
+            loginAttemptStore.recordFailure(email);
+            throw new UnauthorizedException(BAD_CREDENTIALS_MESSAGE);
+        }
 
         if (user.getPasswordHash() == null) {
             throw new UnauthorizedException(
@@ -194,8 +229,11 @@ public class AuthService {
         }
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            throw new UnauthorizedException("Email hoặc mật khẩu không đúng");
+            loginAttemptStore.recordFailure(email);
+            throw new UnauthorizedException(BAD_CREDENTIALS_MESSAGE);
         }
+
+        requireNotLocked(user);
 
         if (!Boolean.TRUE.equals(user.getActive())) {
             throw new UnauthorizedException("Tài khoản chưa được xác thực email. Vui lòng kiểm tra hộp thư.");
@@ -204,12 +242,33 @@ public class AuthService {
         if (Boolean.TRUE.equals(user.getTotpEnabled())) {
             // Password alone isn't enough — hand back a short-lived challenge instead of
             // tokens; the real tokens only get minted once /2fa/verify-login checks the
-            // code (see README "9. Không có 2FA").
+            // code (see README "9. Không có 2FA"). The failure counter is only cleared
+            // after that second step, so the 2FA code can't be brute-forced for free.
             String challengeToken = twoFactorChallengeStore.issueChallenge(user.getId());
             return LoginResponse.ofChallenge(challengeToken);
         }
 
+        loginAttemptStore.reset(email);
         return LoginResponse.ofTokens(issueTokens(user, deviceInfo, ipAddress));
+    }
+
+    private void requireNotLockedOut(String email) {
+        long minutes = loginAttemptStore.remainingLockMinutes(email);
+        if (minutes > 0) {
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Tài khoản tạm khoá do đăng nhập sai nhiều lần, thử lại sau " + minutes + " phút");
+        }
+    }
+
+    private static void requireNotLocked(User user) {
+        if (Boolean.TRUE.equals(user.getLocked())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, ACCOUNT_LOCKED_MESSAGE);
+        }
+    }
+
+    /** For login paths that authenticate the user without a password (OAuth2) but must still demand the 2FA code. */
+    public String issueTwoFactorChallenge(Long userId) {
+        return twoFactorChallengeStore.issueChallenge(userId);
     }
 
     /** Second step of login for a 2FA-enabled account — accepts either a live TOTP code or an unused recovery code. */
@@ -220,18 +279,48 @@ public class AuthService {
         User user = userDao.selectById(userId)
                 .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
 
+        requireNotLocked(user);
+        requireNotLockedOut(user.getEmail());
+
         if (!isValidTwoFactorCode(user, code)) {
+            loginAttemptStore.recordFailure(user.getEmail());
             throw new UnauthorizedException("Mã xác thực không đúng");
         }
 
+        loginAttemptStore.reset(user.getEmail());
         return issueTokens(user, deviceInfo, ipAddress);
     }
 
     private boolean isValidTwoFactorCode(User user, String code) {
-        if (totpService.verifyCode(user.getTotpSecret(), code)) {
+        if (acceptTotpCode(user, code)) {
+            userDao.update(user);
             return true;
         }
         return consumeRecoveryCodeIfValid(user.getId(), code);
+    }
+
+    /**
+     * Checks a TOTP against the decrypted secret and remembers its time step on the (not yet saved)
+     * user, so the same code can never be accepted twice. The caller must persist the user.
+     */
+    private boolean acceptTotpCode(User user, String code) {
+        if (user.getTotpSecret() == null) {
+            return false;
+        }
+        String secret = totpSecretCipher.decrypt(user.getTotpSecret());
+        Optional<Long> step = totpService.matchStep(secret, code);
+        if (step.isEmpty()) {
+            return false;
+        }
+        Long lastStep = user.getTotpLastStep();
+        if (lastStep != null && step.get() <= lastStep) {
+            return false;
+        }
+        user.setTotpLastStep(step.get());
+        if (!totpSecretCipher.isEncrypted(user.getTotpSecret())) {
+            user.setTotpSecret(totpSecretCipher.encrypt(secret));
+        }
+        return true;
     }
 
     private boolean consumeRecoveryCodeIfValid(Long userId, String code) {
@@ -257,6 +346,7 @@ public class AuthService {
 
         User user = userDao.selectById(stored.getUserId())
                 .orElseThrow(() -> new UnauthorizedException("Tài khoản không còn tồn tại"));
+        requireNotLocked(user);
 
         stored.setRevoked(true);
         refreshTokenDao.update(stored);
@@ -296,6 +386,7 @@ public class AuthService {
         user.setResetPasswordToken(null);
         user.setResetPasswordTokenExpiresAt(null);
         userDao.update(user);
+        loginAttemptStore.reset(user.getEmail());
     }
 
     public UserProfileResponse getProfile(Long userId) {
@@ -333,6 +424,134 @@ public class AuthService {
     }
 
     /**
+     * Re-authentication for sensitive actions: accounts with a password must send it; provider-only
+     * accounts (Google/Facebook, no password) must send a live TOTP, so they need 2FA set up first.
+     */
+    private void requireReauthentication(User user, String password, String code) {
+        if (user.getPasswordHash() != null) {
+            if (password == null || password.isBlank()
+                    || !passwordEncoder.matches(password, user.getPasswordHash())) {
+                throw new UnauthorizedException("Mật khẩu không đúng");
+            }
+            return;
+        }
+        if (!Boolean.TRUE.equals(user.getTotpEnabled())) {
+            throw new BadRequestException("Tài khoản này đăng nhập qua " + user.getProvider()
+                    + " và chưa có mật khẩu. Hãy bật xác thực 2 lớp (2FA) để thực hiện thao tác này.");
+        }
+        if (code == null || code.isBlank() || !acceptTotpCode(user, code)) {
+            throw new UnauthorizedException(INVALID_TWO_FACTOR_CODE_MESSAGE);
+        }
+        userDao.update(user);
+    }
+
+    /** Stores the new address as pending and mails a confirmation link to it; the address only changes once that link is opened. */
+    public MessageResponse requestEmailChange(Long userId, ChangeEmailRequest request) {
+        log.info("requestEmailChange - start, userId={}", userId);
+        User user = userDao.selectById(userId)
+                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+        requireReauthentication(user, request.password(), request.code());
+
+        String newEmail = request.newEmail().trim();
+        if (newEmail.equalsIgnoreCase(user.getEmail())) {
+            throw new BadRequestException("Email mới trùng với email hiện tại");
+        }
+        userDao.selectByEmail(newEmail).ifPresent(existing -> {
+            throw new ConflictException("Email đã được sử dụng: " + newEmail);
+        });
+
+        String token = EMAIL_CHANGE_TOKEN_PREFIX + generateOpaqueToken();
+        user.setPendingEmail(newEmail);
+        user.setPendingEmailToken(token);
+        user.setPendingEmailExpiresAt(LocalDateTime.now().plus(verificationTokenTtl));
+        userDao.update(user);
+
+        eventPublisher.publishEvent(new UserVerificationEvent(
+                user.getId(), newEmail, user.getDisplayName(), token, Instant.now()));
+
+        return new MessageResponse("Đã gửi link xác nhận đến " + newEmail + ". Email chỉ đổi sau khi bạn mở link đó.");
+    }
+
+    public boolean isEmailChangeToken(String token) {
+        return token != null && token.startsWith(EMAIL_CHANGE_TOKEN_PREFIX);
+    }
+
+    /** Public (the link may be opened without being logged in), so every session of the account is revoked afterwards. */
+    public void verifyEmailChange(String token) {
+        log.info("verifyEmailChange - start");
+        User user = userDao.selectByPendingEmailToken(token)
+                .orElseThrow(() -> new BadRequestException("Link đổi email không hợp lệ"));
+
+        if (user.getPendingEmail() == null || user.getPendingEmailExpiresAt() == null
+                || user.getPendingEmailExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new BadRequestException("Link đổi email đã hết hạn");
+        }
+        String newEmail = user.getPendingEmail();
+        userDao.selectByEmail(newEmail)
+                .filter(existing -> !existing.getId().equals(user.getId()))
+                .ifPresent(existing -> {
+                    throw new ConflictException("Email đã được sử dụng: " + newEmail);
+                });
+
+        user.setEmail(newEmail);
+        user.setPendingEmail(null);
+        user.setPendingEmailToken(null);
+        user.setPendingEmailExpiresAt(null);
+        userDao.update(user);
+        revokeAllSessions(user.getId());
+    }
+
+    public PersonalDataExportResponse exportPersonalData(Long userId, Long currentSessionId) {
+        log.info("exportPersonalData - start, userId={}", userId);
+        User user = userDao.selectById(userId)
+                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+        List<SessionResponse> sessions = refreshTokenDao.selectActiveByUserId(userId).stream()
+                .map(t -> SessionResponse.from(t, currentSessionId))
+                .toList();
+        return new PersonalDataExportResponse(UserProfileResponse.from(user), listMyFamilies(userId), sessions);
+    }
+
+    /**
+     * Auth-side deletion only: expense/notification data of a family emptied by this deletion is left
+     * orphaned in those services. An OWNER of a family that still has other members must transfer ownership first.
+     */
+    public void deleteAccount(Long userId, DeleteAccountRequest request) {
+        log.info("deleteAccount - start, userId={}", userId);
+        User user = userDao.selectById(userId)
+                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+        requireReauthentication(user, request.password(), request.code());
+
+        List<FamilyMembership> memberships = familyMembershipDao.selectByUserId(userId);
+        for (FamilyMembership membership : memberships) {
+            if (ROLE_OWNER.equals(membership.getRole())
+                    && familyMembershipDao.countByFamilyId(membership.getFamilyId()) > 1) {
+                String familyName = familyDao.selectById(membership.getFamilyId())
+                        .map(Family::getName)
+                        .orElse(String.valueOf(membership.getFamilyId()));
+                throw new BadRequestException("Bạn đang là chủ hộ của gia đình \"" + familyName
+                        + "\" vẫn còn thành viên khác. Hãy chuyển quyền chủ hộ trước khi xoá tài khoản.");
+            }
+        }
+
+        revokeAllSessions(userId);
+        refreshTokenDao.deleteByUserId(userId);
+        twoFactorRecoveryCodeDao.deleteByUserId(userId);
+        familyInviteDao.deleteByInvitedByUserId(userId);
+        memberships.forEach(familyMembershipDao::delete);
+        userDao.delete(user);
+
+        for (FamilyMembership membership : memberships) {
+            Long familyId = membership.getFamilyId();
+            if (familyMembershipDao.countByFamilyId(familyId) == 0) {
+                familyInviteDao.deleteByFamilyId(familyId);
+                familyDao.selectById(familyId).ifPresent(familyDao::delete);
+            } else {
+                publishMemberEvent(FamilyMemberEvent.MEMBER_LEFT, familyId, userId, user.getDisplayName());
+            }
+        }
+    }
+
+    /**
      * Step 1 of enabling 2FA: generates a secret and stores it, but leaves
      * {@code totpEnabled=false} — it only flips on once {@link #confirmTwoFactor} proves
      * the user actually scanned it correctly, so a half-finished setup can never lock
@@ -342,9 +561,13 @@ public class AuthService {
         log.info("setupTwoFactor - start, userId={}", userId);
         User user = userDao.selectById(userId)
                 .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+        if (Boolean.TRUE.equals(user.getTotpEnabled())) {
+            throw new BadRequestException("2FA đang bật. Hãy tắt 2FA (cần nhập mật khẩu) trước khi thiết lập lại");
+        }
 
         String secret = totpService.generateSecret();
-        user.setTotpSecret(secret);
+        user.setTotpSecret(totpSecretCipher.encrypt(secret));
+        user.setTotpLastStep(null);
         user.setTotpEnabled(false);
         userDao.update(user);
 
@@ -359,7 +582,7 @@ public class AuthService {
         if (user.getTotpSecret() == null) {
             throw new BadRequestException("Chưa bắt đầu thiết lập 2FA");
         }
-        if (!totpService.verifyCode(user.getTotpSecret(), code)) {
+        if (!acceptTotpCode(user, code)) {
             throw new BadRequestException("Mã xác thực không đúng");
         }
 
@@ -380,16 +603,37 @@ public class AuthService {
         return new TwoFactorConfirmResponse(recoveryCodes);
     }
 
-    public void disableTwoFactor(Long userId, String password) {
+    /**
+     * Exactly one of {@code password} / {@code code}: accounts with a password confirm with it,
+     * provider-only accounts (no password) confirm with a live TOTP or an unused recovery code.
+     */
+    public void disableTwoFactor(Long userId, String password, String code) {
         log.info("disableTwoFactor - start, userId={}", userId);
         User user = userDao.selectById(userId)
                 .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
-        if (user.getPasswordHash() == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
-            throw new UnauthorizedException("Mật khẩu không đúng");
+
+        boolean hasPassword = password != null && !password.isBlank();
+        boolean hasCode = code != null && !code.isBlank();
+        if (hasPassword == hasCode) {
+            throw new BadRequestException("Vui lòng nhập mật khẩu hoặc mã xác thực (chỉ một trong hai)");
+        }
+
+        if (hasPassword) {
+            if (user.getPasswordHash() == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
+                throw new UnauthorizedException("Mật khẩu không đúng");
+            }
+        } else {
+            if (user.getPasswordHash() != null) {
+                throw new BadRequestException("Tài khoản có mật khẩu, vui lòng nhập mật khẩu để tắt 2FA");
+            }
+            if (!isValidTwoFactorCode(user, code)) {
+                throw new UnauthorizedException(INVALID_TWO_FACTOR_CODE_MESSAGE);
+            }
         }
 
         user.setTotpEnabled(false);
         user.setTotpSecret(null);
+        user.setTotpLastStep(null);
         userDao.update(user);
         twoFactorRecoveryCodeDao.deleteByUserId(userId);
     }
@@ -455,6 +699,103 @@ public class AuthService {
             target.setRole(fallback.getRole());
             userDao.update(target);
         }
+        publishMemberEvent(FamilyMemberEvent.MEMBER_REMOVED, familyId, targetUserId, target.getDisplayName());
+    }
+
+    private void publishMemberEvent(String eventType, Long familyId, Long memberUserId, String memberDisplayName) {
+        eventPublisher.publishEvent(new FamilyMemberEvent(
+                eventType, familyId, memberUserId, memberDisplayName, Instant.now()));
+    }
+
+    @PreAuthorize("hasRole('OWNER')")
+    public MessageResponse renameFamily(Long familyId, RenameFamilyRequest request) {
+        log.info("renameFamily - start, familyId={}", familyId);
+        Family family = familyDao.selectById(familyId)
+                .orElseThrow(() -> new NotFoundException("Gia đình không tồn tại: " + familyId));
+        family.setName(request.name().trim());
+        familyDao.update(family);
+        return new MessageResponse("Đã đổi tên gia đình");
+    }
+
+    /**
+     * Returns fresh tokens because the caller's active family (and so the JWT's
+     * familyId/role claims) changes; the session that made this call is revoked so
+     * its old token can't keep acting on the family they just left.
+     */
+    public AuthResponse leaveFamily(Long familyId, Long userId, Long currentSessionId,
+                                     String deviceInfo, String ipAddress) {
+        log.info("leaveFamily - start, familyId={}, userId={}", familyId, userId);
+        FamilyMembership membership = familyMembershipDao.selectByUserIdAndFamilyId(userId, familyId)
+                .orElseThrow(() -> new NotFoundException("Bạn không thuộc gia đình này"));
+        if (ROLE_OWNER.equals(membership.getRole())) {
+            throw new BadRequestException(
+                    "Chủ hộ không thể rời gia đình. Hãy chuyển quyền chủ hộ cho thành viên khác trước.");
+        }
+        User user = userDao.selectById(userId)
+                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+        familyMembershipDao.delete(membership);
+
+        List<FamilyMembership> remaining = familyMembershipDao.selectByUserId(userId);
+        if (!remaining.isEmpty()) {
+            FamilyMembership fallback = remaining.get(0);
+            user.setFamilyId(fallback.getFamilyId());
+            user.setRole(fallback.getRole());
+        } else {
+            // Every account needs at least one family to be active in, or it can't log in usefully.
+            Family personal = new Family();
+            personal.setName(user.getDisplayName() + "'s Family");
+            personal.setCreatedAt(LocalDateTime.now());
+            familyDao.insert(personal);
+            addMembership(userId, personal.getId(), ROLE_OWNER);
+            user.setFamilyId(personal.getId());
+            user.setRole(ROLE_OWNER);
+        }
+        userDao.update(user);
+        publishMemberEvent(FamilyMemberEvent.MEMBER_LEFT, familyId, userId, user.getDisplayName());
+
+        logout(userId, currentSessionId);
+        return issueTokens(user, deviceInfo, ipAddress);
+    }
+
+    /**
+     * Hands the OWNER role to another existing member. FAMILY_MEMBERSHIPS is the source
+     * of truth; USERS.role is mirrored only for users whose currently-active family is
+     * this one (it tracks the active family's role, see {@link #switchFamily}). Swapping
+     * both roles in one step means the family never has zero OWNERs.
+     */
+    @PreAuthorize("hasRole('OWNER')")
+    public AuthResponse transferOwnership(Long familyId, Long callerUserId, Long currentSessionId,
+                                           TransferOwnershipRequest request, String deviceInfo, String ipAddress) {
+        Long targetUserId = request.userId();
+        log.info("transferOwnership - start, familyId={}, targetUserId={}", familyId, targetUserId);
+        if (targetUserId.equals(callerUserId)) {
+            throw new BadRequestException("Bạn đã là chủ hộ của gia đình này");
+        }
+        FamilyMembership callerMembership = familyMembershipDao.selectByUserIdAndFamilyId(callerUserId, familyId)
+                .orElseThrow(() -> new NotFoundException("Bạn không thuộc gia đình này"));
+        FamilyMembership targetMembership = familyMembershipDao.selectByUserIdAndFamilyId(targetUserId, familyId)
+                .orElseThrow(() -> new NotFoundException("Thành viên không tồn tại: " + targetUserId));
+        User caller = userDao.selectById(callerUserId)
+                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+        User target = userDao.selectById(targetUserId)
+                .orElseThrow(() -> new NotFoundException("Thành viên không tồn tại: " + targetUserId));
+
+        targetMembership.setRole(ROLE_OWNER);
+        familyMembershipDao.update(targetMembership);
+        callerMembership.setRole(ROLE_MEMBER);
+        familyMembershipDao.update(callerMembership);
+
+        if (familyId.equals(target.getFamilyId())) {
+            target.setRole(ROLE_OWNER);
+            userDao.update(target);
+        }
+        if (familyId.equals(caller.getFamilyId())) {
+            caller.setRole(ROLE_MEMBER);
+            userDao.update(caller);
+        }
+
+        logout(callerUserId, currentSessionId);
+        return issueTokens(caller, deviceInfo, ipAddress);
     }
 
     @PreAuthorize("hasRole('OWNER')")
@@ -470,20 +811,69 @@ public class AuthService {
         User inviter = userDao.selectById(inviterUserId)
                 .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
 
-        String token = generateOpaqueToken();
         FamilyInvite invite = new FamilyInvite();
         invite.setFamilyId(familyId);
         invite.setEmail(request.email());
-        invite.setToken(token);
         invite.setInvitedByUserId(inviterUserId);
-        invite.setExpiresAt(LocalDateTime.now().plus(inviteTokenTtl));
         invite.setCreatedAt(LocalDateTime.now());
+        renewInviteToken(invite);
         familyInviteDao.insert(invite);
 
-        eventPublisher.publishEvent(new FamilyInviteEvent(
-                familyId, family.getName(), request.email(), inviter.getDisplayName(), token, Instant.now()));
+        publishInviteEvent(family, inviter, invite);
 
         return new MessageResponse("Đã gửi lời mời đến " + request.email());
+    }
+
+    private void renewInviteToken(FamilyInvite invite) {
+        invite.setToken(generateOpaqueToken());
+        invite.setExpiresAt(LocalDateTime.now().plus(inviteTokenTtl));
+    }
+
+    private void publishInviteEvent(Family family, User inviter, FamilyInvite invite) {
+        eventPublisher.publishEvent(new FamilyInviteEvent(
+                family.getId(), family.getName(), invite.getEmail(), inviter.getDisplayName(),
+                invite.getToken(), Instant.now()));
+    }
+
+    @PreAuthorize("hasRole('OWNER')")
+    public PageResponse<PendingInviteResponse> getPendingInvitesPaged(Long familyId, int page, int size) {
+        log.info("getPendingInvitesPaged - start, familyId={}, page={}, size={}", familyId, page, size);
+        validatePage(page, size);
+        long totalElements = familyInviteDao.countPendingByFamilyId(familyId);
+        List<PendingInviteResponse> content = familyInviteDao.selectPendingByFamilyIdPaged(familyId, size, page * size)
+                .stream()
+                .map(PendingInviteResponse::from)
+                .toList();
+        return PageResponse.of(content, page, size, totalElements);
+    }
+
+    @PreAuthorize("hasRole('OWNER')")
+    public void cancelInvite(Long familyId, Long inviteId) {
+        log.info("cancelInvite - start, familyId={}, inviteId={}", familyId, inviteId);
+        FamilyInvite invite = familyInviteDao.selectByIdAndFamilyId(inviteId, familyId)
+                .orElseThrow(() -> new NotFoundException("Lời mời không tồn tại: " + inviteId));
+        familyInviteDao.delete(invite);
+    }
+
+    /** Issues a fresh token (the old link stops working) and extends the expiry, so an expired invite can be revived too. */
+    @PreAuthorize("hasRole('OWNER')")
+    public MessageResponse resendInvite(Long familyId, Long callerUserId, Long inviteId) {
+        log.info("resendInvite - start, familyId={}, inviteId={}", familyId, inviteId);
+        FamilyInvite invite = familyInviteDao.selectByIdAndFamilyId(inviteId, familyId)
+                .orElseThrow(() -> new NotFoundException("Lời mời không tồn tại: " + inviteId));
+        if (invite.getAcceptedAt() != null) {
+            throw new BadRequestException("Lời mời này đã được sử dụng");
+        }
+        Family family = familyDao.selectById(familyId)
+                .orElseThrow(() -> new NotFoundException("Gia đình không tồn tại: " + familyId));
+        User caller = userDao.selectById(callerUserId)
+                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+
+        renewInviteToken(invite);
+        familyInviteDao.update(invite);
+        publishInviteEvent(family, caller, invite);
+
+        return new MessageResponse("Đã gửi lại lời mời đến " + invite.getEmail());
     }
 
     public InviteDetailsResponse getInviteDetails(String token) {
@@ -516,6 +906,8 @@ public class AuthService {
             addMembership(existingUser.getId(), invite.getFamilyId(), ROLE_MEMBER);
             invite.setAcceptedAt(LocalDateTime.now());
             familyInviteDao.update(invite);
+            publishMemberEvent(FamilyMemberEvent.MEMBER_JOINED, invite.getFamilyId(), existingUser.getId(),
+                    existingUser.getDisplayName());
             return;
         }
 
@@ -535,11 +927,13 @@ public class AuthService {
         user.setProvider(PROVIDER_LOCAL);
         user.setIsSystemAdmin(Boolean.FALSE);
         user.setTotpEnabled(Boolean.FALSE);
+        user.setLocked(Boolean.FALSE);
         userDao.insert(user);
         addMembership(user.getId(), invite.getFamilyId(), ROLE_MEMBER);
 
         invite.setAcceptedAt(LocalDateTime.now());
         familyInviteDao.update(invite);
+        publishMemberEvent(FamilyMemberEvent.MEMBER_JOINED, invite.getFamilyId(), user.getId(), user.getDisplayName());
     }
 
     private FamilyInvite requireValidInvite(String token) {
@@ -569,11 +963,13 @@ public class AuthService {
 
         User existingByProvider = userDao.selectByProviderAndProviderId(provider, providerId).orElse(null);
         if (existingByProvider != null) {
+            requireNotLockedForOAuth2(existingByProvider);
             return existingByProvider;
         }
 
         User existingByEmail = userDao.selectByEmail(email).orElse(null);
         if (existingByEmail != null) {
+            requireNotLockedForOAuth2(existingByEmail);
             // Link this provider to the account already registered with that (verified) email.
             existingByEmail.setProvider(provider);
             existingByEmail.setProviderId(providerId);
@@ -598,9 +994,18 @@ public class AuthService {
         user.setProviderId(providerId);
         user.setIsSystemAdmin(Boolean.FALSE);
         user.setTotpEnabled(Boolean.FALSE);
+        user.setLocked(Boolean.FALSE);
         userDao.insert(user);
         addMembership(user.getId(), family.getId(), ROLE_OWNER);
         return user;
+    }
+
+    /** Thrown as an OAuth2 error (not an ApiException) because it surfaces inside the login filter, where only the failure handler's redirect can reach the browser. */
+    private static void requireNotLockedForOAuth2(User user) {
+        if (Boolean.TRUE.equals(user.getLocked())) {
+            throw new OAuth2AuthenticationException(
+                    new OAuth2Error(OAUTH2_ACCOUNT_LOCKED_ERROR, ACCOUNT_LOCKED_MESSAGE, null), ACCOUNT_LOCKED_MESSAGE);
+        }
     }
 
     /** Every family this account belongs to — backs the family switcher UI. */
@@ -630,6 +1035,7 @@ public class AuthService {
                 .orElseThrow(() -> new NotFoundException("Bạn không thuộc gia đình này"));
         User user = userDao.selectById(userId)
                 .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+        requireNotLocked(user);
         user.setFamilyId(targetFamilyId);
         user.setRole(membership.getRole());
         userDao.update(user);
@@ -658,6 +1064,7 @@ public class AuthService {
      */
     public AuthResponse issueTokens(User user, String deviceInfo, String ipAddress) {
         log.info("issueTokens - start, userId={}", user.getId());
+        requireNotLocked(user);
         LocalDateTime now = LocalDateTime.now();
         String rawRefreshToken = generateOpaqueToken();
         RefreshToken refreshToken = new RefreshToken();
@@ -725,6 +1132,17 @@ public class AuthService {
         }
         refreshTokenDao.revokeAllByUserIdExcept(userId, currentSessionId);
         toRevoke.forEach(t -> revokedSessionStore.markRevoked(t.getId(), accessTokenTtlMillis));
+    }
+
+    /** Revokes every active session of the account and blocks their access tokens immediately (admin lock, e-mail change). */
+    public void revokeAllSessions(Long userId) {
+        log.info("revokeAllSessions - start, userId={}", userId);
+        List<RefreshToken> active = refreshTokenDao.selectActiveByUserId(userId);
+        if (active.isEmpty()) {
+            return;
+        }
+        refreshTokenDao.revokeAllByUserId(userId);
+        active.forEach(t -> revokedSessionStore.markRevoked(t.getId(), accessTokenTtlMillis));
     }
 
     private String truncate(String value, int maxLength) {

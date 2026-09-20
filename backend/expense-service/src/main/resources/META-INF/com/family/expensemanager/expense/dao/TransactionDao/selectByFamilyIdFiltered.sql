@@ -4,6 +4,7 @@ SELECT
     category_id,
     family_id,
     user_id,
+    created_by_name,
     type,
     amount,
     occurred_at,
@@ -30,6 +31,15 @@ WHERE
 /*%end*/
 /*%if toDate != null */
     AND DATE(occurred_at) <= /* toDate */'2025-01-31'
+/*%end*/
+/*%if notePattern != null */
+    AND LOWER(note) LIKE /* notePattern */'%abc%' ESCAPE '!'
+/*%end*/
+/*%if minAmount != null */
+    AND amount >= /* minAmount */0
+/*%end*/
+/*%if maxAmount != null */
+    AND amount <= /* maxAmount */0
 /*%end*/
 ORDER BY
     occurred_at DESC, id DESC

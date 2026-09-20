@@ -47,6 +47,7 @@ kafka:
     user-verification: user-verification
     password-reset: password-reset
     family-invite: family-invite
+    family-member-events: family-member-events
 
 app:
   base-url: ${APP_BASE_URL:http://localhost:8080}

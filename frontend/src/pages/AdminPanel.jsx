@@ -34,6 +34,22 @@ export default function AdminPanel() {
     }
   }
 
+  async function toggleLocked(user) {
+    const nextValue = !user.locked;
+    const confirmMessage = nextValue
+      ? t("lockConfirm", { email: user.email })
+      : t("unlockConfirm", { email: user.email });
+    const title = nextValue ? t("lockSwalTitle") : t("unlockSwalTitle");
+    if (!(await confirmDialog(confirmMessage, { title }))) return;
+    try {
+      await client.put(`/admin/users/${user.id}/locked`, { locked: nextValue });
+      toast.success(nextValue ? t("lockSuccess") : t("unlockSuccess"));
+      reloadUsers();
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("lockFailed"));
+    }
+  }
+
   return (
     <div>
       <div className="page-header">
@@ -99,9 +115,13 @@ export default function AdminPanel() {
                   <td data-label={t("familyHeader")}>{u.familyName ?? `#${u.familyId}`}</td>
                   <td data-label={t("roleHeader")}>{u.role}</td>
                   <td data-label={t("statusHeader")}>
-                    <span className={`badge ${u.active ? "badge-income" : "badge-expense"}`}>
-                      {u.active ? t("activated") : t("notActivated")}
-                    </span>
+                    {u.locked ? (
+                      <span className="badge badge-expense">{t("locked")}</span>
+                    ) : (
+                      <span className={`badge ${u.active ? "badge-income" : "badge-expense"}`}>
+                        {u.active ? t("activated") : t("notActivated")}
+                      </span>
+                    )}
                   </td>
                   <td data-label={t("systemAdminHeader")}>{u.isSystemAdmin ? t("common:yes") : t("common:no")}</td>
                   <td className="row-actions">
@@ -112,6 +132,14 @@ export default function AdminPanel() {
                       disabled={String(u.id) === String(userId) && u.isSystemAdmin}
                     >
                       {u.isSystemAdmin ? t("revokeAdminButton") : t("grantAdminButton")}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => toggleLocked(u)}
+                      disabled={!u.locked && (u.isSystemAdmin || String(u.id) === String(userId))}
+                    >
+                      {u.locked ? t("unlockButton") : t("lockButton")}
                     </button>
                   </td>
                 </tr>

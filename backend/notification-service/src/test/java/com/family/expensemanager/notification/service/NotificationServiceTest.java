@@ -26,21 +26,24 @@ class NotificationServiceTest {
 
     @Mock
     private NotificationDao notificationDao;
+    @Mock
+    private NotificationPreferenceService preferenceService;
 
     private NotificationService notificationService;
 
     @BeforeEach
     void setUp() {
-        notificationService = new NotificationService(notificationDao);
+        notificationService = new NotificationService(notificationDao, preferenceService);
     }
 
     @Test
     void listByFamilyPaged_returnsPageWithOffset() {
-        when(notificationDao.countByFamilyId(1L)).thenReturn(12L);
-        when(notificationDao.selectByFamilyIdPaged(1L, 5, 10))
+        when(preferenceService.disabledInAppTypes(7L)).thenReturn(List.of());
+        when(notificationDao.countByFamilyId(1L, List.of())).thenReturn(12L);
+        when(notificationDao.selectByFamilyIdPaged(1L, List.of(), 5, 10))
                 .thenReturn(List.of(notification(11L, 1L, false), notification(12L, 1L, true)));
 
-        var result = notificationService.listByFamilyPaged(1L, 2, 5);
+        var result = notificationService.listByFamilyPaged(1L, 7L, 2, 5);
 
         assertThat(result.content()).hasSize(2);
         assertThat(result.page()).isEqualTo(2);
@@ -50,24 +53,72 @@ class NotificationServiceTest {
     }
 
     @Test
+    void listByFamilyPaged_excludesTypesTheCallerDisabledInApp() {
+        List<String> disabled = List.of("MEMBER_JOINED", "RECURRING_EXECUTED");
+        when(preferenceService.disabledInAppTypes(7L)).thenReturn(disabled);
+        when(notificationDao.countByFamilyId(1L, disabled)).thenReturn(1L);
+        when(notificationDao.selectByFamilyIdPaged(1L, disabled, 5, 0))
+                .thenReturn(List.of(notification(11L, 1L, false)));
+
+        var result = notificationService.listByFamilyPaged(1L, 7L, 0, 5);
+
+        assertThat(result.content()).hasSize(1);
+        assertThat(result.totalElements()).isEqualTo(1L);
+    }
+
+    @Test
     void listByFamilyPaged_rejectsNegativePage() {
-        assertThatThrownBy(() -> notificationService.listByFamilyPaged(1L, -1, 5))
+        assertThatThrownBy(() -> notificationService.listByFamilyPaged(1L, 7L, -1, 5))
                 .isInstanceOf(BadRequestException.class);
     }
 
     @Test
     void listByFamilyPaged_rejectsOutOfRangeSize() {
-        assertThatThrownBy(() -> notificationService.listByFamilyPaged(1L, 0, 0))
+        assertThatThrownBy(() -> notificationService.listByFamilyPaged(1L, 7L, 0, 0))
                 .isInstanceOf(BadRequestException.class);
-        assertThatThrownBy(() -> notificationService.listByFamilyPaged(1L, 0, 101))
+        assertThatThrownBy(() -> notificationService.listByFamilyPaged(1L, 7L, 0, 101))
                 .isInstanceOf(BadRequestException.class);
     }
 
     @Test
-    void countUnread_delegatesToDao() {
-        when(notificationDao.countUnreadByFamilyId(1L)).thenReturn(3L);
+    void countUnread_delegatesToDao_excludingDisabledTypes() {
+        List<String> disabled = List.of("BUDGET_WARNING");
+        when(preferenceService.disabledInAppTypes(7L)).thenReturn(disabled);
+        when(notificationDao.countUnreadByFamilyId(1L, disabled)).thenReturn(3L);
 
-        assertThat(notificationService.countUnread(1L)).isEqualTo(3L);
+        assertThat(notificationService.countUnread(1L, 7L)).isEqualTo(3L);
+    }
+
+    @Test
+    void delete_removesNotification_whenOwnedByFamily() {
+        Notification notification = notification(1L, 1L, true);
+        when(notificationDao.selectById(1L)).thenReturn(Optional.of(notification));
+
+        notificationService.delete(1L, 1L);
+
+        verify(notificationDao).delete(notification);
+    }
+
+    @Test
+    void delete_throwsNotFound_whenBelongsToAnotherFamily() {
+        when(notificationDao.selectById(1L)).thenReturn(Optional.of(notification(1L, 2L, true)));
+
+        assertThatThrownBy(() -> notificationService.delete(1L, 1L)).isInstanceOf(NotFoundException.class);
+        verify(notificationDao, never()).delete(any());
+    }
+
+    @Test
+    void delete_throwsNotFound_whenMissing() {
+        when(notificationDao.selectById(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> notificationService.delete(1L, 1L)).isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void deleteRead_deletesReadNotificationsOfTheFamilyOnly() {
+        notificationService.deleteRead(1L);
+
+        verify(notificationDao).deleteReadByFamilyId(1L);
     }
 
     @Test

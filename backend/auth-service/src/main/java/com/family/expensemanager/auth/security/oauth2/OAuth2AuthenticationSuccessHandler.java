@@ -44,6 +44,17 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
                     "Unexpected OAuth2 principal type: " + authentication.getPrincipal().getClass());
         }
 
+        if (Boolean.TRUE.equals(appUserPrincipal.getUser().getTotpEnabled())) {
+            // A Google/Facebook login proves the email, not the 2FA code — hand the frontend a
+            // challenge (same one password login issues) instead of tokens.
+            String challengeToken = authService.issueTwoFactorChallenge(appUserPrincipal.getUser().getId());
+            response.sendRedirect(UriComponentsBuilder.fromUriString(successRedirectUrl)
+                    .queryParam("twoFactorToken", challengeToken)
+                    .build()
+                    .toUriString());
+            return;
+        }
+
         AuthResponse tokens = authService.issueTokens(appUserPrincipal.getUser(),
                 RequestMetadataUtil.deviceInfo(request), RequestMetadataUtil.ipAddress(request));
 

@@ -82,6 +82,7 @@ class AuthDaoIT {
         user.setProvider("LOCAL");
         user.setIsSystemAdmin(false);
         user.setTotpEnabled(false);
+        user.setLocked(false);
         userDao.insert(user);
 
         assertThat(user.getId()).isNotNull();
@@ -139,6 +140,7 @@ class AuthDaoIT {
         user.setProvider("LOCAL");
         user.setIsSystemAdmin(false);
         user.setTotpEnabled(false);
+        user.setLocked(false);
         userDao.insert(user);
 
         LocalDateTime now = LocalDateTime.now().withNano(0);

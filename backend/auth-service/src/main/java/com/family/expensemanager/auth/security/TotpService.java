@@ -3,6 +3,7 @@ package com.family.expensemanager.auth.security;
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;
 import java.util.Locale;
+import java.util.Optional;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -43,17 +44,23 @@ public class TotpService {
     }
 
     public boolean verifyCode(String secret, String code) {
+        return matchStep(secret, code).isPresent();
+    }
+
+    /** The time step the code was generated for (within the allowed drift), so callers can reject a replay of the same step. */
+    public Optional<Long> matchStep(String secret, String code) {
         if (code == null || !code.matches("\\d{" + CODE_DIGITS + "}")) {
-            return false;
+            return Optional.empty();
         }
         long currentStep = System.currentTimeMillis() / 1000 / TIME_STEP_SECONDS;
         byte[] key = base32Decode(secret);
         for (int drift = -ALLOWED_STEP_DRIFT; drift <= ALLOWED_STEP_DRIFT; drift++) {
-            if (code.equals(generateCode(key, currentStep + drift))) {
-                return true;
+            long step = currentStep + drift;
+            if (code.equals(generateCode(key, step))) {
+                return Optional.of(step);
             }
         }
-        return false;
+        return Optional.empty();
     }
 
     private String generateCode(byte[] key, long step) {

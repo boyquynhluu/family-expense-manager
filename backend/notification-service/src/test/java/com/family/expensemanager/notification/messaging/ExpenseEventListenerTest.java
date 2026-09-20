@@ -2,7 +2,9 @@ package com.family.expensemanager.notification.messaging;
 
 import com.family.expensemanager.common.event.ExpenseEvent;
 import com.family.expensemanager.notification.dao.NotificationDao;
+import com.family.expensemanager.notification.domain.NotificationType;
 import com.family.expensemanager.notification.domain.entity.Notification;
+import com.family.expensemanager.notification.service.NotificationPreferenceService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.mail.internet.MimeMessage;
@@ -18,10 +20,13 @@ import org.springframework.mail.javamail.JavaMailSender;
 import jakarta.mail.Session;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Properties;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -33,14 +38,67 @@ class ExpenseEventListenerTest {
     private NotificationDao notificationDao;
     @Mock
     private JavaMailSender mailSender;
+    @Mock
+    private NotificationPreferenceService preferenceService;
 
     private ExpenseEventListener listener;
 
     @BeforeEach
     void setUp() {
+        lenient().when(preferenceService.isEmailEnabled(any(), eq(NotificationType.BUDGET_EXCEEDED))).thenReturn(true);
         listener = new ExpenseEventListener(
-                notificationDao, new ObjectMapper().registerModule(new JavaTimeModule()), mailSender,
-                "http://localhost:5173", "no-reply@fem.local");
+                notificationDao, preferenceService, new ObjectMapper().registerModule(new JavaTimeModule()),
+                mailSender, "http://localhost:5173", "no-reply@fem.local");
+    }
+
+    @Test
+    void onExpenseEvent_recordsNotificationButSkipsEmail_whenUserDisabledEmailForBudgetExceeded() throws Exception {
+        when(preferenceService.isEmailEnabled(10L, NotificationType.BUDGET_EXCEEDED)).thenReturn(false);
+
+        listener.onExpenseEvent(budgetExceededEvent("user@b.com"));
+
+        verify(notificationDao).insert(any());
+        verify(mailSender, never()).createMimeMessage();
+        verify(mailSender, never()).send(any(MimeMessage.class));
+    }
+
+    @Test
+    void onExpenseEvent_recordsInAppNotification_whenRecurringExecuted() throws Exception {
+        listener.onExpenseEvent(recurringEvent(ExpenseEvent.RECURRING_EXECUTED, 99L, "Tiền nhà", "Nhà ở"));
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(notificationCaptor.capture());
+        Notification saved = notificationCaptor.getValue();
+        assertThat(saved.getType()).isEqualTo(ExpenseEvent.RECURRING_EXECUTED);
+        assertThat(saved.getFamilyId()).isEqualTo(1L);
+        assertThat(saved.getUserId()).isEqualTo(10L);
+        assertThat(saved.getIsRead()).isFalse();
+        assertThat(saved.getTitle()).isEqualTo("Giao dịch định kỳ đã được ghi");
+        assertThat(saved.getMessage())
+                .isEqualTo("Đã ghi giao dịch định kỳ \"Tiền nhà\" (Nhà ở) 5,000,000 vào ngày 01/02/2026");
+        assertThat(saved.getPayloadJson()).contains("RECURRING_EXECUTED");
+        verify(mailSender, never()).createMimeMessage();
+    }
+
+    @Test
+    void onExpenseEvent_recordsInAppNotification_whenRecurringFailed_withoutNoteOrCategory() throws Exception {
+        listener.onExpenseEvent(recurringEvent(ExpenseEvent.RECURRING_FAILED, null, null, null));
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(notificationCaptor.capture());
+        Notification saved = notificationCaptor.getValue();
+        assertThat(saved.getType()).isEqualTo(ExpenseEvent.RECURRING_FAILED);
+        assertThat(saved.getTitle()).isEqualTo("Giao dịch định kỳ không thực hiện được");
+        assertThat(saved.getMessage()).isEqualTo(
+                "Không ghi được giao dịch định kỳ 5,000,000 vào ngày 01/02/2026. "
+                        + "Hệ thống sẽ thử lại vào lần chạy tiếp theo");
+        verify(mailSender, never()).createMimeMessage();
+    }
+
+    private static ExpenseEvent recurringEvent(String type, Long transactionId, String note, String categoryName) {
+        return new ExpenseEvent(
+                type, 1L, 10L, transactionId, 5L, BigDecimal.valueOf(5000000), null, null, null, categoryName,
+                "user@b.com", "Chủ hộ", Instant.now(), LocalDate.of(2026, 2, 1), note);
     }
 
     @Test
@@ -75,6 +133,56 @@ class ExpenseEventListenerTest {
         verify(notificationDao).insert(any());
         verify(mailSender, never()).createMimeMessage();
         verify(mailSender, never()).send(any(MimeMessage.class));
+    }
+
+    @Test
+    void onExpenseEvent_recordsNotificationOnly_whenBudgetWarning() throws Exception {
+        listener.onExpenseEvent(budgetEvent(ExpenseEvent.BUDGET_WARNING, 5L, "Ăn uống", "user@b.com",
+                BigDecimal.valueOf(850)));
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(notificationCaptor.capture());
+        Notification saved = notificationCaptor.getValue();
+        assertThat(saved.getType()).isEqualTo(ExpenseEvent.BUDGET_WARNING);
+        assertThat(saved.getTitle()).isEqualTo("Sắp vượt ngân sách tháng 2026-01");
+        assertThat(saved.getMessage()).isEqualTo("Danh mục Ăn uống đã chi 850 / giới hạn 1,000 (đạt 85%)");
+        verify(mailSender, never()).createMimeMessage();
+        verify(mailSender, never()).send(any(MimeMessage.class));
+    }
+
+    @Test
+    void onExpenseEvent_usesOverallLabel_whenBudgetWarningHasNoCategory() throws Exception {
+        listener.onExpenseEvent(budgetEvent(ExpenseEvent.BUDGET_WARNING, null, "Tổng chi tiêu", "user@b.com",
+                BigDecimal.valueOf(800)));
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(notificationCaptor.capture());
+        assertThat(notificationCaptor.getValue().getMessage())
+                .isEqualTo("Tổng chi tiêu đã chi 800 / giới hạn 1,000 (đạt 80%)");
+    }
+
+    @Test
+    void onExpenseEvent_handlesOverallBudgetExceeded_withNullCategory() throws Exception {
+        MimeMessage mimeMessage = new MimeMessage(Session.getInstance(new Properties()));
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+
+        listener.onExpenseEvent(budgetEvent(ExpenseEvent.BUDGET_EXCEEDED, null, null, "user@b.com",
+                BigDecimal.valueOf(1100)));
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(notificationCaptor.capture());
+        assertThat(notificationCaptor.getValue().getMessage())
+                .isEqualTo("Tổng chi tiêu đã chi 1,100 / giới hạn 1,000 trong tháng 2026-01");
+        verify(mailSender).send(mimeMessage);
+        assertThat(mimeMessage.getSubject()).contains("Tổng chi tiêu");
+    }
+
+    private static ExpenseEvent budgetEvent(String type, Long categoryId, String categoryName, String userEmail,
+                                             BigDecimal totalSpent) {
+        return new ExpenseEvent(
+                type, 1L, 10L, 100L, categoryId, BigDecimal.valueOf(50),
+                "2026-01", BigDecimal.valueOf(1000), totalSpent, categoryName,
+                userEmail, "Chủ hộ", Instant.now());
     }
 
     private static ExpenseEvent expenseCreatedEvent() {

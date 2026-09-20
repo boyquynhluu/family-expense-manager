@@ -16,5 +16,10 @@
   "no": "No",
   "paginationInfo": "{{total}} items — Page {{page}}/{{totalPages}}",
   "prevPage": "Previous",
-  "nextPage": "Next"
+  "nextPage": "Next",
+  "seedDefaultsButton": "Create sample wallet & categories",
+  "seedDefaultsSuccess": "Sample wallet and categories created",
+  "seedDefaultsNothingToDo": "Your family already has wallets and categories",
+  "seedDefaultsFailed": "Could not create sample data",
+  "seedDefaultsOwnerOnly": "Ask the household owner to create wallets and categories."
 }

@@ -10,6 +10,8 @@ import org.springframework.http.HttpHeaders;
  */
 public final class RequestMetadataUtil {
 
+    private static final String CLIENT_IP_HEADER = "X-Client-Ip";
+
     private RequestMetadataUtil() {
     }
 
@@ -18,13 +20,14 @@ public final class RequestMetadataUtil {
     }
 
     /**
-     * Requests arrive via api-gateway, so the direct socket address is always the
-     * gateway's own IP — the real client IP (if forwarded) is in X-Forwarded-For.
+     * Requests only reach this service through api-gateway, which strips any inbound
+     * X-Client-Ip and sets it to the trusted client IP; X-Forwarded-For is client-forgeable
+     * and deliberately ignored.
      */
     public static String ipAddress(HttpServletRequest request) {
-        String forwardedFor = request.getHeader("X-Forwarded-For");
-        if (forwardedFor != null && !forwardedFor.isBlank()) {
-            return forwardedFor.split(",")[0].trim();
+        String clientIp = request.getHeader(CLIENT_IP_HEADER);
+        if (clientIp != null && !clientIp.isBlank()) {
+            return clientIp.trim();
         }
         return request.getRemoteAddr();
     }

@@ -16,18 +16,26 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const [error, setError] = useState(location.state?.oauth2Error ? t("oauth2Error") : "");
+  const [error, setError] = useState(
+    location.state?.oauth2Error
+      ? t(location.state.oauth2ErrorCode === "account_locked" ? "accountLocked" : "oauth2Error")
+      : ""
+  );
   const [loading, setLoading] = useState(false);
 
   // Set only when the backend says the account has 2FA enabled (README "9. Không có
   // 2FA") — while set, the form below switches to asking for the 6-digit code instead
   // of email/password.
-  const [twoFactorToken, setTwoFactorToken] = useState(null);
+  const [twoFactorToken, setTwoFactorToken] = useState(location.state?.twoFactorToken ?? null);
   const [totpCode, setTotpCode] = useState("");
 
   useEffect(() => {
     if (location.state?.passwordResetSuccess) {
       toast.success(t("passwordResetSuccess"));
+      navigate(location.pathname, { replace: true, state: {} });
+    } else if (location.state?.twoFactorToken) {
+      // Already copied into component state above; drop it from history so a refresh
+      // doesn't replay a (single-use) challenge.
       navigate(location.pathname, { replace: true, state: {} });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -78,7 +86,7 @@ export default function Login() {
 
             {error && <p className="error-text">{error}</p>}
 
-            <div className="auth-input-group">
+            <div className="auth-input-group no-required-mark">
               <span className="auth-input-icon">
                 <KeyIcon />
               </span>
@@ -119,7 +127,7 @@ export default function Login() {
 
           {error && <p className="error-text">{error}</p>}
 
-          <div className="auth-input-group">
+          <div className="auth-input-group no-required-mark">
             <span className="auth-input-icon">
               <MailIcon />
             </span>
@@ -133,7 +141,7 @@ export default function Login() {
             />
           </div>
 
-          <div className="auth-input-group">
+          <div className="auth-input-group no-required-mark">
             <span className="auth-input-icon">
               <KeyIcon />
             </span>

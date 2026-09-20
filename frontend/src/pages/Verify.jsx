@@ -15,6 +15,9 @@ export default function Verify() {
   const handled = useRef(false);
   const [status, setStatus] = useState("verifying");
   const [error, setError] = useState("");
+  // notification-service links both registration and e-mail change confirmations to /verify?token=...;
+  // change tokens are recognisable by their "ec." prefix (see auth-service AuthService).
+  const isEmailChange = (searchParams.get("token") ?? "").startsWith("ec.");
 
   useEffect(() => {
     if (handled.current) return;
@@ -30,12 +33,12 @@ export default function Verify() {
     client
       .get("/auth/verify", { params: { token } })
       .then((res) => {
-        toast.success(res.data.data?.message || t("verifySuccess"));
+        toast.success(isEmailChange ? t("emailChangeSuccess") : res.data.data?.message || t("verifySuccess"));
         navigate("/login", { replace: true });
       })
       .catch((err) => {
         setStatus("error");
-        setError(err.response?.data?.message || t("verifyFailed"));
+        setError(err.response?.data?.message || t(isEmailChange ? "emailChangeFailed" : "verifyFailed"));
       });
   }, [searchParams, navigate]);
 
@@ -43,7 +46,7 @@ export default function Verify() {
     <div className="auth-page">
       <LanguageSwitcher variant="floating" />
       <div className="auth-form">
-        {status === "verifying" && <p className="verify-message">{t("verifying")}</p>}
+        {status === "verifying" && <p className="verify-message">{isEmailChange ? t("emailChangeVerifying") : t("verifying")}</p>}
         {status === "error" && (
           <>
             <p className="verify-message is-error">{error}</p>

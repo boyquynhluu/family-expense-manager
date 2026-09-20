@@ -26,5 +26,7 @@
   "facebookComingSoon": "Facebook đăng nhập sắp ra mắt",
   "githubComingSoon": "GitHub đăng nhập sắp ra mắt",
   "noAccount": "Chưa có tài khoản?",
-  "registerLink": "Đăng ký gia đình mới"
+  "registerLink": "Đăng ký gia đình mới",
+
+  "accountLocked": "Tài khoản đã bị khoá bởi quản trị viên"
 }

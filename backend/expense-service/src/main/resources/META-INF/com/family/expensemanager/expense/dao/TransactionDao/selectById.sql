@@ -4,6 +4,7 @@ SELECT
     category_id,
     family_id,
     user_id,
+    created_by_name,
     type,
     amount,
     occurred_at,

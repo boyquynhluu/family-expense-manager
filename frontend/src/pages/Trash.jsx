@@ -8,7 +8,7 @@ import { usePagedList } from "../hooks/usePagedList";
 
 export default function Trash() {
   const { t } = useTranslation("trash");
-  const { role } = useAuth();
+  const { role, userId } = useAuth();
   const isOwner = role === "OWNER";
   // One usePagedList per table: each keeps its own page state, so paging one table
   // never refetches (or resets) the other two.
@@ -141,9 +141,11 @@ export default function Trash() {
                   <td data-label={t("colNote")}>{t2.note || "-"}</td>
                   <td data-label={t("colDeletedAt")}>{formatDateTime(t2.deletedAt)}</td>
                   <td className="row-actions">
-                    <button type="button" onClick={() => handleRestore("transactions", t2.id, loadTransactions)}>
-                      {t("restoreButton")}
-                    </button>
+                    {(isOwner || String(t2.userId) === String(userId)) && (
+                      <button type="button" onClick={() => handleRestore("transactions", t2.id, loadTransactions)}>
+                        {t("restoreButton")}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -1,14 +1,16 @@
 import QRCode from "qrcode";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { TrashIcon } from "../components/AppIcons";
 import { EyeIcon, EyeOffIcon } from "../components/AuthIcons";
 import Pagination from "../components/Pagination";
+import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
 import { formatServerDateTime } from "../utils/format";
+import { clearTokens } from "../utils/tokenStorage";
 
 // The stored value is always this fixed Vietnamese word regardless of UI language —
 // only the displayed label is translated (see relationshipLabelFor below) — otherwise
@@ -29,8 +31,101 @@ const RELATIONSHIP_OPTIONS = [
   ["Khác", "relationshipOther"],
 ];
 
+// Its own component so the owner-only /auth/invites request is never fired (and rejected with 403) for regular members.
+function PendingInvitesSection({ reloadSignal }) {
+  const { t } = useTranslation(["profile", "common"]);
+  const { pageData, page, setPage, reload } = usePagedList("/auth/invites");
+  const invites = pageData.content;
+  const [busyInviteId, setBusyInviteId] = useState(null);
+  const handledSignal = useRef(reloadSignal);
+
+  // A new invite lands on the first page (newest first), so jump back there.
+  useEffect(() => {
+    if (handledSignal.current === reloadSignal) return;
+    handledSignal.current = reloadSignal;
+    if (page === 0) reload();
+    else setPage(0);
+  }, [reloadSignal, page, reload, setPage]);
+
+  async function handleCancelInvite(invite) {
+    if (!(await confirmDialog(t("cancelInviteConfirm", { email: invite.email })))) return;
+    setBusyInviteId(invite.id);
+    try {
+      await client.delete(`/auth/invites/${invite.id}`);
+      toast.success(t("inviteCancelled"));
+      reload();
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("cancelInviteFailed"));
+    } finally {
+      setBusyInviteId(null);
+    }
+  }
+
+  async function handleResendInvite(invite) {
+    setBusyInviteId(invite.id);
+    try {
+      await client.post(`/auth/invites/${invite.id}/resend`);
+      toast.success(t("inviteResent", { email: invite.email }));
+      reload();
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("resendInviteFailed"));
+    } finally {
+      setBusyInviteId(null);
+    }
+  }
+
+  return (
+    <div className="section-card">
+      <h2>{t("pendingInvitesTitle")}</h2>
+      {invites.length === 0 ? (
+        <p className="empty-state">{t("noPendingInvites")}</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>{t("emailLabel")}</th>
+              <th>{t("invitedAtHeader")}</th>
+              <th>{t("expiresAtHeader")}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {invites.map((invite) => (
+              <tr key={invite.id}>
+                <td data-label={t("emailLabel")}>{invite.email}</td>
+                <td data-label={t("invitedAtHeader")}>{formatServerDateTime(invite.createdAt)}</td>
+                <td data-label={t("expiresAtHeader")}>{formatServerDateTime(invite.expiresAt)}</td>
+                <td className="row-actions">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => handleResendInvite(invite)}
+                    disabled={busyInviteId === invite.id}
+                  >
+                    {t("resendInviteButton")}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => handleCancelInvite(invite)}
+                    disabled={busyInviteId === invite.id}
+                  >
+                    {t("cancelInviteButton")}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <Pagination pageData={pageData} onPageChange={setPage} />
+    </div>
+  );
+}
+
 export default function Profile() {
   const { t } = useTranslation(["profile", "common"]);
+  const { familyId, loginWithTokens } = useAuth();
 
   function relationshipLabelFor(value) {
     const entry = RELATIONSHIP_OPTIONS.find(([v]) => v === value);
@@ -55,6 +150,10 @@ export default function Profile() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteError, setInviteError] = useState("");
   const [inviting, setInviting] = useState(false);
+  const [invitesReloadSignal, setInvitesReloadSignal] = useState(0);
+  const [familyName, setFamilyName] = useState("");
+  const [renamingFamily, setRenamingFamily] = useState(false);
+  const [leavingFamily, setLeavingFamily] = useState(false);
 
   const { pageData: sessionsPage, setPage: setSessionsPage, reload: loadSessions } = usePagedList("/auth/sessions");
   const sessions = sessionsPage.content;
@@ -70,6 +169,17 @@ export default function Profile() {
   const [disableError, setDisableError] = useState("");
   const [savingTwoFactor, setSavingTwoFactor] = useState(false);
 
+  const [newEmail, setNewEmail] = useState("");
+  const [emailCredential, setEmailCredential] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [changingEmail, setChangingEmail] = useState(false);
+
+  const [exporting, setExporting] = useState(false);
+
+  const [deleteCredential, setDeleteCredential] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
   useEffect(() => {
     client.get("/auth/me").then((res) => {
       setProfile(res.data.data);
@@ -77,6 +187,13 @@ export default function Profile() {
       setRelationship(res.data.data.relationship ?? "");
     });
   }, []);
+
+  useEffect(() => {
+    client.get("/auth/my-families").then((res) => {
+      const current = res.data.data.find((f) => f.familyId === familyId);
+      setFamilyName(current?.familyName ?? "");
+    });
+  }, [familyId]);
 
   async function handleRevokeSession(session) {
     if (!(await confirmDialog(t("revokeSessionConfirm")))) return;
@@ -137,7 +254,9 @@ export default function Profile() {
     setDisableError("");
     setSavingTwoFactor(true);
     try {
-      await client.post("/auth/2fa/disable", { password: disablePassword });
+      // Accounts without a password (Google-only) confirm with a TOTP/recovery code instead.
+      const hasPassword = profile.hasPassword !== false;
+      await client.post("/auth/2fa/disable", hasPassword ? { password: disablePassword } : { code: disablePassword });
       setProfile((p) => ({ ...p, totpEnabled: false }));
       setDisablingTwoFactor(false);
       setDisablePassword("");
@@ -165,6 +284,49 @@ export default function Profile() {
     }
   }
 
+  async function handleRenameFamily(e) {
+    e.preventDefault();
+    setRenamingFamily(true);
+    try {
+      const res = await client.put("/auth/family", { name: familyName.trim() });
+      setFamilyName(familyName.trim());
+      toast.success(res.data.data?.message || t("familyRenamed"));
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("renameFamilyFailed"));
+    } finally {
+      setRenamingFamily(false);
+    }
+  }
+
+  async function handleTransferOwnership(member) {
+    if (!(await confirmDialog(t("transferOwnershipConfirm", { name: member.displayName })))) return;
+    try {
+      const res = await client.post("/auth/family/transfer-ownership", { userId: member.id });
+      // The role claim in the old token would still say OWNER, so swap in the fresh tokens.
+      loginWithTokens(res.data.data.accessToken, res.data.data.refreshToken);
+      toast.success(t("ownershipTransferred"));
+      const me = await client.get("/auth/me");
+      setProfile(me.data.data);
+      loadMembers();
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("transferOwnershipFailed"));
+    }
+  }
+
+  async function handleLeaveFamily() {
+    if (!(await confirmDialog(t("leaveFamilyConfirm")))) return;
+    setLeavingFamily(true);
+    try {
+      const res = await client.post("/auth/family/leave");
+      loginWithTokens(res.data.data.accessToken, res.data.data.refreshToken);
+      // Everything on screen was loaded under the family just left, so a full reload refetches it all.
+      window.location.href = "/";
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("leaveFamilyFailed"));
+      setLeavingFamily(false);
+    }
+  }
+
   async function handleInviteSubmit(e) {
     e.preventDefault();
     setInviteError("");
@@ -173,6 +335,7 @@ export default function Profile() {
       const res = await client.post("/auth/invite", { email: inviteEmail });
       toast.success(res.data.data?.message || t("inviteSentDefault", { email: inviteEmail }));
       setInviteEmail("");
+      setInvitesReloadSignal((n) => n + 1);
     } catch (err) {
       setInviteError(err.response?.data?.message || t("inviteFailed"));
     } finally {
@@ -212,9 +375,107 @@ export default function Profile() {
     }
   }
 
+  async function handleChangeEmailSubmit(e) {
+    e.preventDefault();
+    setEmailError("");
+    setChangingEmail(true);
+    try {
+      const email = newEmail.trim();
+      await client.post("/auth/me/email", { newEmail: email, ...credentialBody(emailCredential) });
+      toast.success(t("changeEmailSent", { email }));
+      setNewEmail("");
+      setEmailCredential("");
+    } catch (err) {
+      setEmailError(err.response?.data?.message || t("changeEmailFailed"));
+    } finally {
+      setChangingEmail(false);
+    }
+  }
+
+  async function handleExportData() {
+    setExporting(true);
+    try {
+      const res = await client.get("/auth/me/export");
+      const blob = new Blob([JSON.stringify(res.data.data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "du-lieu-ca-nhan.json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success(t("exportSuccess"));
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("exportFailed"));
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleDeleteAccount(e) {
+    e.preventDefault();
+    setDeleteError("");
+    const confirmed = await confirmDialog(t("deleteAccountConfirm"), {
+      title: t("deleteAccountConfirmTitle"),
+      confirmButtonText: t("deleteAccountConfirmButton"),
+    });
+    if (!confirmed) return;
+    setDeletingAccount(true);
+    try {
+      await client.delete("/auth/me", { data: credentialBody(deleteCredential) });
+      // The account and its sessions are gone server-side, so there is nothing left to log out of.
+      clearTokens();
+      window.location.href = "/login";
+    } catch (err) {
+      setDeleteError(err.response?.data?.message || t("deleteAccountFailed"));
+      setDeletingAccount(false);
+    }
+  }
+
   if (!profile) return null;
 
   const isLocalAccount = profile.provider === "LOCAL";
+  const hasPassword = profile.hasPassword !== false;
+  const canReauthenticate = hasPassword || profile.totpEnabled;
+
+  // Sensitive actions re-check the password, or (for accounts without one) a live 2FA code.
+  function credentialBody(value) {
+    return hasPassword ? { password: value } : { code: value };
+  }
+
+  function renderCredentialField(value, onChange) {
+    return hasPassword ? (
+      <label className="field">
+        <span>
+          {t("currentPasswordLabel")}
+          <span className="required-mark" aria-hidden="true"> *</span>
+        </span>
+        <input
+          type="password"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoComplete="current-password"
+          required
+        />
+      </label>
+    ) : (
+      <label className="field">
+        <span>
+          {t("verificationCodeLabel")}
+          <span className="required-mark" aria-hidden="true"> *</span>
+        </span>
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={t("sixDigitCodePlaceholder")}
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          required
+        />
+      </label>
+    );
+  }
 
   return (
     <div>
@@ -233,7 +494,10 @@ export default function Profile() {
             <input value={profile.email} disabled />
           </label>
           <label className="field">
-            {t("displayNameLabel")}
+            <span>
+              {t("displayNameLabel")}
+              <span className="required-mark" aria-hidden="true"> *</span>
+            </span>
             <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
           </label>
           <label className="field">
@@ -267,7 +531,10 @@ export default function Profile() {
         ) : (
           <form className="inline-form" onSubmit={handlePasswordSubmit}>
             <label className="field">
-              {t("currentPasswordLabel")}
+              <span>
+                {t("currentPasswordLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <div className="password-field-wrapper">
                 <input
                   type={showCurrentPassword ? "text" : "password"}
@@ -286,7 +553,10 @@ export default function Profile() {
               </div>
             </label>
             <label className="field">
-              {t("newPasswordLabel")}
+              <span>
+                {t("newPasswordLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <div className="password-field-wrapper">
                 <input
                   type={showNewPassword ? "text" : "password"}
@@ -314,7 +584,50 @@ export default function Profile() {
       </div>
 
       <div className="section-card">
+        <h2>{t("changeEmailTitle")}</h2>
+        <p>{t("changeEmailNotice")}</p>
+        {!canReauthenticate ? (
+          <p className="empty-state">{t("reauthNeedsTwoFactor", { provider: profile.provider })}</p>
+        ) : (
+          <form className="inline-form" onSubmit={handleChangeEmailSubmit}>
+            <label className="field">
+              <span>
+                {t("newEmailLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
+              <input
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder={t("emailPlaceholderExample")}
+                required
+              />
+            </label>
+            {renderCredentialField(emailCredential, setEmailCredential)}
+            <button type="submit" disabled={changingEmail}>
+              {changingEmail ? t("sendingChangeEmail") : t("changeEmailButton")}
+            </button>
+          </form>
+        )}
+        {emailError && <p className="error-text">{emailError}</p>}
+      </div>
+
+      <div className="section-card">
         <h2>{t("familyMembersTitle")}</h2>
+        {profile.role === "OWNER" && (
+          <form className="inline-form" onSubmit={handleRenameFamily}>
+            <label className="field">
+              <span>
+                {t("familyNameLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
+              <input value={familyName} onChange={(e) => setFamilyName(e.target.value)} maxLength={100} required />
+            </label>
+            <button type="submit" disabled={renamingFamily || !familyName.trim()}>
+              {renamingFamily ? t("common:saving") : t("renameFamilyButton")}
+            </button>
+          </form>
+        )}
         {members.length === 0 ? (
           <p className="empty-state">{t("noMembers")}</p>
         ) : (
@@ -340,14 +653,19 @@ export default function Profile() {
                   {profile.role === "OWNER" && (
                     <td className="row-actions">
                       {m.role !== "OWNER" && (
-                        <button
-                          type="button"
-                          className="icon-btn icon-btn-danger"
-                          onClick={() => handleRemoveMember(m)}
-                          aria-label={t("common:delete")}
-                        >
-                          <TrashIcon />
-                        </button>
+                        <>
+                          <button type="button" className="btn-secondary" onClick={() => handleTransferOwnership(m)}>
+                            {t("transferOwnershipButton")}
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn icon-btn-danger"
+                            onClick={() => handleRemoveMember(m)}
+                            aria-label={t("common:delete")}
+                          >
+                            <TrashIcon />
+                          </button>
+                        </>
                       )}
                     </td>
                   )}
@@ -358,12 +676,21 @@ export default function Profile() {
         )}
         <Pagination pageData={membersPage} onPageChange={setMembersPage} />
 
+        {profile.role !== "OWNER" && (
+          <button type="button" className="btn-secondary" onClick={handleLeaveFamily} disabled={leavingFamily}>
+            {t("leaveFamilyButton")}
+          </button>
+        )}
+
         {profile.role === "OWNER" && (
           <>
             <h3>{t("inviteMemberTitle")}</h3>
             <form className="inline-form" onSubmit={handleInviteSubmit}>
               <label className="field">
-                {t("emailLabel")}
+                <span>
+                  {t("emailLabel")}
+                  <span className="required-mark" aria-hidden="true"> *</span>
+                </span>
                 <input
                   type="email"
                   value={inviteEmail}
@@ -380,6 +707,8 @@ export default function Profile() {
           </>
         )}
       </div>
+
+      {profile.role === "OWNER" && <PendingInvitesSection reloadSignal={invitesReloadSignal} />}
 
       <div className="section-card">
         <h2>{t("sessionsTitle")}</h2>
@@ -458,7 +787,10 @@ export default function Profile() {
               {t("secretKeyLabel")} <code>{twoFactorSetup.secret}</code>
             </p>
             <label className="field">
-              {t("verificationCodeLabel")}
+              <span>
+                {t("verificationCodeLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <input
                 value={twoFactorCode}
                 onChange={(e) => setTwoFactorCode(e.target.value)}
@@ -479,11 +811,16 @@ export default function Profile() {
           disablingTwoFactor ? (
             <form className="inline-form" onSubmit={handleDisableTwoFactor}>
               <label className="field">
-                {t("confirmDisablePasswordLabel")}
+                <span>
+                  {hasPassword ? t("confirmDisablePasswordLabel") : t("confirmDisableCodeLabel")}
+                  <span className="required-mark" aria-hidden="true"> *</span>
+                </span>
                 <input
-                  type="password"
+                  type={hasPassword ? "password" : "text"}
                   value={disablePassword}
                   onChange={(e) => setDisablePassword(e.target.value)}
+                  placeholder={hasPassword ? undefined : t("codeOrRecoveryPlaceholder")}
+                  autoComplete={hasPassword ? "current-password" : "one-time-code"}
                   required
                 />
               </label>
@@ -511,6 +848,30 @@ export default function Profile() {
             </button>
           </>
         )}
+      </div>
+
+      <div className="section-card">
+        <h2>{t("exportDataTitle")}</h2>
+        <p>{t("exportDataNotice")}</p>
+        <button type="button" onClick={handleExportData} disabled={exporting}>
+          {exporting ? t("exportingData") : t("exportDataButton")}
+        </button>
+      </div>
+
+      <div className="section-card">
+        <h2>{t("deleteAccountTitle")}</h2>
+        <p>{t("deleteAccountNotice")}</p>
+        {!canReauthenticate ? (
+          <p className="empty-state">{t("reauthNeedsTwoFactor", { provider: profile.provider })}</p>
+        ) : (
+          <form className="inline-form" onSubmit={handleDeleteAccount}>
+            {renderCredentialField(deleteCredential, setDeleteCredential)}
+            <button type="submit" disabled={deletingAccount} style={{ background: "#dc2626" }}>
+              {deletingAccount ? t("deletingAccountLoading") : t("deleteAccountButton")}
+            </button>
+          </form>
+        )}
+        {deleteError && <p className="error-text">{deleteError}</p>}
       </div>
     </div>
   );

@@ -46,6 +46,14 @@ public class RecurringTransaction {
     @Column(name = "day_of_month")
     private Integer dayOfMonth;
 
+    private String frequency;
+
+    @Column(name = "day_of_week")
+    private Integer dayOfWeek;
+
+    @Column(name = "month_of_year")
+    private Integer monthOfYear;
+
     @Column(name = "start_date")
     private LocalDate startDate;
 
@@ -150,6 +158,30 @@ public class RecurringTransaction {
 
     public void setDayOfMonth(Integer dayOfMonth) {
         this.dayOfMonth = dayOfMonth;
+    }
+
+    public String getFrequency() {
+        return frequency;
+    }
+
+    public void setFrequency(String frequency) {
+        this.frequency = frequency;
+    }
+
+    public Integer getDayOfWeek() {
+        return dayOfWeek;
+    }
+
+    public void setDayOfWeek(Integer dayOfWeek) {
+        this.dayOfWeek = dayOfWeek;
+    }
+
+    public Integer getMonthOfYear() {
+        return monthOfYear;
+    }
+
+    public void setMonthOfYear(Integer monthOfYear) {
+        this.monthOfYear = monthOfYear;
     }
 
     public LocalDate getStartDate() {

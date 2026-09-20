@@ -39,6 +39,9 @@ public interface UserDao {
     Optional<User> selectByResetPasswordToken(String resetPasswordToken);
 
     @Select
+    Optional<User> selectByPendingEmailToken(String pendingEmailToken);
+
+    @Select
     Optional<User> selectByProviderAndProviderId(String provider, String providerId);
 
     @Select

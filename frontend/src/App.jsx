@@ -16,6 +16,7 @@ import Categories from "./pages/Categories";
 import Transactions from "./pages/Transactions";
 import RecurringTransactions from "./pages/RecurringTransactions";
 import Budgets from "./pages/Budgets";
+import Reports from "./pages/Reports";
 import Notifications from "./pages/Notifications";
 import Profile from "./pages/Profile";
 import AdminPanel from "./pages/AdminPanel";
@@ -42,6 +43,7 @@ export default function App() {
               <Route path="/transactions" element={<Transactions />} />
               <Route path="/recurring-transactions" element={<RecurringTransactions />} />
               <Route path="/budgets" element={<Budgets />} />
+              <Route path="/reports" element={<Reports />} />
               <Route path="/notifications" element={<Notifications />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/trash" element={<Trash />} />
