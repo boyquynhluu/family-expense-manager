@@ -1,5 +1,6 @@
 package com.family.expensemanager.notification.service;
 
+import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.notification.dao.NotificationDao;
 import com.family.expensemanager.notification.domain.entity.Notification;
@@ -31,6 +32,35 @@ class NotificationServiceTest {
     @BeforeEach
     void setUp() {
         notificationService = new NotificationService(notificationDao);
+    }
+
+    @Test
+    void listByFamilyPaged_returnsPageWithOffset() {
+        when(notificationDao.countByFamilyId(1L)).thenReturn(12L);
+        when(notificationDao.selectByFamilyIdPaged(1L, 5, 10))
+                .thenReturn(List.of(notification(11L, 1L, false), notification(12L, 1L, true)));
+
+        var result = notificationService.listByFamilyPaged(1L, 2, 5);
+
+        assertThat(result.content()).hasSize(2);
+        assertThat(result.page()).isEqualTo(2);
+        assertThat(result.size()).isEqualTo(5);
+        assertThat(result.totalElements()).isEqualTo(12L);
+        assertThat(result.totalPages()).isEqualTo(3);
+    }
+
+    @Test
+    void listByFamilyPaged_rejectsNegativePage() {
+        assertThatThrownBy(() -> notificationService.listByFamilyPaged(1L, -1, 5))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void listByFamilyPaged_rejectsOutOfRangeSize() {
+        assertThatThrownBy(() -> notificationService.listByFamilyPaged(1L, 0, 0))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> notificationService.listByFamilyPaged(1L, 0, 101))
+                .isInstanceOf(BadRequestException.class);
     }
 
     @Test

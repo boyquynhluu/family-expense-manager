@@ -56,6 +56,13 @@ public class User {
     /** Purely informational family label (Bố, Mẹ, Anh, Chị, Em, ...) — no business logic reads it. */
     private String relationship;
 
+    /** Base32 TOTP secret. Set as soon as 2FA setup starts, but only enforced once totpEnabled is true. */
+    @Column(name = "totp_secret")
+    private String totpSecret;
+
+    @Column(name = "totp_enabled")
+    private Boolean totpEnabled;
+
     public Long getId() {
         return id;
     }
@@ -174,5 +181,21 @@ public class User {
 
     public void setRelationship(String relationship) {
         this.relationship = relationship;
+    }
+
+    public String getTotpSecret() {
+        return totpSecret;
+    }
+
+    public void setTotpSecret(String totpSecret) {
+        this.totpSecret = totpSecret;
+    }
+
+    public Boolean getTotpEnabled() {
+        return totpEnabled;
+    }
+
+    public void setTotpEnabled(Boolean totpEnabled) {
+        this.totpEnabled = totpEnabled;
     }
 }

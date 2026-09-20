@@ -39,6 +39,11 @@ public final class CurrentUser {
         return claims().get(JwtUtil.CLAIM_DISPLAY_NAME, String.class);
     }
 
+    /** The REFRESH_TOKENS.id this access token was minted from — identifies the current login session. */
+    public static Long sessionId() {
+        return claims().get(JwtUtil.CLAIM_SESSION_ID, Long.class);
+    }
+
     private static Claims claims() {
         return (Claims) authentication().getDetails();
     }

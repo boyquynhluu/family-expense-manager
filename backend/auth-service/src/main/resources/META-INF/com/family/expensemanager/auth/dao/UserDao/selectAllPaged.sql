@@ -13,8 +13,11 @@ SELECT
     reset_password_token,
     reset_password_token_expires_at,
     is_system_admin,
-    relationship
+    relationship,
+    totp_secret,
+    totp_enabled
 FROM
     USERS
 ORDER BY
     id
+LIMIT /* limit */20 OFFSET /* offset */0

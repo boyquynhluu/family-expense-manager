@@ -7,3 +7,4 @@ WHERE
     AND category_id = /* categoryId */0
     AND DATE_FORMAT(occurred_at, '%Y-%m') = /* periodMonth */'2025-01'
     AND type = /* type */'EXPENSE'
+    AND deleted_at IS NULL

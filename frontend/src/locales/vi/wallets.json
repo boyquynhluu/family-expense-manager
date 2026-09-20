@@ -1,0 +1,22 @@
+{
+  "title": "Ví",
+  "subtitle": "Quản lý các ví/tài khoản tiền của gia đình",
+  "addTitle": "Thêm ví mới",
+  "editTitle": "Cập nhật ví",
+  "nameLabel": "Tên ví",
+  "namePlaceholder": "VD: Tiền mặt",
+  "currencyLabel": "Tiền tệ",
+  "currencyPlaceholder": "VND",
+  "initialBalanceLabel": "Số dư ban đầu",
+  "submitAdd": "Thêm ví",
+  "submitUpdate": "Cập nhật",
+  "listTitle": "Danh sách ví",
+  "emptyState": "Chưa có ví nào",
+  "colName": "Tên",
+  "colCurrency": "Tiền tệ",
+  "colInitialBalance": "Số dư ban đầu",
+  "colCurrentBalance": "Số dư hiện tại",
+  "saveFailed": "Lưu ví thất bại",
+  "deleteConfirm": "Xoá ví này? Chỉ xoá được khi ví chưa có giao dịch nào — có thể khôi phục sau trong Thùng rác.",
+  "deleteFailed": "Xoá ví thất bại"
+}

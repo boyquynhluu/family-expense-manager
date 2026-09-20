@@ -34,11 +34,19 @@
                  here (the gateway's own JwtGatewayFilter is a plain servlet Filter).
                  Exclude the starter so Boot doesn't auto-configure default HTTP Basic
                  security (which would 401 every request, including public auth routes)
-                 for a service with no SecurityConfig of its own. -->
+                 for a service with no SecurityConfig of its own. Also exclude Redis
+                 (added to common for RevokedSessionStore, used only by
+                 JwtAuthenticationFilter — irrelevant here) so actuator's auto-registered
+                 Redis health indicator doesn't try connecting to a host this service
+                 never configures. -->
             <exclusions>
                 <exclusion>
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-starter-security</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-data-redis</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -62,6 +70,10 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
 
         <dependency>

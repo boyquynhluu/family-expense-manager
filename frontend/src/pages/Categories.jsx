@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { EditIcon, TrashIcon } from "../components/AppIcons";
+import { confirmDialog } from "../utils/confirm";
 import { useAuth } from "../hooks/useAuth";
 
 export default function Categories() {
+  const { t } = useTranslation(["common", "categories"]);
   const { role } = useAuth();
   const isOwner = role === "OWNER";
   const [categories, setCategories] = useState([]);
@@ -49,19 +52,18 @@ export default function Categories() {
       cancelEdit();
       load();
     } catch (err) {
-      setError(err.response?.data?.message || "Lưu danh mục thất bại");
+      setError(err.response?.data?.message || t("categories:saveFailed"));
     }
   }
 
   async function handleDelete(id) {
-    if (!window.confirm("Xoá danh mục này? Chỉ xoá được khi chưa có giao dịch hoặc ngân sách nào dùng danh mục này."))
-      return;
+    if (!(await confirmDialog(t("categories:deleteConfirm")))) return;
     setError("");
     try {
       await client.delete(`/expenses/categories/${id}`);
       load();
     } catch (err) {
-      setError(err.response?.data?.message || "Xoá danh mục thất bại");
+      setError(err.response?.data?.message || t("categories:deleteFailed"));
     }
   }
 
@@ -69,37 +71,42 @@ export default function Categories() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Danh mục</h1>
-          <p className="page-header-subtitle">Nhóm các khoản thu/chi để dễ theo dõi</p>
+          <h1>{t("categories:title")}</h1>
+          <p className="page-header-subtitle">{t("categories:subtitle")}</p>
         </div>
       </div>
 
       <div className="section-card">
-        <h2>{editingId ? "Cập nhật danh mục" : "Thêm danh mục mới"}</h2>
+        <h2>{editingId ? t("categories:editTitle") : t("categories:addTitle")}</h2>
         <form className="inline-form" onSubmit={handleSubmit}>
           <label className="field">
-            Tên danh mục
-            <input placeholder="VD: Ăn uống" value={name} onChange={(e) => setName(e.target.value)} required />
+            {t("categories:nameLabel")}
+            <input
+              placeholder={t("categories:namePlaceholder")}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
           </label>
           <label className="field">
-            Loại
+            {t("categories:typeLabel")}
             <select value={type} onChange={(e) => setType(e.target.value)}>
-              <option value="EXPENSE">Chi tiêu</option>
-              <option value="INCOME">Thu nhập</option>
+              <option value="EXPENSE">{t("categories:typeExpense")}</option>
+              <option value="INCOME">{t("categories:typeIncome")}</option>
             </select>
           </label>
           <label className="field">
-            Icon (tuỳ chọn)
-            <input placeholder="VD: 🍔" value={icon} onChange={(e) => setIcon(e.target.value)} />
+            {t("categories:iconLabel")}
+            <input placeholder={t("categories:iconPlaceholder")} value={icon} onChange={(e) => setIcon(e.target.value)} />
           </label>
           <label className="field">
-            Màu
+            {t("categories:colorLabel")}
             <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
           </label>
-          <button type="submit">{editingId ? "Cập nhật" : "Thêm danh mục"}</button>
+          <button type="submit">{editingId ? t("categories:submitUpdate") : t("categories:submitAdd")}</button>
           {editingId && (
             <button type="button" className="btn-secondary" onClick={cancelEdit}>
-              Huỷ
+              {t("common:cancel")}
             </button>
           )}
         </form>
@@ -107,9 +114,9 @@ export default function Categories() {
       </div>
 
       <div className="section-card">
-        <h2>Danh sách danh mục</h2>
+        <h2>{t("categories:listTitle")}</h2>
         {categories.length === 0 ? (
-          <p className="empty-state">Chưa có danh mục nào</p>
+          <p className="empty-state">{t("categories:emptyState")}</p>
         ) : (
           <div className="category-chip-grid">
             {categories.map((c) => (
@@ -120,11 +127,11 @@ export default function Categories() {
                 <div className="category-chip-body">
                   <span className="category-chip-name">{c.name}</span>
                   <span className={`badge ${c.type === "EXPENSE" ? "badge-expense" : "badge-income"}`}>
-                    {c.type === "EXPENSE" ? "Chi tiêu" : "Thu nhập"}
+                    {c.type === "EXPENSE" ? t("categories:typeExpense") : t("categories:typeIncome")}
                   </span>
                 </div>
                 <div className="row-actions">
-                  <button type="button" className="icon-btn" onClick={() => startEdit(c)} aria-label="Sửa">
+                  <button type="button" className="icon-btn" onClick={() => startEdit(c)} aria-label={t("common:edit")}>
                     <EditIcon />
                   </button>
                   {isOwner && (
@@ -132,7 +139,7 @@ export default function Categories() {
                       type="button"
                       className="icon-btn icon-btn-danger"
                       onClick={() => handleDelete(c.id)}
-                      aria-label="Xoá"
+                      aria-label={t("common:delete")}
                     >
                       <TrashIcon />
                     </button>

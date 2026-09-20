@@ -8,6 +8,7 @@ import org.seasar.doma.Id;
 import org.seasar.doma.Table;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "WALLETS")
@@ -26,6 +27,9 @@ public class Wallet {
 
     @Column(name = "initial_balance")
     private BigDecimal initialBalance;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     public Long getId() {
         return id;
@@ -65,5 +69,13 @@ public class Wallet {
 
     public void setInitialBalance(BigDecimal initialBalance) {
         this.initialBalance = initialBalance;
+    }
+
+    public LocalDateTime getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void setDeletedAt(LocalDateTime deletedAt) {
+        this.deletedAt = deletedAt;
     }
 }

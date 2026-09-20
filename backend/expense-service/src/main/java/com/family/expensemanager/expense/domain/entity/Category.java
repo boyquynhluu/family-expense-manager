@@ -7,6 +7,8 @@ import org.seasar.doma.GenerationType;
 import org.seasar.doma.Id;
 import org.seasar.doma.Table;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Table(name = "CATEGORIES")
 public class Category {
@@ -25,6 +27,9 @@ public class Category {
     private String icon;
 
     private String color;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     public Long getId() {
         return id;
@@ -72,5 +77,13 @@ public class Category {
 
     public void setColor(String color) {
         this.color = color;
+    }
+
+    public LocalDateTime getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void setDeletedAt(LocalDateTime deletedAt) {
+        this.deletedAt = deletedAt;
     }
 }

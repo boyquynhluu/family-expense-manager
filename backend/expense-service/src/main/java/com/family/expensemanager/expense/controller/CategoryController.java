@@ -1,6 +1,7 @@
 package com.family.expensemanager.expense.controller;
 
 import com.family.expensemanager.common.dto.ApiResponse;
+import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.security.CurrentUser;
 import com.family.expensemanager.expense.dto.CategoryResponse;
 import com.family.expensemanager.expense.dto.CreateCategoryRequest;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -50,6 +52,20 @@ public class CategoryController {
     public ApiResponse<Void> delete(@PathVariable Long id) {
         log.info("delete - start, id={}", id);
         categoryService.delete(id, CurrentUser.familyId());
+        return ApiResponse.ok();
+    }
+
+    @GetMapping("/trash")
+    public ApiResponse<PageResponse<CategoryResponse>> trash(
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "5") int size) {
+        log.info("trash - start, page={}, size={}", page, size);
+        return ApiResponse.ok(categoryService.listDeletedPaged(CurrentUser.familyId(), page, size));
+    }
+
+    @PostMapping("/{id}/restore")
+    public ApiResponse<Void> restore(@PathVariable Long id) {
+        log.info("restore - start, id={}", id);
+        categoryService.restore(id, CurrentUser.familyId());
         return ApiResponse.ok();
     }
 }

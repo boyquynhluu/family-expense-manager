@@ -1,0 +1,9 @@
+{
+  "title": "Thông báo",
+  "subtitle": "Cảnh báo vượt ngân sách và các cập nhật khác",
+  "markAllReadButton": "Đánh dấu tất cả đã đọc",
+  "noNotifications": "Chưa có thông báo nào",
+  "loadFailed": "Không tải được thông báo",
+  "markReadFailed": "Không đánh dấu được thông báo đã đọc",
+  "markAllReadFailed": "Không đánh dấu được tất cả đã đọc"
+}

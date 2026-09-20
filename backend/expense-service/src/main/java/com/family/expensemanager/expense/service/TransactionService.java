@@ -141,15 +141,42 @@ public class TransactionService {
         return TransactionResponse.from(transaction);
     }
 
+    /**
+     * Soft-delete (README "10. Xoá là mất vĩnh viễn") — the row and its receipt file
+     * both stay in place, just hidden from normal queries, so {@link #restore} can bring
+     * a mistaken delete back exactly as it was.
+     */
     @Transactional
     public void delete(Long familyId, Long transactionId) {
         log.info("delete - start, familyId={}, transactionId={}", familyId, transactionId);
         Transaction transaction = requireOwnedByFamily(transactionId, familyId);
-        if (transaction.getReceiptPath() != null) {
-            receiptStorageService.delete(transaction.getReceiptPath());
-        }
-        transactionDao.delete(transaction);
+        transaction.setDeletedAt(LocalDateTime.now());
+        transactionDao.update(transaction);
         evictCaches(familyId, periodMonthOf(transaction.getOccurredAt()));
+    }
+
+    public PageResponse<TransactionResponse> listDeletedPaged(Long familyId, int page, int size) {
+        log.info("listDeletedPaged - start, familyId={}, page={}, size={}", familyId, page, size);
+        if (page < 0) {
+            throw new BadRequestException("page phải >= 0");
+        }
+        if (size < 1 || size > MAX_PAGE_SIZE) {
+            throw new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE);
+        }
+        long totalElements = transactionDao.countDeletedByFamilyId(familyId);
+        List<TransactionResponse> content = transactionDao.selectDeletedByFamilyIdPaged(familyId, size, page * size)
+                .stream().map(TransactionResponse::from).toList();
+        return PageResponse.of(content, page, size, totalElements);
+    }
+
+    @Transactional
+    public void restore(Long familyId, Long transactionId) {
+        log.info("restore - start, familyId={}, transactionId={}", familyId, transactionId);
+        if (transactionDao.restore(transactionId, familyId) == 0) {
+            throw new NotFoundException("Giao dịch đã xoá không tồn tại: " + transactionId);
+        }
+        Transaction restored = requireOwnedByFamily(transactionId, familyId);
+        evictCaches(familyId, periodMonthOf(restored.getOccurredAt()));
     }
 
     @Transactional

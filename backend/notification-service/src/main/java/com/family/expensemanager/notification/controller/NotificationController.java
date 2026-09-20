@@ -1,6 +1,7 @@
 package com.family.expensemanager.notification.controller;
 
 import com.family.expensemanager.common.dto.ApiResponse;
+import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.security.CurrentUser;
 import com.family.expensemanager.notification.dto.NotificationResponse;
 import com.family.expensemanager.notification.dto.UnreadCountResponse;
@@ -9,9 +10,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,9 +25,10 @@ public class NotificationController {
     private final NotificationService notificationService;
 
     @GetMapping
-    public ApiResponse<List<NotificationResponse>> list() {
-        log.info("list - start");
-        return ApiResponse.ok(notificationService.listByFamily(CurrentUser.familyId()));
+    public ApiResponse<PageResponse<NotificationResponse>> list(
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "5") int size) {
+        log.info("list - start, page={}, size={}", page, size);
+        return ApiResponse.ok(notificationService.listByFamilyPaged(CurrentUser.familyId(), page, size));
     }
 
     @GetMapping("/unread-count")

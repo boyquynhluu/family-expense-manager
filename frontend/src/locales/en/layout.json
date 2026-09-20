@@ -1,0 +1,18 @@
+{
+  "brand": "Family Expense",
+  "openMenu": "Open menu",
+  "closeMenu": "Close menu",
+  "nav": {
+    "dashboard": "Dashboard",
+    "wallets": "Wallets",
+    "categories": "Categories",
+    "transactions": "Transactions",
+    "recurringTransactions": "Recurring transactions",
+    "budgets": "Budgets",
+    "notifications": "Notifications",
+    "trash": "Trash",
+    "profile": "Profile",
+    "admin": "System admin"
+  },
+  "logout": "Log out"
+}

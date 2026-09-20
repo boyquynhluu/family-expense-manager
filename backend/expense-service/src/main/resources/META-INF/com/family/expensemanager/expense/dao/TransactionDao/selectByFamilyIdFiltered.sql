@@ -9,11 +9,13 @@ SELECT
     occurred_at,
     note,
     receipt_path,
-    receipt_content_type
+    receipt_content_type,
+    deleted_at
 FROM
     TRANSACTIONS
 WHERE
     family_id = /* familyId */0
+    AND deleted_at IS NULL
 /*%if walletId != null */
     AND wallet_id = /* walletId */0
 /*%end*/

@@ -1,5 +1,6 @@
 package com.family.expensemanager.expense.service;
 
+import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.expense.dao.BudgetDao;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -75,7 +77,7 @@ class CategoryServiceTest {
         when(transactionDao.countByCategoryId(1L)).thenReturn(1L);
 
         assertThatThrownBy(() -> categoryService.delete(1L, 1L)).isInstanceOf(ConflictException.class);
-        verify(categoryDao, never()).delete(any());
+        verify(categoryDao, never()).update(any());
     }
 
     @Test
@@ -86,7 +88,7 @@ class CategoryServiceTest {
         when(budgetDao.countByCategoryId(1L)).thenReturn(1L);
 
         assertThatThrownBy(() -> categoryService.delete(1L, 1L)).isInstanceOf(ConflictException.class);
-        verify(categoryDao, never()).delete(any());
+        verify(categoryDao, never()).update(any());
     }
 
     @Test
@@ -98,7 +100,7 @@ class CategoryServiceTest {
         when(recurringTransactionDao.countByCategoryId(1L)).thenReturn(1L);
 
         assertThatThrownBy(() -> categoryService.delete(1L, 1L)).isInstanceOf(ConflictException.class);
-        verify(categoryDao, never()).delete(any());
+        verify(categoryDao, never()).update(any());
     }
 
     @Test
@@ -111,7 +113,54 @@ class CategoryServiceTest {
 
         categoryService.delete(1L, 1L);
 
-        verify(categoryDao).delete(category);
+        assertThat(category.getDeletedAt()).isNotNull();
+        verify(categoryDao).update(category);
+    }
+
+    @Test
+    void restore_clearsDeletedAt_whenRowExists() {
+        when(categoryDao.restore(1L, 1L)).thenReturn(1);
+
+        categoryService.restore(1L, 1L);
+
+        verify(categoryDao).restore(1L, 1L);
+    }
+
+    @Test
+    void restore_throwsNotFound_whenRowMissingOrNotDeleted() {
+        when(categoryDao.restore(1L, 1L)).thenReturn(0);
+
+        assertThatThrownBy(() -> categoryService.restore(1L, 1L)).isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void listDeletedPaged_returnsPageWithOffset() {
+        when(categoryDao.countDeletedByFamilyId(1L)).thenReturn(12L);
+        when(categoryDao.selectDeletedByFamilyIdPaged(1L, 5, 10))
+                .thenReturn(List.of(category(11L, 1L), category(12L, 1L)));
+
+        var result = categoryService.listDeletedPaged(1L, 2, 5);
+
+        assertThat(result.content()).hasSize(2);
+        assertThat(result.content().get(0).id()).isEqualTo(11L);
+        assertThat(result.page()).isEqualTo(2);
+        assertThat(result.size()).isEqualTo(5);
+        assertThat(result.totalElements()).isEqualTo(12L);
+        assertThat(result.totalPages()).isEqualTo(3);
+    }
+
+    @Test
+    void listDeletedPaged_rejectsNegativePage() {
+        assertThatThrownBy(() -> categoryService.listDeletedPaged(1L, -1, 5))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void listDeletedPaged_rejectsOutOfRangeSize() {
+        assertThatThrownBy(() -> categoryService.listDeletedPaged(1L, 0, 0))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> categoryService.listDeletedPaged(1L, 0, 101))
+                .isInstanceOf(BadRequestException.class);
     }
 
     private static Category category(Long id, Long familyId) {

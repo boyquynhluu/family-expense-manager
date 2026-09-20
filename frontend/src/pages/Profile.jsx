@@ -1,12 +1,41 @@
+import QRCode from "qrcode";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { TrashIcon } from "../components/AppIcons";
 import { EyeIcon, EyeOffIcon } from "../components/AuthIcons";
+import Pagination from "../components/Pagination";
+import { usePagedList } from "../hooks/usePagedList";
+import { confirmDialog } from "../utils/confirm";
 
-const RELATIONSHIP_OPTIONS = ["Bố", "Mẹ", "Ông", "Bà", "Anh", "Chị", "Em", "Con", "Cháu", "Chồng", "Vợ", "Khác"];
+// The stored value is always this fixed Vietnamese word regardless of UI language —
+// only the displayed label is translated (see relationshipLabelFor below) — otherwise
+// switching languages would change what gets saved to the DB and orphan existing data
+// saved under the other language's word.
+const RELATIONSHIP_OPTIONS = [
+  ["Bố", "relationshipFather"],
+  ["Mẹ", "relationshipMother"],
+  ["Ông", "relationshipGrandfather"],
+  ["Bà", "relationshipGrandmother"],
+  ["Anh", "relationshipOlderBrother"],
+  ["Chị", "relationshipOlderSister"],
+  ["Em", "relationshipYoungerSibling"],
+  ["Con", "relationshipChild"],
+  ["Cháu", "relationshipGrandchild"],
+  ["Chồng", "relationshipHusband"],
+  ["Vợ", "relationshipWife"],
+  ["Khác", "relationshipOther"],
+];
 
 export default function Profile() {
+  const { t } = useTranslation(["profile", "common"]);
+
+  function relationshipLabelFor(value) {
+    const entry = RELATIONSHIP_OPTIONS.find(([v]) => v === value);
+    return entry ? t(entry[1]) : value;
+  }
+
   const [profile, setProfile] = useState(null);
   const [displayName, setDisplayName] = useState("");
   const [relationship, setRelationship] = useState("");
@@ -20,14 +49,25 @@ export default function Profile() {
   const [passwordError, setPasswordError] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
 
-  const [members, setMembers] = useState([]);
+  const { pageData: membersPage, setPage: setMembersPage, reload: loadMembers } = usePagedList("/auth/family/members");
+  const members = membersPage.content;
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteError, setInviteError] = useState("");
   const [inviting, setInviting] = useState(false);
 
-  function loadMembers() {
-    client.get("/auth/family/members").then((res) => setMembers(res.data.data));
-  }
+  const { pageData: sessionsPage, setPage: setSessionsPage, reload: loadSessions } = usePagedList("/auth/sessions");
+  const sessions = sessionsPage.content;
+  const [revokingOthers, setRevokingOthers] = useState(false);
+
+  const [twoFactorSetup, setTwoFactorSetup] = useState(null); // { secret, otpAuthUri, qrDataUrl }
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [twoFactorError, setTwoFactorError] = useState("");
+  const [confirmingTwoFactor, setConfirmingTwoFactor] = useState(false);
+  const [recoveryCodes, setRecoveryCodes] = useState(null);
+  const [disablingTwoFactor, setDisablingTwoFactor] = useState(false);
+  const [disablePassword, setDisablePassword] = useState("");
+  const [disableError, setDisableError] = useState("");
+  const [savingTwoFactor, setSavingTwoFactor] = useState(false);
 
   useEffect(() => {
     client.get("/auth/me").then((res) => {
@@ -35,17 +75,92 @@ export default function Profile() {
       setDisplayName(res.data.data.displayName);
       setRelationship(res.data.data.relationship ?? "");
     });
-    loadMembers();
   }, []);
 
+  async function handleRevokeSession(session) {
+    if (!(await confirmDialog(t("revokeSessionConfirm")))) return;
+    try {
+      await client.delete(`/auth/sessions/${session.id}`);
+      toast.success(t("sessionRevoked"));
+      loadSessions();
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("revokeSessionFailed"));
+    }
+  }
+
+  async function handleRevokeOtherSessions() {
+    if (!(await confirmDialog(t("revokeOtherSessionsConfirm")))) return;
+    setRevokingOthers(true);
+    try {
+      await client.post("/auth/sessions/revoke-others");
+      toast.success(t("otherSessionsRevoked"));
+      loadSessions();
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("actionFailed"));
+    } finally {
+      setRevokingOthers(false);
+    }
+  }
+
+  async function handleStartTwoFactorSetup() {
+    try {
+      const res = await client.post("/auth/2fa/setup");
+      const { secret, otpAuthUri } = res.data.data;
+      const qrDataUrl = await QRCode.toDataURL(otpAuthUri);
+      setTwoFactorSetup({ secret, otpAuthUri, qrDataUrl });
+      setTwoFactorCode("");
+      setTwoFactorError("");
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("twoFactorSetupStartFailed"));
+    }
+  }
+
+  async function handleConfirmTwoFactor(e) {
+    e.preventDefault();
+    setTwoFactorError("");
+    setConfirmingTwoFactor(true);
+    try {
+      const res = await client.post("/auth/2fa/confirm", { code: twoFactorCode });
+      setRecoveryCodes(res.data.data.recoveryCodes);
+      setTwoFactorSetup(null);
+      setProfile((p) => ({ ...p, totpEnabled: true }));
+    } catch (err) {
+      setTwoFactorError(err.response?.data?.message || t("twoFactorCodeInvalid"));
+    } finally {
+      setConfirmingTwoFactor(false);
+    }
+  }
+
+  async function handleDisableTwoFactor(e) {
+    e.preventDefault();
+    setDisableError("");
+    setSavingTwoFactor(true);
+    try {
+      await client.post("/auth/2fa/disable", { password: disablePassword });
+      setProfile((p) => ({ ...p, totpEnabled: false }));
+      setDisablingTwoFactor(false);
+      setDisablePassword("");
+      toast.success(t("twoFactorDisabled"));
+    } catch (err) {
+      setDisableError(err.response?.data?.message || t("disableTwoFactorFailed"));
+    } finally {
+      setSavingTwoFactor(false);
+    }
+  }
+
+  function formatDateTime(value) {
+    if (!value) return t("notAvailable");
+    return new Date(value).toLocaleString("vi-VN");
+  }
+
   async function handleRemoveMember(member) {
-    if (!window.confirm(`Xoá ${member.displayName} khỏi gia đình? Hành động này không thể hoàn tác.`)) return;
+    if (!(await confirmDialog(t("removeMemberConfirm", { name: member.displayName })))) return;
     try {
       await client.delete(`/auth/family/members/${member.id}`);
-      toast.success("Đã xoá thành viên khỏi gia đình");
+      toast.success(t("memberRemoved"));
       loadMembers();
     } catch (err) {
-      toast.error(err.response?.data?.message || "Xoá thành viên thất bại");
+      toast.error(err.response?.data?.message || t("removeMemberFailed"));
     }
   }
 
@@ -55,10 +170,10 @@ export default function Profile() {
     setInviting(true);
     try {
       const res = await client.post("/auth/invite", { email: inviteEmail });
-      toast.success(res.data.data?.message || `Đã gửi lời mời đến ${inviteEmail}`);
+      toast.success(res.data.data?.message || t("inviteSentDefault", { email: inviteEmail }));
       setInviteEmail("");
     } catch (err) {
-      setInviteError(err.response?.data?.message || "Gửi lời mời thất bại");
+      setInviteError(err.response?.data?.message || t("inviteFailed"));
     } finally {
       setInviting(false);
     }
@@ -72,9 +187,9 @@ export default function Profile() {
       const res = await client.put("/auth/me", { displayName, relationship: relationship || null });
       setProfile(res.data.data);
       loadMembers();
-      toast.success("Cập nhật hồ sơ thành công");
+      toast.success(t("profileUpdateSuccess"));
     } catch (err) {
-      setProfileError(err.response?.data?.message || "Cập nhật hồ sơ thất bại");
+      setProfileError(err.response?.data?.message || t("profileUpdateFailed"));
     } finally {
       setSavingProfile(false);
     }
@@ -88,9 +203,9 @@ export default function Profile() {
       await client.put("/auth/me/password", { currentPassword, newPassword });
       setCurrentPassword("");
       setNewPassword("");
-      toast.success("Đổi mật khẩu thành công");
+      toast.success(t("passwordChangeSuccess"));
     } catch (err) {
-      setPasswordError(err.response?.data?.message || "Đổi mật khẩu thất bại");
+      setPasswordError(err.response?.data?.message || t("passwordChangeFailed"));
     } finally {
       setSavingPassword(false);
     }
@@ -104,54 +219,54 @@ export default function Profile() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Hồ sơ</h1>
-          <p className="page-header-subtitle">Quản lý thông tin tài khoản của bạn</p>
+          <h1>{t("title")}</h1>
+          <p className="page-header-subtitle">{t("subtitle")}</p>
         </div>
       </div>
 
       <div className="section-card">
-        <h2>Thông tin cá nhân</h2>
+        <h2>{t("personalInfoTitle")}</h2>
         <form className="inline-form" onSubmit={handleProfileSubmit}>
           <label className="field">
-            Email
+            {t("emailLabel")}
             <input value={profile.email} disabled />
           </label>
           <label className="field">
-            Tên hiển thị
+            {t("displayNameLabel")}
             <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
           </label>
           <label className="field">
-            Quan hệ trong gia đình
+            {t("relationshipLabel")}
             <select value={relationship} onChange={(e) => setRelationship(e.target.value)}>
-              <option value="">Không chọn</option>
-              {RELATIONSHIP_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+              <option value="">{t("relationshipNone")}</option>
+              {RELATIONSHIP_OPTIONS.map(([value, key]) => (
+                <option key={value} value={value}>
+                  {t(key)}
                 </option>
               ))}
             </select>
           </label>
           <label className="field">
-            Vai trò
+            {t("roleLabel")}
             <input value={profile.role} disabled />
           </label>
           <button type="submit" disabled={savingProfile}>
-            {savingProfile ? "Đang lưu..." : "Lưu thay đổi"}
+            {savingProfile ? t("common:saving") : t("saveChanges")}
           </button>
         </form>
         {profileError && <p className="error-text">{profileError}</p>}
       </div>
 
       <div className="section-card">
-        <h2>Đổi mật khẩu</h2>
+        <h2>{t("changePasswordTitle")}</h2>
         {!isLocalAccount ? (
           <p className="empty-state">
-            Tài khoản này đăng nhập qua {profile.provider}, không có mật khẩu để đổi.
+            {t("oauthNoPasswordNotice", { provider: profile.provider })}
           </p>
         ) : (
           <form className="inline-form" onSubmit={handlePasswordSubmit}>
             <label className="field">
-              Mật khẩu hiện tại
+              {t("currentPasswordLabel")}
               <div className="password-field-wrapper">
                 <input
                   type={showCurrentPassword ? "text" : "password"}
@@ -163,14 +278,14 @@ export default function Profile() {
                   type="button"
                   className="password-toggle-btn"
                   onClick={() => setShowCurrentPassword((v) => !v)}
-                  aria-label={showCurrentPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                  aria-label={showCurrentPassword ? t("hidePassword") : t("showPassword")}
                 >
                   {showCurrentPassword ? <EyeOffIcon /> : <EyeIcon />}
                 </button>
               </div>
             </label>
             <label className="field">
-              Mật khẩu mới
+              {t("newPasswordLabel")}
               <div className="password-field-wrapper">
                 <input
                   type={showNewPassword ? "text" : "password"}
@@ -183,14 +298,14 @@ export default function Profile() {
                   type="button"
                   className="password-toggle-btn"
                   onClick={() => setShowNewPassword((v) => !v)}
-                  aria-label={showNewPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                  aria-label={showNewPassword ? t("hidePassword") : t("showPassword")}
                 >
                   {showNewPassword ? <EyeOffIcon /> : <EyeIcon />}
                 </button>
               </div>
             </label>
             <button type="submit" disabled={savingPassword}>
-              {savingPassword ? "Đang lưu..." : "Đổi mật khẩu"}
+              {savingPassword ? t("common:saving") : t("changePasswordButton")}
             </button>
           </form>
         )}
@@ -198,27 +313,29 @@ export default function Profile() {
       </div>
 
       <div className="section-card">
-        <h2>Thành viên gia đình</h2>
+        <h2>{t("familyMembersTitle")}</h2>
         {members.length === 0 ? (
-          <p className="empty-state">Chưa có thành viên nào.</p>
+          <p className="empty-state">{t("noMembers")}</p>
         ) : (
           <table>
             <thead>
               <tr>
-                <th>Tên hiển thị</th>
-                <th>Email</th>
-                <th>Vai trò</th>
-                <th>Quan hệ</th>
+                <th>{t("displayNameLabel")}</th>
+                <th>{t("emailLabel")}</th>
+                <th>{t("roleLabel")}</th>
+                <th>{t("relationshipColumnHeader")}</th>
                 {profile.role === "OWNER" && <th></th>}
               </tr>
             </thead>
             <tbody>
               {members.map((m) => (
                 <tr key={m.id}>
-                  <td data-label="Tên hiển thị">{m.displayName}</td>
-                  <td data-label="Email">{m.email}</td>
-                  <td data-label="Vai trò">{m.role}</td>
-                  <td data-label="Quan hệ">{m.relationship || "-"}</td>
+                  <td data-label={t("displayNameLabel")}>{m.displayName}</td>
+                  <td data-label={t("emailLabel")}>{m.email}</td>
+                  <td data-label={t("roleLabel")}>{m.role}</td>
+                  <td data-label={t("relationshipColumnHeader")}>
+                    {m.relationship ? relationshipLabelFor(m.relationship) : t("notAvailable")}
+                  </td>
                   {profile.role === "OWNER" && (
                     <td className="row-actions">
                       {m.role !== "OWNER" && (
@@ -226,7 +343,7 @@ export default function Profile() {
                           type="button"
                           className="icon-btn icon-btn-danger"
                           onClick={() => handleRemoveMember(m)}
-                          aria-label="Xoá"
+                          aria-label={t("common:delete")}
                         >
                           <TrashIcon />
                         </button>
@@ -238,26 +355,159 @@ export default function Profile() {
             </tbody>
           </table>
         )}
+        <Pagination pageData={membersPage} onPageChange={setMembersPage} />
 
         {profile.role === "OWNER" && (
           <>
-            <h3>Mời thành viên mới</h3>
+            <h3>{t("inviteMemberTitle")}</h3>
             <form className="inline-form" onSubmit={handleInviteSubmit}>
               <label className="field">
-                Email
+                {t("emailLabel")}
                 <input
                   type="email"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="email@example.com"
+                  placeholder={t("emailPlaceholderExample")}
                   required
                 />
               </label>
               <button type="submit" disabled={inviting}>
-                {inviting ? "Đang gửi..." : "Gửi lời mời"}
+                {inviting ? t("sendingInvite") : t("sendInviteButton")}
               </button>
             </form>
             {inviteError && <p className="error-text">{inviteError}</p>}
+          </>
+        )}
+      </div>
+
+      <div className="section-card">
+        <h2>{t("sessionsTitle")}</h2>
+        {sessions.length === 0 ? (
+          <p className="empty-state">{t("noSessions")}</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>{t("deviceHeader")}</th>
+                <th>{t("ipAddressHeader")}</th>
+                <th>{t("loginAtHeader")}</th>
+                <th>{t("lastActiveHeader")}</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {sessions.map((s) => (
+                <tr key={s.id}>
+                  <td data-label={t("deviceHeader")}>
+                    {s.deviceInfo || t("unknownDevice")}
+                    {s.isCurrent && <span className="badge">{t("currentSessionBadge")}</span>}
+                  </td>
+                  <td data-label={t("ipAddressHeader")}>{s.ipAddress || t("notAvailable")}</td>
+                  <td data-label={t("loginAtHeader")}>{formatDateTime(s.createdAt)}</td>
+                  <td data-label={t("lastActiveHeader")}>{formatDateTime(s.lastUsedAt)}</td>
+                  <td className="row-actions">
+                    {!s.isCurrent && (
+                      <button
+                        type="button"
+                        className="icon-btn icon-btn-danger"
+                        onClick={() => handleRevokeSession(s)}
+                        aria-label={t("revokeSessionAriaLabel")}
+                      >
+                        <TrashIcon />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <Pagination pageData={sessionsPage} onPageChange={setSessionsPage} />
+        {(sessionsPage.totalElements > 1 || sessions.some((s) => !s.isCurrent)) && (
+          <button type="button" onClick={handleRevokeOtherSessions} disabled={revokingOthers}>
+            {revokingOthers ? t("revokingOthersLoading") : t("revokeOtherSessionsButton")}
+          </button>
+        )}
+      </div>
+
+      <div className="section-card">
+        <h2>{t("twoFactorTitle")}</h2>
+
+        {recoveryCodes ? (
+          <>
+            <p>
+              {t("recoveryCodesNotice")}
+            </p>
+            <ul className="recovery-codes-list">
+              {recoveryCodes.map((code) => (
+                <li key={code}>
+                  <code>{code}</code>
+                </li>
+              ))}
+            </ul>
+            <button type="button" onClick={() => setRecoveryCodes(null)}>
+              {t("recoveryCodesSavedButton")}
+            </button>
+          </>
+        ) : twoFactorSetup ? (
+          <form className="inline-form" onSubmit={handleConfirmTwoFactor}>
+            <p>{t("scanQrNotice")}</p>
+            <img src={twoFactorSetup.qrDataUrl} alt={t("qrCodeAlt")} width={200} height={200} />
+            <p>
+              {t("secretKeyLabel")} <code>{twoFactorSetup.secret}</code>
+            </p>
+            <label className="field">
+              {t("verificationCodeLabel")}
+              <input
+                value={twoFactorCode}
+                onChange={(e) => setTwoFactorCode(e.target.value)}
+                placeholder={t("sixDigitCodePlaceholder")}
+                autoFocus
+                required
+              />
+            </label>
+            <button type="submit" disabled={confirmingTwoFactor}>
+              {confirmingTwoFactor ? t("confirmingTwoFactorLoading") : t("confirmAndEnableButton")}
+            </button>
+            <button type="button" onClick={() => setTwoFactorSetup(null)}>
+              {t("common:cancel")}
+            </button>
+            {twoFactorError && <p className="error-text">{twoFactorError}</p>}
+          </form>
+        ) : profile.totpEnabled ? (
+          disablingTwoFactor ? (
+            <form className="inline-form" onSubmit={handleDisableTwoFactor}>
+              <label className="field">
+                {t("confirmDisablePasswordLabel")}
+                <input
+                  type="password"
+                  value={disablePassword}
+                  onChange={(e) => setDisablePassword(e.target.value)}
+                  required
+                />
+              </label>
+              <button type="submit" disabled={savingTwoFactor}>
+                {savingTwoFactor ? t("disablingTwoFactorLoading") : t("confirmDisableButton")}
+              </button>
+              <button type="button" onClick={() => setDisablingTwoFactor(false)}>
+                {t("common:cancel")}
+              </button>
+              {disableError && <p className="error-text">{disableError}</p>}
+            </form>
+          ) : (
+            <>
+              <p>{t("twoFactorStatusPrefix")} <strong>{t("enabledWord")}</strong> {t("twoFactorStatusEnabledSuffix")}</p>
+              <button type="button" onClick={() => setDisablingTwoFactor(true)}>
+                {t("disableTwoFactorButton")}
+              </button>
+            </>
+          )
+        ) : (
+          <>
+            <p>{t("twoFactorStatusPrefix")} <strong>{t("disabledWord")}</strong> {t("twoFactorStatusDisabledSuffix")}</p>
+            <button type="button" onClick={handleStartTwoFactorSetup}>
+              {t("enableTwoFactorButton")}
+            </button>
           </>
         )}
       </div>

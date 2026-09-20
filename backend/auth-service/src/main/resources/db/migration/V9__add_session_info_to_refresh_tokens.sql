@@ -1,0 +1,5 @@
+ALTER TABLE REFRESH_TOKENS
+    ADD COLUMN created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER revoked,
+    ADD COLUMN device_info  VARCHAR(255) NULL AFTER created_at,
+    ADD COLUMN ip_address   VARCHAR(255) NULL AFTER device_info,
+    ADD COLUMN last_used_at DATETIME     NULL AFTER ip_address;

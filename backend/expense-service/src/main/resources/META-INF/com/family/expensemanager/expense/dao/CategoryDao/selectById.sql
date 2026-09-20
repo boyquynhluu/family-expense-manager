@@ -4,8 +4,10 @@ SELECT
     name,
     type,
     icon,
-    color
+    color,
+    deleted_at
 FROM
     CATEGORIES
 WHERE
     id = /* id */0
+    AND deleted_at IS NULL

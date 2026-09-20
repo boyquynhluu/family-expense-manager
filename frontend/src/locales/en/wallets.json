@@ -1,0 +1,22 @@
+{
+  "title": "Wallets",
+  "subtitle": "Manage your family's wallets/accounts",
+  "addTitle": "Add new wallet",
+  "editTitle": "Update wallet",
+  "nameLabel": "Wallet name",
+  "namePlaceholder": "e.g. Cash",
+  "currencyLabel": "Currency",
+  "currencyPlaceholder": "VND",
+  "initialBalanceLabel": "Initial balance",
+  "submitAdd": "Add wallet",
+  "submitUpdate": "Update",
+  "listTitle": "Wallet list",
+  "emptyState": "No wallets yet",
+  "colName": "Name",
+  "colCurrency": "Currency",
+  "colInitialBalance": "Initial balance",
+  "colCurrentBalance": "Current balance",
+  "saveFailed": "Failed to save wallet",
+  "deleteConfirm": "Delete this wallet? It can only be deleted if it has no transactions yet — you can restore it later from Trash.",
+  "deleteFailed": "Failed to delete wallet"
+}

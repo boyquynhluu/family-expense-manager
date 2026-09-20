@@ -1,0 +1,7 @@
+{
+  "missingToken": "Thiếu token xác thực.",
+  "verifySuccess": "Xác thực email thành công.",
+  "verifyFailed": "Xác thực email thất bại. Token có thể đã hết hạn.",
+  "verifying": "Đang xác thực email...",
+  "backToLogin": "Quay lại đăng nhập"
+}

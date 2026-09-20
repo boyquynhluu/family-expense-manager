@@ -35,12 +35,19 @@ th {
   border-bottom: 1px solid #e5e7eb;
 }
 
+/* Zebra striping so a wide table (transactions, users, ...) stays easy to scan across
+   rows — applies to every <table> in the app since none of them opt out of this global
+   rule. */
+tbody tr:nth-child(even) {
+  background: #f3f4f6;
+}
+
 tbody tr:last-child td {
   border-bottom: none;
 }
 
 tbody tr:hover {
-  background: #f9fafb;
+  background: #e5e7eb;
 }
 
 button {
@@ -589,6 +596,75 @@ select:focus {
   text-align: center;
 }
 
+.family-switcher {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+  padding: 0 0.1rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #9aa3b5;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.family-switcher select {
+  background: #2a3040;
+  border: 1px solid #3a4152;
+  color: #e5e7eb;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* Pill toggle (VI | EN) — see LanguageSwitcher.jsx. Same dark-pill look everywhere it
+   renders (sidebar or floating), so only positioning differs between variants. */
+.language-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(10, 12, 20, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  width: fit-content;
+  margin-bottom: 1rem;
+}
+
+.language-toggle-btn {
+  border: none;
+  background: transparent;
+  color: #9aa3b5;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 0.35rem 0.95rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.language-toggle-btn:hover:not(.is-active) {
+  color: #e5e7eb;
+}
+
+.language-toggle-btn.is-active {
+  background: #4f46e5;
+  color: #fff;
+}
+
+/* Floats over the auth pages' dark/photo background instead of sitting in the sidebar
+   flow — see LanguageSwitcher's variant="floating" (used on Login/Register/...). */
+.language-toggle-floating {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 2;
+  margin-bottom: 0;
+}
+
 .sidebar-user {
   display: flex;
   align-items: center;
@@ -805,9 +881,31 @@ select:focus {
   color: #16a34a;
 }
 
+.badge-neutral {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
 .amount-expense {
   color: #dc2626;
   font-weight: 600;
+}
+
+.recovery-codes-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.recovery-codes-list code {
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
 }
 
 .amount-income {

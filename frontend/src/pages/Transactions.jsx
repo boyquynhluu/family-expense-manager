@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import toast from "react-hot-toast";
+import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { CloseIcon, EditIcon, ImageIcon, TrashIcon } from "../components/AppIcons";
+import Pagination from "../components/Pagination";
+import { PAGE_SIZE } from "../hooks/usePagedList";
+import { confirmDialog } from "../utils/confirm";
 import { formatCurrency } from "../utils/format";
 
 const emptyForm = {
@@ -20,11 +25,10 @@ const emptyFilter = {
   toDate: "",
 };
 
-const PAGE_SIZE = 20;
-
 const emptyPage = { content: [], page: 0, size: PAGE_SIZE, totalElements: 0, totalPages: 0 };
 
 export default function Transactions() {
+  const { t } = useTranslation(["common", "transactions"]);
   const [pageData, setPageData] = useState(emptyPage);
   const [wallets, setWallets] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -35,6 +39,8 @@ export default function Transactions() {
   const [error, setError] = useState("");
   const fileInputRef = useRef(null);
   const [uploadTargetId, setUploadTargetId] = useState(null);
+  const importInputRef = useRef(null);
+  const [importing, setImporting] = useState(false);
 
   // Filtering/paging happens on the backend now (see README "1. Phân trang/lọc chỉ làm
   // ở frontend") — the client only ever holds the current page's rows.
@@ -112,18 +118,18 @@ export default function Transactions() {
       cancelEdit();
       load();
     } catch (err) {
-      setError(err.response?.data?.message || "Lưu giao dịch thất bại");
+      setError(err.response?.data?.message || t("transactions:saveFailed"));
     }
   }
 
   async function handleDelete(id) {
-    if (!window.confirm("Xoá giao dịch này? Hành động này không thể hoàn tác.")) return;
+    if (!(await confirmDialog(t("transactions:deleteConfirm")))) return;
     setError("");
     try {
       await client.delete(`/expenses/transactions/${id}`);
       load();
     } catch (err) {
-      setError(err.response?.data?.message || "Xoá giao dịch thất bại");
+      setError(err.response?.data?.message || t("transactions:deleteFailed"));
     }
   }
 
@@ -145,7 +151,7 @@ export default function Transactions() {
       });
       load();
     } catch (err) {
-      setError(err.response?.data?.message || "Tải ảnh hoá đơn thất bại");
+      setError(err.response?.data?.message || t("transactions:uploadReceiptFailed"));
     }
   }
 
@@ -157,18 +163,18 @@ export default function Transactions() {
       window.open(url, "_blank");
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
-      setError(err.response?.data?.message || "Không tải được ảnh hoá đơn");
+      setError(err.response?.data?.message || t("transactions:viewReceiptFailed"));
     }
   }
 
   async function handleDeleteReceipt(id) {
-    if (!window.confirm("Xoá ảnh hoá đơn này?")) return;
+    if (!(await confirmDialog(t("transactions:deleteReceiptConfirm")))) return;
     setError("");
     try {
       await client.delete(`/expenses/transactions/${id}/receipt`);
       load();
     } catch (err) {
-      setError(err.response?.data?.message || "Xoá ảnh hoá đơn thất bại");
+      setError(err.response?.data?.message || t("transactions:deleteReceiptFailed"));
     }
   }
 
@@ -213,7 +219,49 @@ export default function Transactions() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err.response?.data?.message || "Xuất báo cáo thất bại");
+      setError(err.response?.data?.message || t("transactions:exportFailed"));
+    }
+  }
+
+  function triggerImport() {
+    importInputRef.current?.click();
+  }
+
+  async function handleImportFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file (e.g. after fixing errors)
+    if (!file) return;
+    setError("");
+    setImporting(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const res = await client.post("/expenses/transactions/import", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const result = res.data.data;
+      if (result.importedCount > 0) {
+        toast.success(t("transactions:importSuccess", { imported: result.importedCount, total: result.totalRows }));
+      }
+      if (result.errors.length > 0) {
+        const preview = result.errors
+          .slice(0, 5)
+          .map((e) => t("transactions:importRowError", { row: e.rowNumber, message: e.message }))
+          .join("\n");
+        const more =
+          result.errors.length > 5
+            ? `\n${t("transactions:importMoreErrors", { count: result.errors.length - 5 })}`
+            : "";
+        setError(`${t("transactions:importErrorsHeader", { count: result.errors.length })}\n${preview}${more}`);
+      }
+      if (result.importedCount > 0) {
+        setPage(0);
+        load();
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || t("transactions:importFailed"));
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -221,25 +269,25 @@ export default function Transactions() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Giao dịch</h1>
-          <p className="page-header-subtitle">Ghi lại các khoản thu/chi hằng ngày</p>
+          <h1>{t("transactions:title")}</h1>
+          <p className="page-header-subtitle">{t("transactions:subtitle")}</p>
         </div>
       </div>
 
       <div className="section-card">
-        <h2>{editingId ? "Cập nhật giao dịch" : "Thêm giao dịch mới"}</h2>
+        <h2>{editingId ? t("transactions:editFormTitle") : t("transactions:addFormTitle")}</h2>
         {wallets.length === 0 || categories.length === 0 ? (
           <p className="empty-state">
             {wallets.length === 0 && categories.length === 0
-              ? "Cần tạo ít nhất 1 ví và 1 danh mục trước khi ghi giao dịch."
+              ? t("transactions:needWalletAndCategory")
               : wallets.length === 0
-                ? "Cần tạo ít nhất 1 ví trước khi ghi giao dịch."
-                : "Cần tạo ít nhất 1 danh mục trước khi ghi giao dịch."}
+                ? t("transactions:needWallet")
+                : t("transactions:needCategory")}
           </p>
         ) : (
           <form className="inline-form" onSubmit={handleSubmit}>
             <label className="field">
-              Ví
+              {t("transactions:walletLabel")}
               <select value={form.walletId} onChange={(e) => updateField("walletId", e.target.value)} required>
                 {wallets.map((w) => (
                   <option key={w.id} value={w.id}>
@@ -249,7 +297,7 @@ export default function Transactions() {
               </select>
             </label>
             <label className="field">
-              Danh mục
+              {t("transactions:categoryLabel")}
               <select value={form.categoryId} onChange={(e) => updateField("categoryId", e.target.value)} required>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -259,14 +307,14 @@ export default function Transactions() {
               </select>
             </label>
             <label className="field">
-              Loại
+              {t("transactions:typeLabel")}
               <select value={form.type} onChange={(e) => updateField("type", e.target.value)}>
-                <option value="EXPENSE">Chi tiêu</option>
-                <option value="INCOME">Thu nhập</option>
+                <option value="EXPENSE">{t("transactions:typeExpense")}</option>
+                <option value="INCOME">{t("transactions:typeIncome")}</option>
               </select>
             </label>
             <label className="field">
-              Số tiền
+              {t("transactions:amountLabel")}
               <input
                 type="number"
                 step="0.01"
@@ -277,7 +325,7 @@ export default function Transactions() {
               />
             </label>
             <label className="field">
-              Thời gian
+              {t("transactions:timeLabel")}
               <input
                 type="datetime-local"
                 value={form.occurredAt}
@@ -286,18 +334,26 @@ export default function Transactions() {
               />
             </label>
             <label className="field">
-              Ghi chú
-              <input placeholder="Tuỳ chọn" value={form.note} onChange={(e) => updateField("note", e.target.value)} />
+              {t("transactions:noteLabel")}
+              <input
+                placeholder={t("transactions:notePlaceholder")}
+                value={form.note}
+                onChange={(e) => updateField("note", e.target.value)}
+              />
             </label>
-            <button type="submit">{editingId ? "Cập nhật" : "Thêm giao dịch"}</button>
+            <button type="submit">{editingId ? t("transactions:submitUpdate") : t("transactions:submitAdd")}</button>
             {editingId && (
               <button type="button" className="btn-secondary" onClick={cancelEdit}>
-                Huỷ
+                {t("common:cancel")}
               </button>
             )}
           </form>
         )}
-        {error && <p className="error-text">{error}</p>}
+        {error && (
+          <p className="error-text" style={{ whiteSpace: "pre-line" }}>
+            {error}
+          </p>
+        )}
       </div>
 
       <input
@@ -307,27 +363,40 @@ export default function Transactions() {
         style={{ display: "none" }}
         onChange={handleFileSelected}
       />
+      <input
+        type="file"
+        ref={importInputRef}
+        accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        style={{ display: "none" }}
+        onChange={handleImportFile}
+      />
 
       <div className="section-card">
         <div className="page-header">
-          <h2>Lịch sử giao dịch</h2>
-          {pageData.totalElements > 0 && (
-            <div className="row-actions">
-              <button type="button" className="btn-secondary" onClick={() => exportReport("CSV")}>
-                Xuất CSV
-              </button>
-              <button type="button" className="btn-secondary" onClick={() => exportReport("EXCEL")}>
-                Xuất Excel
-              </button>
-            </div>
-          )}
+          <h2>{t("transactions:historyTitle")}</h2>
+          <div className="row-actions">
+            <button type="button" className="btn-secondary" onClick={triggerImport} disabled={importing}>
+              {importing ? t("transactions:importing") : t("transactions:importButton")}
+            </button>
+            {pageData.totalElements > 0 && (
+              <>
+                <button type="button" className="btn-secondary" onClick={() => exportReport("CSV")}>
+                  {t("transactions:exportCsv")}
+                </button>
+                <button type="button" className="btn-secondary" onClick={() => exportReport("EXCEL")}>
+                  {t("transactions:exportExcel")}
+                </button>
+              </>
+            )}
+          </div>
         </div>
+        <p className="page-header-subtitle">{t("transactions:importHint")}</p>
 
         <form className="inline-form filter-bar" onSubmit={(e) => e.preventDefault()}>
           <label className="field">
-            Ví
+            {t("transactions:walletLabel")}
             <select value={filter.walletId} onChange={(e) => updateFilter("walletId", e.target.value)}>
-              <option value="">Tất cả</option>
+              <option value="">{t("transactions:allOption")}</option>
               {wallets.map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.name}
@@ -336,9 +405,9 @@ export default function Transactions() {
             </select>
           </label>
           <label className="field">
-            Danh mục
+            {t("transactions:categoryLabel")}
             <select value={filter.categoryId} onChange={(e) => updateFilter("categoryId", e.target.value)}>
-              <option value="">Tất cả</option>
+              <option value="">{t("transactions:allOption")}</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -347,80 +416,80 @@ export default function Transactions() {
             </select>
           </label>
           <label className="field">
-            Loại
+            {t("transactions:typeLabel")}
             <select value={filter.type} onChange={(e) => updateFilter("type", e.target.value)}>
-              <option value="">Tất cả</option>
-              <option value="EXPENSE">Chi tiêu</option>
-              <option value="INCOME">Thu nhập</option>
+              <option value="">{t("transactions:allOption")}</option>
+              <option value="EXPENSE">{t("transactions:typeExpense")}</option>
+              <option value="INCOME">{t("transactions:typeIncome")}</option>
             </select>
           </label>
           <label className="field">
-            Từ ngày
+            {t("transactions:fromDateLabel")}
             <input type="date" value={filter.fromDate} onChange={(e) => updateFilter("fromDate", e.target.value)} />
           </label>
           <label className="field">
-            Đến ngày
+            {t("transactions:toDateLabel")}
             <input type="date" value={filter.toDate} onChange={(e) => updateFilter("toDate", e.target.value)} />
           </label>
           {hasActiveFilter && (
             <button type="button" className="btn-secondary" onClick={clearFilter}>
-              Xoá lọc
+              {t("transactions:clearFilter")}
             </button>
           )}
         </form>
 
         {pageData.content.length === 0 ? (
           <p className="empty-state">
-            {hasActiveFilter ? "Không có giao dịch nào khớp bộ lọc" : "Chưa có giao dịch nào"}
+            {hasActiveFilter ? t("transactions:noMatchFilter") : t("transactions:emptyState")}
           </p>
         ) : (
           <table>
             <thead>
               <tr>
-                <th>Thời gian</th>
-                <th>Ví</th>
-                <th>Danh mục</th>
-                <th>Loại</th>
-                <th>Số tiền</th>
-                <th>Ghi chú</th>
+                <th>{t("transactions:timeLabel")}</th>
+                <th>{t("transactions:walletLabel")}</th>
+                <th>{t("transactions:categoryLabel")}</th>
+                <th>{t("transactions:typeLabel")}</th>
+                <th>{t("transactions:amountLabel")}</th>
+                <th>{t("transactions:noteLabel")}</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {pageData.content.map((t) => (
-                <tr key={t.id}>
-                  <td data-label="Thời gian">{t.occurredAt.replace("T", " ")}</td>
-                  <td data-label="Ví">{walletName(t.walletId)}</td>
-                  <td data-label="Danh mục">{categoryName(t.categoryId)}</td>
-                  <td data-label="Loại">
-                    <span className={`badge ${t.type === "EXPENSE" ? "badge-expense" : "badge-income"}`}>
-                      {t.type === "EXPENSE" ? "Chi tiêu" : "Thu nhập"}
+              {pageData.content.map((row) => (
+                <tr key={row.id}>
+                  <td data-label={t("transactions:timeLabel")}>{row.occurredAt.replace("T", " ")}</td>
+                  <td data-label={t("transactions:walletLabel")}>{walletName(row.walletId)}</td>
+                  <td data-label={t("transactions:categoryLabel")}>{categoryName(row.categoryId)}</td>
+                  <td data-label={t("transactions:typeLabel")}>
+                    <span className={`badge ${row.type === "EXPENSE" ? "badge-expense" : "badge-income"}`}>
+                      {row.type === "EXPENSE" ? t("transactions:typeExpense") : t("transactions:typeIncome")}
                     </span>
                   </td>
                   <td
-                    data-label="Số tiền"
-                    className={t.type === "EXPENSE" ? "amount-expense" : "amount-income"}
+                    data-label={t("transactions:amountLabel")}
+                    className={row.type === "EXPENSE" ? "amount-expense" : "amount-income"}
                   >
-                    {t.type === "EXPENSE" ? "-" : "+"}
-                    {formatCurrency(t.amount)}
+                    {row.type === "EXPENSE" ? "-" : "+"}
+                    {formatCurrency(row.amount)}
                   </td>
-                  <td data-label="Ghi chú">{t.note}</td>
+                  <td data-label={t("transactions:noteLabel")}>{row.note}</td>
                   <td className="row-actions">
-                    {t.hasReceipt ? (
+                    {row.hasReceipt ? (
                       <>
                         <button
                           type="button"
                           className="icon-btn"
-                          onClick={() => viewReceipt(t.id)}
-                          aria-label="Xem hoá đơn"
+                          onClick={() => viewReceipt(row.id)}
+                          aria-label={t("transactions:viewReceiptAria")}
                         >
                           <ImageIcon />
                         </button>
                         <button
                           type="button"
                           className="icon-btn icon-btn-danger"
-                          onClick={() => handleDeleteReceipt(t.id)}
-                          aria-label="Xoá ảnh hoá đơn"
+                          onClick={() => handleDeleteReceipt(row.id)}
+                          aria-label={t("transactions:deleteReceiptAria")}
                         >
                           <CloseIcon />
                         </button>
@@ -429,20 +498,20 @@ export default function Transactions() {
                       <button
                         type="button"
                         className="icon-btn"
-                        onClick={() => triggerUpload(t.id)}
-                        aria-label="Đính kèm hoá đơn"
+                        onClick={() => triggerUpload(row.id)}
+                        aria-label={t("transactions:attachReceiptAria")}
                       >
                         <ImageIcon />
                       </button>
                     )}
-                    <button type="button" className="icon-btn" onClick={() => startEdit(t)} aria-label="Sửa">
+                    <button type="button" className="icon-btn" onClick={() => startEdit(row)} aria-label={t("common:edit")}>
                       <EditIcon />
                     </button>
                     <button
                       type="button"
                       className="icon-btn icon-btn-danger"
-                      onClick={() => handleDelete(t.id)}
-                      aria-label="Xoá"
+                      onClick={() => handleDelete(row.id)}
+                      aria-label={t("common:delete")}
                     >
                       <TrashIcon />
                     </button>
@@ -453,31 +522,7 @@ export default function Transactions() {
           </table>
         )}
 
-        {pageData.totalPages > 1 && (
-          <div className="pagination">
-            <span className="pagination-info">
-              {pageData.totalElements} giao dịch — Trang {pageData.page + 1}/{pageData.totalPages}
-            </span>
-            <div className="pagination-controls">
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={pageData.page === 0}
-              >
-                Trước
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setPage((p) => Math.min(pageData.totalPages - 1, p + 1))}
-                disabled={pageData.page >= pageData.totalPages - 1}
-              >
-                Sau
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination pageData={pageData} onPageChange={setPage} />
       </div>
     </div>
   );

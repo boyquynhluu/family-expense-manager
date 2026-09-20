@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { EditIcon, TrashIcon, WalletIcon } from "../components/AppIcons";
+import { confirmDialog } from "../utils/confirm";
 import { formatCurrency } from "../utils/format";
 import { useAuth } from "../hooks/useAuth";
 
 export default function Wallets() {
+  const { t } = useTranslation(["common", "wallets"]);
   const { role } = useAuth();
   const isOwner = role === "OWNER";
   const [wallets, setWallets] = useState([]);
@@ -51,18 +54,18 @@ export default function Wallets() {
       cancelEdit();
       load();
     } catch (err) {
-      setError(err.response?.data?.message || "Lưu ví thất bại");
+      setError(err.response?.data?.message || t("wallets:saveFailed"));
     }
   }
 
   async function handleDelete(id) {
-    if (!window.confirm("Xoá ví này? Chỉ xoá được khi ví chưa có giao dịch nào.")) return;
+    if (!(await confirmDialog(t("wallets:deleteConfirm")))) return;
     setError("");
     try {
       await client.delete(`/expenses/wallets/${id}`);
       load();
     } catch (err) {
-      setError(err.response?.data?.message || "Xoá ví thất bại");
+      setError(err.response?.data?.message || t("wallets:deleteFailed"));
     }
   }
 
@@ -70,22 +73,27 @@ export default function Wallets() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Ví</h1>
-          <p className="page-header-subtitle">Quản lý các ví/tài khoản tiền của gia đình</p>
+          <h1>{t("wallets:title")}</h1>
+          <p className="page-header-subtitle">{t("wallets:subtitle")}</p>
         </div>
       </div>
 
       <div className="section-card">
-        <h2>{editingId ? "Cập nhật ví" : "Thêm ví mới"}</h2>
+        <h2>{editingId ? t("wallets:editTitle") : t("wallets:addTitle")}</h2>
         <form className="inline-form" onSubmit={handleSubmit}>
           <label className="field">
-            Tên ví
-            <input placeholder="VD: Tiền mặt" value={name} onChange={(e) => setName(e.target.value)} required />
+            {t("wallets:nameLabel")}
+            <input
+              placeholder={t("wallets:namePlaceholder")}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
           </label>
           <label className="field">
-            Tiền tệ
+            {t("wallets:currencyLabel")}
             <input
-              placeholder="VND"
+              placeholder={t("wallets:currencyPlaceholder")}
               value={currency}
               onChange={(e) => setCurrency(e.target.value.toUpperCase())}
               maxLength={3}
@@ -93,7 +101,7 @@ export default function Wallets() {
             />
           </label>
           <label className="field">
-            Số dư ban đầu
+            {t("wallets:initialBalanceLabel")}
             <input
               type="number"
               step="0.01"
@@ -103,10 +111,10 @@ export default function Wallets() {
               required
             />
           </label>
-          <button type="submit">{editingId ? "Cập nhật" : "Thêm ví"}</button>
+          <button type="submit">{editingId ? t("wallets:submitUpdate") : t("wallets:submitAdd")}</button>
           {editingId && (
             <button type="button" className="btn-secondary" onClick={cancelEdit}>
-              Huỷ
+              {t("common:cancel")}
             </button>
           )}
         </form>
@@ -114,35 +122,35 @@ export default function Wallets() {
       </div>
 
       <div className="section-card">
-        <h2>Danh sách ví</h2>
+        <h2>{t("wallets:listTitle")}</h2>
         {wallets.length === 0 ? (
-          <p className="empty-state">Chưa có ví nào</p>
+          <p className="empty-state">{t("wallets:emptyState")}</p>
         ) : (
           <table>
             <thead>
               <tr>
-                <th>Tên</th>
-                <th>Tiền tệ</th>
-                <th>Số dư ban đầu</th>
-                <th>Số dư hiện tại</th>
+                <th>{t("wallets:colName")}</th>
+                <th>{t("wallets:colCurrency")}</th>
+                <th>{t("wallets:colInitialBalance")}</th>
+                <th>{t("wallets:colCurrentBalance")}</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {wallets.map((w) => (
                 <tr key={w.id}>
-                  <td data-label="Tên">
+                  <td data-label={t("wallets:colName")}>
                     <span className="table-cell-icon">
                       <WalletIcon /> {w.name}
                     </span>
                   </td>
-                  <td data-label="Tiền tệ">{w.currency}</td>
-                  <td data-label="Số dư ban đầu">{formatCurrency(w.initialBalance, w.currency)}</td>
-                  <td data-label="Số dư hiện tại">
+                  <td data-label={t("wallets:colCurrency")}>{w.currency}</td>
+                  <td data-label={t("wallets:colInitialBalance")}>{formatCurrency(w.initialBalance, w.currency)}</td>
+                  <td data-label={t("wallets:colCurrentBalance")}>
                     <strong>{formatCurrency(w.currentBalance, w.currency)}</strong>
                   </td>
                   <td className="row-actions">
-                    <button type="button" className="icon-btn" onClick={() => startEdit(w)} aria-label="Sửa">
+                    <button type="button" className="icon-btn" onClick={() => startEdit(w)} aria-label={t("common:edit")}>
                       <EditIcon />
                     </button>
                     {isOwner && (
@@ -150,7 +158,7 @@ export default function Wallets() {
                         type="button"
                         className="icon-btn icon-btn-danger"
                         onClick={() => handleDelete(w.id)}
-                        aria-label="Xoá"
+                        aria-label={t("common:delete")}
                       >
                         <TrashIcon />
                       </button>

@@ -1,0 +1,18 @@
+{
+  "title": "Dashboard",
+  "subtitle": "Monthly overview of your family's expenses",
+  "summaryLoadFailed": "Failed to load summary data",
+  "totalIncome": "Total income",
+  "totalExpense": "Total expense",
+  "balanceThisMonth": "This month's balance",
+  "trendTitle": "Income & expense trend (last 6 months)",
+  "noData": "No data yet",
+  "income": "Income",
+  "expense": "Expense",
+  "walletBalanceTitle": "Balance by wallet",
+  "noWallets": "No wallets yet",
+  "expenseByCategoryTitle": "Expenses by category",
+  "noExpenseData": "No expense data for this month yet",
+  "expenseByCategoryByWalletTitle": "Expenses by category per wallet",
+  "noExpenseThisMonth": "No expenses this month yet"
+}

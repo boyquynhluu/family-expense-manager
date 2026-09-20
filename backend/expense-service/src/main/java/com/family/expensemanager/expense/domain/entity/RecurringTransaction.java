@@ -55,6 +55,10 @@ public class RecurringTransaction {
     @Column(name = "next_run_date")
     private LocalDate nextRunDate;
 
+    /** Null until the rule fires for the first time — see {@link com.family.expensemanager.expense.service.RecurringTransactionService}. */
+    @Column(name = "last_run_date")
+    private LocalDate lastRunDate;
+
     private Boolean active;
 
     @Column(name = "created_at")
@@ -170,6 +174,14 @@ public class RecurringTransaction {
 
     public void setNextRunDate(LocalDate nextRunDate) {
         this.nextRunDate = nextRunDate;
+    }
+
+    public LocalDate getLastRunDate() {
+        return lastRunDate;
+    }
+
+    public void setLastRunDate(LocalDate lastRunDate) {
+        this.lastRunDate = lastRunDate;
     }
 
     public Boolean getActive() {

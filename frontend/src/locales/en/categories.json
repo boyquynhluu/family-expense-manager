@@ -1,0 +1,21 @@
+{
+  "title": "Categories",
+  "subtitle": "Group income/expenses to track them more easily",
+  "addTitle": "Add new category",
+  "editTitle": "Update category",
+  "nameLabel": "Category name",
+  "namePlaceholder": "e.g. Food",
+  "typeLabel": "Type",
+  "typeExpense": "Expense",
+  "typeIncome": "Income",
+  "iconLabel": "Icon (optional)",
+  "iconPlaceholder": "e.g. 🍔",
+  "colorLabel": "Color",
+  "submitAdd": "Add category",
+  "submitUpdate": "Update",
+  "listTitle": "Category list",
+  "emptyState": "No categories yet",
+  "saveFailed": "Failed to save category",
+  "deleteConfirm": "Delete this category? It can only be deleted if no transactions or budgets use it — you can restore it later from Trash.",
+  "deleteFailed": "Failed to delete category"
+}

@@ -22,6 +22,12 @@ public interface NotificationDao {
     List<Notification> selectByFamilyId(Long familyId);
 
     @Select
+    long countByFamilyId(Long familyId);
+
+    @Select
+    List<Notification> selectByFamilyIdPaged(Long familyId, int limit, int offset);
+
+    @Select
     Optional<Notification> selectById(Long id);
 
     @Select

@@ -45,6 +45,9 @@ public class Transaction {
     @Column(name = "receipt_content_type")
     private String receiptContentType;
 
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     public Long getId() {
         return id;
     }
@@ -131,5 +134,13 @@ public class Transaction {
 
     public void setReceiptContentType(String receiptContentType) {
         this.receiptContentType = receiptContentType;
+    }
+
+    public LocalDateTime getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void setDeletedAt(LocalDateTime deletedAt) {
+        this.deletedAt = deletedAt;
     }
 }

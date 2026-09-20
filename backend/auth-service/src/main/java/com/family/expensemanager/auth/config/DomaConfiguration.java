@@ -4,8 +4,12 @@ import com.family.expensemanager.auth.dao.FamilyDao;
 import com.family.expensemanager.auth.dao.FamilyDaoImpl;
 import com.family.expensemanager.auth.dao.FamilyInviteDao;
 import com.family.expensemanager.auth.dao.FamilyInviteDaoImpl;
+import com.family.expensemanager.auth.dao.FamilyMembershipDao;
+import com.family.expensemanager.auth.dao.FamilyMembershipDaoImpl;
 import com.family.expensemanager.auth.dao.RefreshTokenDao;
 import com.family.expensemanager.auth.dao.RefreshTokenDaoImpl;
+import com.family.expensemanager.auth.dao.TwoFactorRecoveryCodeDao;
+import com.family.expensemanager.auth.dao.TwoFactorRecoveryCodeDaoImpl;
 import com.family.expensemanager.auth.dao.UserDao;
 import com.family.expensemanager.auth.dao.UserDaoImpl;
 import com.family.expensemanager.common.doma.AppDomaConfig;
@@ -42,5 +46,15 @@ public class DomaConfiguration {
     @Bean
     public FamilyInviteDao familyInviteDao(Config domaConfig) {
         return new FamilyInviteDaoImpl(domaConfig);
+    }
+
+    @Bean
+    public FamilyMembershipDao familyMembershipDao(Config domaConfig) {
+        return new FamilyMembershipDaoImpl(domaConfig);
+    }
+
+    @Bean
+    public TwoFactorRecoveryCodeDao twoFactorRecoveryCodeDao(Config domaConfig) {
+        return new TwoFactorRecoveryCodeDaoImpl(domaConfig);
     }
 }

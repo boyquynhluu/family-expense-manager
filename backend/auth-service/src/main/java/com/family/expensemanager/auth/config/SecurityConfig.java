@@ -16,6 +16,7 @@ import com.family.expensemanager.auth.security.oauth2.OAuth2AuthenticationFailur
 import com.family.expensemanager.auth.security.oauth2.OAuth2AuthenticationSuccessHandler;
 import com.family.expensemanager.common.security.JwtAuthenticationFilter;
 import com.family.expensemanager.common.security.JwtUtil;
+import com.family.expensemanager.common.security.RevokedSessionStore;
 
 import lombok.RequiredArgsConstructor;
 
@@ -25,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 public class SecurityConfig {
 
     private final JwtUtil jwtUtil;
+    private final RevokedSessionStore revokedSessionStore;
     private final AppOidcUserService appOidcUserService;
     private final AppOAuth2UserService appOAuth2UserService;
     private final CookieOAuth2AuthorizationRequestRepository authorizationRequestRepository;
@@ -38,14 +40,14 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/verify",
-                                "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
+                                "/api/auth/forgot-password", "/api/auth/reset-password", "/api/auth/2fa/verify-login").permitAll()
                         .requestMatchers("/api/auth/oauth2/**", "/api/auth/login/oauth2/**").permitAll()
                         // Viewing/accepting a family invite needs no prior login — only sending one
                         // (POST /api/auth/invite, no path segment after it) requires auth.
                         .requestMatchers(HttpMethod.GET, "/api/auth/invite/*").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/invite/*/accept").permitAll()
                         .requestMatchers("/v3/api-docs", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/prometheus").permitAll()
                         .anyRequest().authenticated())
                 .oauth2Login(oauth2 -> oauth2
                         .authorizationEndpoint(a -> a
@@ -57,7 +59,7 @@ public class SecurityConfig {
                                 .userService(appOAuth2UserService))
                         .successHandler(oAuth2AuthenticationSuccessHandler)
                         .failureHandler(oAuth2AuthenticationFailureHandler))
-                .addFilterBefore(new JwtAuthenticationFilter(jwtUtil), UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(new JwtAuthenticationFilter(jwtUtil, revokedSessionStore), UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 }

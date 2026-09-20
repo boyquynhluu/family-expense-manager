@@ -30,6 +30,7 @@ import lombok.extern.slf4j.Slf4j;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
+    private final RevokedSessionStore revokedSessionStore;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -39,6 +40,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String token = header.substring(7);
             try {
                 Claims claims = jwtUtil.parseClaims(token);
+                Long sessionId = claims.get(JwtUtil.CLAIM_SESSION_ID, Long.class);
+                if (revokedSessionStore.isRevoked(sessionId)) {
+                    log.warn("JWT thuộc phiên đăng nhập đã bị thu hồi, sessionId={}", sessionId);
+                    SecurityContextHolder.clearContext();
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+
                 String role = claims.get(JwtUtil.CLAIM_ROLE, String.class);
                 Boolean isSystemAdmin = claims.get(JwtUtil.CLAIM_IS_SYSTEM_ADMIN, Boolean.class);
 

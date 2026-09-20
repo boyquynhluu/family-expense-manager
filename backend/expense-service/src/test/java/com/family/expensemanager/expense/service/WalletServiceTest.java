@@ -1,5 +1,6 @@
 package com.family.expensemanager.expense.service;
 
+import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.expense.dao.RecurringTransactionDao;
@@ -113,7 +114,7 @@ class WalletServiceTest {
         when(transactionDao.countByWalletId(1L)).thenReturn(3L);
 
         assertThatThrownBy(() -> walletService.delete(1L, 1L)).isInstanceOf(ConflictException.class);
-        verify(walletDao, never()).delete(any());
+        verify(walletDao, never()).update(any());
     }
 
     @Test
@@ -124,7 +125,7 @@ class WalletServiceTest {
         when(recurringTransactionDao.countByWalletId(1L)).thenReturn(1L);
 
         assertThatThrownBy(() -> walletService.delete(1L, 1L)).isInstanceOf(ConflictException.class);
-        verify(walletDao, never()).delete(any());
+        verify(walletDao, never()).update(any());
     }
 
     @Test
@@ -136,7 +137,54 @@ class WalletServiceTest {
 
         walletService.delete(1L, 1L);
 
-        verify(walletDao).delete(target);
+        assertThat(target.getDeletedAt()).isNotNull();
+        verify(walletDao).update(target);
+    }
+
+    @Test
+    void restore_clearsDeletedAt_whenRowExists() {
+        when(walletDao.restore(1L, 1L)).thenReturn(1);
+
+        walletService.restore(1L, 1L);
+
+        verify(walletDao).restore(1L, 1L);
+    }
+
+    @Test
+    void restore_throwsNotFound_whenRowMissingOrNotDeleted() {
+        when(walletDao.restore(1L, 1L)).thenReturn(0);
+
+        assertThatThrownBy(() -> walletService.restore(1L, 1L)).isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void listDeletedPaged_returnsPageWithOffset() {
+        when(walletDao.countDeletedByFamilyId(1L)).thenReturn(12L);
+        when(walletDao.selectDeletedByFamilyIdPaged(1L, 5, 10))
+                .thenReturn(List.of(wallet(11L, 1L, "VND"), wallet(12L, 1L, "VND")));
+
+        var result = walletService.listDeletedPaged(1L, 2, 5);
+
+        assertThat(result.content()).hasSize(2);
+        assertThat(result.content().get(0).id()).isEqualTo(11L);
+        assertThat(result.page()).isEqualTo(2);
+        assertThat(result.size()).isEqualTo(5);
+        assertThat(result.totalElements()).isEqualTo(12L);
+        assertThat(result.totalPages()).isEqualTo(3);
+    }
+
+    @Test
+    void listDeletedPaged_rejectsNegativePage() {
+        assertThatThrownBy(() -> walletService.listDeletedPaged(1L, -1, 5))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void listDeletedPaged_rejectsOutOfRangeSize() {
+        assertThatThrownBy(() -> walletService.listDeletedPaged(1L, 0, 0))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> walletService.listDeletedPaged(1L, 0, 101))
+                .isInstanceOf(BadRequestException.class);
     }
 
     @Test

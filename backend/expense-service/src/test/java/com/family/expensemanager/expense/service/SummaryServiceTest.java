@@ -74,9 +74,9 @@ class SummaryServiceTest {
 
     @Test
     void walletCategoryBreakdown_omitsZeroTotals_andOnlyConsidersExpenseCategories() {
-        WalletResponse wallet = new WalletResponse(10L, 1L, "Ví chính", "VND", BigDecimal.ZERO, BigDecimal.ZERO);
-        CategoryResponse expenseCategory = new CategoryResponse(20L, 1L, "Ăn uống", "EXPENSE", null, null);
-        CategoryResponse incomeCategory = new CategoryResponse(21L, 1L, "Lương", "INCOME", null, null);
+        WalletResponse wallet = new WalletResponse(10L, 1L, "Ví chính", "VND", BigDecimal.ZERO, BigDecimal.ZERO, null);
+        CategoryResponse expenseCategory = new CategoryResponse(20L, 1L, "Ăn uống", "EXPENSE", null, null, null);
+        CategoryResponse incomeCategory = new CategoryResponse(21L, 1L, "Lương", "INCOME", null, null, null);
         when(walletService.listByFamily(1L)).thenReturn(List.of(wallet));
         when(categoryService.listByFamily(1L)).thenReturn(List.of(expenseCategory, incomeCategory));
         when(transactionDao.sumAmountByWalletCategoryPeriodAndType(1L, 10L, 20L, "2026-01", "EXPENSE"))

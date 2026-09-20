@@ -1,16 +1,7 @@
 package com.family.expensemanager.expense.controller;
 
-import com.family.expensemanager.common.dto.ApiResponse;
-import com.family.expensemanager.common.dto.PageResponse;
-import com.family.expensemanager.common.report.ReportFormat;
-import com.family.expensemanager.common.security.CurrentUser;
-import com.family.expensemanager.expense.dto.ReceiptFile;
-import com.family.expensemanager.expense.dto.TransactionReportFilter;
-import com.family.expensemanager.expense.dto.TransactionRequest;
-import com.family.expensemanager.expense.dto.TransactionResponse;
-import com.family.expensemanager.expense.service.TransactionReportService;
-import com.family.expensemanager.expense.service.TransactionService;
-import jakarta.validation.Valid;
+import java.time.LocalDate;
+
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -25,8 +16,20 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.time.LocalDate;
+import com.family.expensemanager.common.dto.ApiResponse;
+import com.family.expensemanager.common.dto.PageResponse;
+import com.family.expensemanager.common.report.ReportFormat;
+import com.family.expensemanager.common.security.CurrentUser;
+import com.family.expensemanager.expense.dto.ImportResult;
+import com.family.expensemanager.expense.dto.ReceiptFile;
+import com.family.expensemanager.expense.dto.TransactionReportFilter;
+import com.family.expensemanager.expense.dto.TransactionRequest;
+import com.family.expensemanager.expense.dto.TransactionResponse;
+import com.family.expensemanager.expense.service.TransactionImportService;
+import com.family.expensemanager.expense.service.TransactionReportService;
+import com.family.expensemanager.expense.service.TransactionService;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -38,6 +41,7 @@ public class TransactionController {
 
     private final TransactionService transactionService;
     private final TransactionReportService transactionReportService;
+    private final TransactionImportService transactionImportService;
 
     @PostMapping
     public ApiResponse<TransactionResponse> create(@Valid @RequestBody TransactionRequest request) {
@@ -55,7 +59,7 @@ public class TransactionController {
             @RequestParam(required = false) LocalDate fromDate,
             @RequestParam(required = false) LocalDate toDate,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "10") int size) {
         log.info("list - start, page={}, size={}", page, size);
         TransactionReportFilter filter = new TransactionReportFilter(walletId, categoryId, type, fromDate, toDate);
         return ApiResponse.ok(transactionService.listByFamilyPaged(CurrentUser.familyId(), filter, page, size));
@@ -80,6 +84,20 @@ public class TransactionController {
         return ApiResponse.ok();
     }
 
+    @GetMapping("/trash")
+    public ApiResponse<PageResponse<TransactionResponse>> trash(
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "5") int size) {
+        log.info("trash - start, page={}, size={}", page, size);
+        return ApiResponse.ok(transactionService.listDeletedPaged(CurrentUser.familyId(), page, size));
+    }
+
+    @PostMapping("/{id}/restore")
+    public ApiResponse<Void> restore(@PathVariable Long id) {
+        log.info("restore - start, id={}", id);
+        transactionService.restore(CurrentUser.familyId(), id);
+        return ApiResponse.ok();
+    }
+
     @PostMapping("/{id}/receipt")
     public ApiResponse<TransactionResponse> uploadReceipt(
             @PathVariable Long id, @RequestParam("file") MultipartFile file) {
@@ -101,6 +119,13 @@ public class TransactionController {
         log.info("deleteReceipt - start, id={}", id);
         transactionService.deleteReceipt(CurrentUser.familyId(), id);
         return ApiResponse.ok();
+    }
+
+    @PostMapping("/import")
+    public ApiResponse<ImportResult> importTransactions(@RequestParam("file") MultipartFile file) {
+        log.info("importTransactions - start, filename={}", file.getOriginalFilename());
+        return ApiResponse.ok(transactionImportService.importFile(
+                CurrentUser.familyId(), CurrentUser.userId(), CurrentUser.email(), CurrentUser.displayName(), file));
     }
 
     @GetMapping("/export")

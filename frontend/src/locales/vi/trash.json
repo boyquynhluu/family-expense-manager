@@ -1,0 +1,22 @@
+{
+  "title": "Thùng rác",
+  "subtitle": "Ví, danh mục và giao dịch đã xoá — khôi phục lại nếu xoá nhầm (README \"10. Xoá là mất vĩnh viễn\")",
+  "restoreSuccess": "Đã khôi phục",
+  "restoreFailed": "Khôi phục thất bại",
+  "walletsTitle": "Ví đã xoá",
+  "walletsEmpty": "Không có ví nào trong thùng rác.",
+  "categoriesTitle": "Danh mục đã xoá",
+  "categoriesEmpty": "Không có danh mục nào trong thùng rác.",
+  "transactionsTitle": "Giao dịch đã xoá",
+  "transactionsEmpty": "Không có giao dịch nào trong thùng rác.",
+  "colName": "Tên",
+  "colCurrency": "Tiền tệ",
+  "colDeletedAt": "Đã xoá lúc",
+  "colType": "Loại",
+  "colAmount": "Số tiền",
+  "colOccurredAt": "Ngày giao dịch",
+  "colNote": "Ghi chú",
+  "restoreButton": "Khôi phục",
+  "typeExpense": "Chi tiêu",
+  "typeIncome": "Thu nhập"
+}

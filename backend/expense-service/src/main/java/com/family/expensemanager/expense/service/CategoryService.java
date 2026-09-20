@@ -1,5 +1,7 @@
 package com.family.expensemanager.expense.service;
 
+import com.family.expensemanager.common.dto.PageResponse;
+import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.expense.dao.BudgetDao;
@@ -13,6 +15,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import lombok.RequiredArgsConstructor;
@@ -22,6 +25,8 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 @Slf4j(topic = "CategoryService")
 public class CategoryService {
+
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final CategoryDao categoryDao;
     private final TransactionDao transactionDao;
@@ -58,6 +63,7 @@ public class CategoryService {
         return CategoryResponse.from(category);
     }
 
+    /** Soft-delete (README "10. Xoá là mất vĩnh viễn") — the row stays, just hidden, so {@link #restore} can undo it. */
     @Transactional
     @PreAuthorize("hasRole('OWNER')")
     public void delete(Long categoryId, Long familyId) {
@@ -69,7 +75,32 @@ public class CategoryService {
         if (recurringTransactionDao.countByCategoryId(categoryId) > 0) {
             throw new ConflictException("Không thể xoá danh mục đang có giao dịch định kỳ");
         }
-        categoryDao.delete(category);
+        category.setDeletedAt(LocalDateTime.now());
+        categoryDao.update(category);
+    }
+
+    public PageResponse<CategoryResponse> listDeletedPaged(Long familyId, int page, int size) {
+        log.info("listDeletedPaged - start, familyId={}, page={}, size={}", familyId, page, size);
+        if (page < 0) {
+            throw new BadRequestException("page phải >= 0");
+        }
+        if (size < 1 || size > MAX_PAGE_SIZE) {
+            throw new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE);
+        }
+        long totalElements = categoryDao.countDeletedByFamilyId(familyId);
+        List<CategoryResponse> content = categoryDao.selectDeletedByFamilyIdPaged(familyId, size, page * size).stream()
+                .map(CategoryResponse::from)
+                .toList();
+        return PageResponse.of(content, page, size, totalElements);
+    }
+
+    @Transactional
+    @PreAuthorize("hasRole('OWNER')")
+    public void restore(Long categoryId, Long familyId) {
+        log.info("restore - start, categoryId={}, familyId={}", categoryId, familyId);
+        if (categoryDao.restore(categoryId, familyId) == 0) {
+            throw new NotFoundException("Danh mục đã xoá không tồn tại: " + categoryId);
+        }
     }
 
     Category requireOwnedByFamily(Long categoryId, Long familyId) {

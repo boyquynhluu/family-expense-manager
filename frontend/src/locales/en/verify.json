@@ -1,0 +1,7 @@
+{
+  "missingToken": "Missing verification token.",
+  "verifySuccess": "Your email has been verified.",
+  "verifyFailed": "Email verification failed. The token may have expired.",
+  "verifying": "Verifying your email...",
+  "backToLogin": "Back to login"
+}

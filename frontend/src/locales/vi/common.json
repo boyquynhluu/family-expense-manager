@@ -1,0 +1,20 @@
+{
+  "language": "Ngôn ngữ",
+  "languageVi": "Tiếng Việt",
+  "languageEn": "English",
+  "save": "Lưu",
+  "cancel": "Huỷ",
+  "edit": "Sửa",
+  "delete": "Xoá",
+  "confirm": "Xác nhận",
+  "confirmTitle": "Xác nhận hành động",
+  "loading": "Đang tải...",
+  "saving": "Đang lưu...",
+  "close": "Đóng",
+  "back": "Quay lại",
+  "yes": "Có",
+  "no": "Không",
+  "paginationInfo": "{{total}} mục — Trang {{page}}/{{totalPages}}",
+  "prevPage": "Trước",
+  "nextPage": "Sau"
+}

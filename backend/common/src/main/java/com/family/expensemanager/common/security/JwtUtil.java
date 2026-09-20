@@ -28,6 +28,8 @@ public class JwtUtil {
     public static final String CLAIM_DISPLAY_NAME = "displayName";
     public static final String CLAIM_IS_SYSTEM_ADMIN = "isSystemAdmin";
     public static final String CLAIM_EMAIL = "email";
+    /** REFRESH_TOKENS.id this access token was minted from — lets a revoked session be blocked immediately (see RevokedSessionStore). */
+    public static final String CLAIM_SESSION_ID = "sid";
 
     private final SecretKey key;
 

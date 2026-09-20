@@ -1,0 +1,20 @@
+{
+  "missingToken": "Missing invite token.",
+  "invalidInvite": "This invite is invalid or has expired.",
+  "joinSuccess": "You've joined the family. You can now log in.",
+  "joinFailed": "Failed to join. The invite may have expired.",
+  "title": "Join a family",
+  "welcome": "Welcome!",
+  "invitedSubtitle": "You've been invited to join <strong>{{familyName}}</strong>'s family with the email {{email}}.",
+  "checkingInvite": "Checking invite...",
+  "existingAccountSubtitle": "This email already has an account. Click confirm to join this family too — you'll keep logging in with your current password.",
+  "displayNamePlaceholder": "Your display name",
+  "passwordPlaceholder": "Password (minimum 8 characters)",
+  "passwordLabel": "Password",
+  "hidePassword": "Hide password",
+  "showPassword": "Show password",
+  "joining": "Joining...",
+  "confirmJoin": "Confirm and join",
+  "joinFamily": "Join family",
+  "backToLogin": "Back to login"
+}

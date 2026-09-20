@@ -1,15 +1,18 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { EyeIcon, EyeOffIcon, KeyIcon } from "../components/AuthIcons";
+import LanguageSwitcher from "../components/LanguageSwitcher";
 
 export default function ResetPassword() {
+  const { t } = useTranslation("resetPassword");
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get("token");
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState(token ? "" : "Thiếu token đặt lại mật khẩu.");
+  const [error, setError] = useState(token ? "" : t("missingToken"));
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e) {
@@ -20,7 +23,7 @@ export default function ResetPassword() {
       await client.post("/auth/reset-password", { token, newPassword });
       navigate("/login", { replace: true, state: { passwordResetSuccess: true } });
     } catch (err) {
-      setError(err.response?.data?.message || "Đặt lại mật khẩu thất bại. Token có thể đã hết hạn.");
+      setError(err.response?.data?.message || t("resetFailed"));
     } finally {
       setLoading(false);
     }
@@ -28,12 +31,13 @@ export default function ResetPassword() {
 
   return (
     <div className="auth-page">
+      <LanguageSwitcher variant="floating" />
       <form className="auth-form" onSubmit={handleSubmit}>
-        <h1 className="auth-title">Đặt lại mật khẩu</h1>
+        <h1 className="auth-title">{t("title")}</h1>
 
         <div className="auth-card">
-          <p className="auth-card-title">Tạo mật khẩu mới</p>
-          <p className="auth-card-subtitle">Nhập mật khẩu mới cho tài khoản của bạn.</p>
+          <p className="auth-card-title">{t("cardTitle")}</p>
+          <p className="auth-card-subtitle">{t("subtitle")}</p>
 
           {error && <p className="error-text">{error}</p>}
 
@@ -47,8 +51,8 @@ export default function ResetPassword() {
                   type={showPassword ? "text" : "password"}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Mật khẩu mới (tối thiểu 8 ký tự)"
-                  aria-label="Mật khẩu mới"
+                  placeholder={t("newPasswordPlaceholder")}
+                  aria-label={t("newPasswordLabel")}
                   minLength={8}
                   required
                 />
@@ -56,21 +60,21 @@ export default function ResetPassword() {
                   type="button"
                   className="auth-input-toggle"
                   onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                  aria-label={showPassword ? t("hidePassword") : t("showPassword")}
                 >
                   {showPassword ? <EyeOffIcon /> : <EyeIcon />}
                 </button>
               </div>
 
               <button type="submit" className="auth-submit" disabled={loading}>
-                {loading ? "Đang lưu..." : "Đặt lại mật khẩu"}
+                {loading ? t("saving") : t("submit")}
               </button>
             </>
           )}
         </div>
 
         <p className="auth-footer-text">
-          <Link to="/login">Quay lại đăng nhập</Link>
+          <Link to="/login">{t("backToLogin")}</Link>
         </p>
       </form>
     </div>

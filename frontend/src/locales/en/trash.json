@@ -1,0 +1,22 @@
+{
+  "title": "Trash",
+  "subtitle": "Deleted wallets, categories, and transactions — restore them if you deleted something by mistake (README \"10. Deletion is permanent\")",
+  "restoreSuccess": "Restored",
+  "restoreFailed": "Failed to restore",
+  "walletsTitle": "Deleted wallets",
+  "walletsEmpty": "No wallets in trash.",
+  "categoriesTitle": "Deleted categories",
+  "categoriesEmpty": "No categories in trash.",
+  "transactionsTitle": "Deleted transactions",
+  "transactionsEmpty": "No transactions in trash.",
+  "colName": "Name",
+  "colCurrency": "Currency",
+  "colDeletedAt": "Deleted at",
+  "colType": "Type",
+  "colAmount": "Amount",
+  "colOccurredAt": "Transaction date",
+  "colNote": "Note",
+  "restoreButton": "Restore",
+  "typeExpense": "Expense",
+  "typeIncome": "Income"
+}

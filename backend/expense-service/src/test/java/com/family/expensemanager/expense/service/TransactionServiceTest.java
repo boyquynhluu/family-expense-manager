@@ -176,6 +176,68 @@ class TransactionServiceTest {
         verify(receiptStorageService, never()).delete(any());
     }
 
+    @Test
+    void delete_softDeletesRow_andKeepsReceiptFile() {
+        Transaction target = transaction(1L);
+        target.setReceiptPath("1/1-a.jpg");
+        when(transactionDao.selectById(1L)).thenReturn(Optional.of(target));
+
+        transactionService.delete(1L, 1L);
+
+        assertThat(target.getDeletedAt()).isNotNull();
+        verify(transactionDao).update(target);
+        verify(transactionDao, never()).delete(any());
+        verify(receiptStorageService, never()).delete(any());
+    }
+
+    @Test
+    void restore_clearsDeletedAt_whenRowExists() {
+        Transaction restored = transaction(1L);
+        when(transactionDao.restore(1L, 1L)).thenReturn(1);
+        when(transactionDao.selectById(1L)).thenReturn(Optional.of(restored));
+
+        transactionService.restore(1L, 1L);
+
+        verify(transactionDao).restore(1L, 1L);
+    }
+
+    @Test
+    void restore_throwsNotFound_whenRowMissingOrNotDeleted() {
+        when(transactionDao.restore(1L, 1L)).thenReturn(0);
+
+        assertThatThrownBy(() -> transactionService.restore(1L, 1L)).isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void listDeletedPaged_returnsPageWithOffset() {
+        when(transactionDao.countDeletedByFamilyId(1L)).thenReturn(12L);
+        when(transactionDao.selectDeletedByFamilyIdPaged(1L, 5, 10))
+                .thenReturn(List.of(transaction(98L), transaction(99L)));
+
+        var result = transactionService.listDeletedPaged(1L, 2, 5);
+
+        assertThat(result.content()).hasSize(2);
+        assertThat(result.content().get(1).id()).isEqualTo(99L);
+        assertThat(result.page()).isEqualTo(2);
+        assertThat(result.size()).isEqualTo(5);
+        assertThat(result.totalElements()).isEqualTo(12L);
+        assertThat(result.totalPages()).isEqualTo(3);
+    }
+
+    @Test
+    void listDeletedPaged_rejectsNegativePage() {
+        assertThatThrownBy(() -> transactionService.listDeletedPaged(1L, -1, 5))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void listDeletedPaged_rejectsOutOfRangeSize() {
+        assertThatThrownBy(() -> transactionService.listDeletedPaged(1L, 0, 0))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> transactionService.listDeletedPaged(1L, 0, 101))
+                .isInstanceOf(BadRequestException.class);
+    }
+
     private static Transaction transaction(Long id) {
         Transaction transaction = new Transaction();
         transaction.setId(id);

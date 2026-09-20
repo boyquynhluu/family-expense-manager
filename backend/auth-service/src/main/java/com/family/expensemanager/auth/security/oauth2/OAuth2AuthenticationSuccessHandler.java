@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import com.family.expensemanager.auth.dto.AuthResponse;
+import com.family.expensemanager.auth.security.RequestMetadataUtil;
 import com.family.expensemanager.auth.service.AuthService;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -43,7 +44,8 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
                     "Unexpected OAuth2 principal type: " + authentication.getPrincipal().getClass());
         }
 
-        AuthResponse tokens = authService.issueTokens(appUserPrincipal.getUser());
+        AuthResponse tokens = authService.issueTokens(appUserPrincipal.getUser(),
+                RequestMetadataUtil.deviceInfo(request), RequestMetadataUtil.ipAddress(request));
 
         String targetUrl = UriComponentsBuilder.fromUriString(successRedirectUrl)
                 .queryParam("accessToken", tokens.accessToken())

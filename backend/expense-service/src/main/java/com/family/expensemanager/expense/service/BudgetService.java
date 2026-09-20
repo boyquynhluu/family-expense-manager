@@ -1,5 +1,7 @@
 package com.family.expensemanager.expense.service;
 
+import com.family.expensemanager.common.dto.PageResponse;
+import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.expense.dao.BudgetDao;
 import com.family.expensemanager.expense.domain.entity.Budget;
@@ -19,6 +21,8 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j(topic = "BudgetService")
 public class BudgetService {
 
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final BudgetDao budgetDao;
     private final CategoryService categoryService;
 
@@ -36,9 +40,19 @@ public class BudgetService {
         return BudgetResponse.from(budget);
     }
 
-    public List<BudgetResponse> listByFamily(Long familyId) {
-        log.info("listByFamily - start, familyId={}", familyId);
-        return budgetDao.selectByFamilyId(familyId).stream().map(BudgetResponse::from).toList();
+    public PageResponse<BudgetResponse> listByFamilyPaged(Long familyId, int page, int size) {
+        log.info("listByFamilyPaged - start, familyId={}, page={}, size={}", familyId, page, size);
+        if (page < 0) {
+            throw new BadRequestException("page phải >= 0");
+        }
+        if (size < 1 || size > MAX_PAGE_SIZE) {
+            throw new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE);
+        }
+        long totalElements = budgetDao.countByFamilyId(familyId);
+        List<BudgetResponse> content = budgetDao.selectByFamilyIdPaged(familyId, size, page * size).stream()
+                .map(BudgetResponse::from)
+                .toList();
+        return PageResponse.of(content, page, size, totalElements);
     }
 
     @Transactional
