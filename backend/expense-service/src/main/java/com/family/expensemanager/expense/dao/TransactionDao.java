@@ -42,6 +42,9 @@ public interface TransactionDao {
     Optional<Transaction> selectById(Long id);
 
     @Select
+    Optional<Transaction> selectDeletedById(Long id);
+
+    @Select
     BigDecimal sumAmountByCategoryPeriodAndType(Long familyId, Long categoryId, String periodMonth, String type);
 
     @Select

@@ -14,6 +14,7 @@
   "amountLabel": "Amount",
   "timeLabel": "Time",
   "noteLabel": "Note",
+  "creatorLabel": "Created by",
   "notePlaceholder": "Optional",
   "submitAdd": "Add transaction",
   "submitUpdate": "Update",

@@ -77,6 +77,56 @@ class ExpenseEventListenerTest {
         verify(mailSender, never()).send(any(MimeMessage.class));
     }
 
+    @Test
+    void onExpenseEvent_recordsNotificationOnly_whenBudgetWarning() throws Exception {
+        listener.onExpenseEvent(budgetEvent(ExpenseEvent.BUDGET_WARNING, 5L, "Ăn uống", "user@b.com",
+                BigDecimal.valueOf(850)));
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(notificationCaptor.capture());
+        Notification saved = notificationCaptor.getValue();
+        assertThat(saved.getType()).isEqualTo(ExpenseEvent.BUDGET_WARNING);
+        assertThat(saved.getTitle()).isEqualTo("Sắp vượt ngân sách tháng 2026-01");
+        assertThat(saved.getMessage()).isEqualTo("Danh mục Ăn uống đã chi 850 / giới hạn 1,000 (đạt 85%)");
+        verify(mailSender, never()).createMimeMessage();
+        verify(mailSender, never()).send(any(MimeMessage.class));
+    }
+
+    @Test
+    void onExpenseEvent_usesOverallLabel_whenBudgetWarningHasNoCategory() throws Exception {
+        listener.onExpenseEvent(budgetEvent(ExpenseEvent.BUDGET_WARNING, null, "Tổng chi tiêu", "user@b.com",
+                BigDecimal.valueOf(800)));
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(notificationCaptor.capture());
+        assertThat(notificationCaptor.getValue().getMessage())
+                .isEqualTo("Tổng chi tiêu đã chi 800 / giới hạn 1,000 (đạt 80%)");
+    }
+
+    @Test
+    void onExpenseEvent_handlesOverallBudgetExceeded_withNullCategory() throws Exception {
+        MimeMessage mimeMessage = new MimeMessage(Session.getInstance(new Properties()));
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+
+        listener.onExpenseEvent(budgetEvent(ExpenseEvent.BUDGET_EXCEEDED, null, null, "user@b.com",
+                BigDecimal.valueOf(1100)));
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(notificationCaptor.capture());
+        assertThat(notificationCaptor.getValue().getMessage())
+                .isEqualTo("Tổng chi tiêu đã chi 1,100 / giới hạn 1,000 trong tháng 2026-01");
+        verify(mailSender).send(mimeMessage);
+        assertThat(mimeMessage.getSubject()).contains("Tổng chi tiêu");
+    }
+
+    private static ExpenseEvent budgetEvent(String type, Long categoryId, String categoryName, String userEmail,
+                                             BigDecimal totalSpent) {
+        return new ExpenseEvent(
+                type, 1L, 10L, 100L, categoryId, BigDecimal.valueOf(50),
+                "2026-01", BigDecimal.valueOf(1000), totalSpent, categoryName,
+                userEmail, "Chủ hộ", Instant.now());
+    }
+
     private static ExpenseEvent expenseCreatedEvent() {
         return new ExpenseEvent(
                 ExpenseEvent.EXPENSE_CREATED, 1L, 10L, 100L, 5L, BigDecimal.TEN,

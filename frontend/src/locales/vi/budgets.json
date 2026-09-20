@@ -1,9 +1,8 @@
 {
   "title": "Ngân sách",
-  "subtitle": "Đặt hạn mức chi tiêu theo danh mục cho từng tháng",
+  "subtitle": "Đặt hạn mức chi tiêu theo danh mục hoặc tổng chi tiêu của cả gia đình cho từng tháng",
   "editTitle": "Cập nhật ngân sách",
   "newTitle": "Đặt ngân sách mới",
-  "noCategoriesMessage": "Cần tạo ít nhất 1 danh mục chi tiêu trước khi đặt ngân sách.",
   "categoryLabel": "Danh mục",
   "monthLabel": "Tháng",
   "limitLabel": "Hạn mức",
@@ -16,5 +15,15 @@
   "statusSafe": "An toàn",
   "saveFailed": "Lưu ngân sách thất bại",
   "deleteConfirm": "Xoá ngân sách này?",
-  "deleteFailed": "Xoá ngân sách thất bại"
+  "deleteFailed": "Xoá ngân sách thất bại",
+  "overallOption": "Tất cả danh mục (tổng chi tiêu)",
+  "overallLabel": "Tổng chi tiêu",
+  "copyTitle": "Sao chép ngân sách",
+  "copyHint": "Sao chép toàn bộ ngân sách của một tháng sang tháng khác. Ngân sách đã có ở tháng đích sẽ được giữ nguyên.",
+  "copyFromLabel": "Từ tháng",
+  "copyToLabel": "Sang tháng",
+  "copyButton": "Sao chép",
+  "copyResult": "Đã sao chép {{copied}} ngân sách, bỏ qua {{skipped}} ngân sách đã tồn tại",
+  "copySameMonth": "Tháng nguồn và tháng đích phải khác nhau",
+  "copyFailed": "Sao chép ngân sách thất bại"
 }

@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { CloseIcon, EditIcon, ImageIcon, TrashIcon } from "../components/AppIcons";
 import Pagination from "../components/Pagination";
+import SeedDefaultsButton from "../components/SeedDefaultsButton";
+import { useAuth } from "../hooks/useAuth";
 import { PAGE_SIZE } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
 import { formatCurrency } from "../utils/format";
@@ -29,9 +31,11 @@ const emptyPage = { content: [], page: 0, size: PAGE_SIZE, totalElements: 0, tot
 
 export default function Transactions() {
   const { t } = useTranslation(["common", "transactions"]);
+  const { role, userId } = useAuth();
   const [pageData, setPageData] = useState(emptyPage);
   const [wallets, setWallets] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [members, setMembers] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [filter, setFilter] = useState(emptyFilter);
@@ -68,7 +72,7 @@ export default function Transactions() {
 
   useEffect(load, [filter, page]);
 
-  useEffect(() => {
+  function loadWalletsAndCategories() {
     client.get("/expenses/wallets").then((res) => {
       setWallets(res.data.data);
       setForm((f) => ({ ...f, walletId: f.walletId || String(res.data.data[0]?.id ?? "") }));
@@ -77,6 +81,14 @@ export default function Transactions() {
       setCategories(res.data.data);
       setForm((f) => ({ ...f, categoryId: f.categoryId || String(res.data.data[0]?.id ?? "") }));
     });
+  }
+
+  useEffect(() => {
+    loadWalletsAndCategories();
+    client
+      .get("/auth/family/members", { params: { page: 0, size: 100 } })
+      .then((res) => setMembers(res.data.data.content))
+      .catch(() => {});
   }, []);
 
   function updateField(field, value) {
@@ -206,6 +218,14 @@ export default function Transactions() {
     return categories.find((c) => c.id === id)?.name ?? `#${id}`;
   }
 
+  function memberName(id) {
+    return members.find((m) => m.id === id)?.displayName ?? `#${id}`;
+  }
+
+  function canModify(row) {
+    return role === "OWNER" || String(row.userId) === String(userId);
+  }
+
   function updateFilter(field, value) {
     setFilter((f) => ({ ...f, [field]: value }));
     setPage(0);
@@ -297,13 +317,16 @@ export default function Transactions() {
       <div className="section-card">
         <h2>{editingId ? t("transactions:editFormTitle") : t("transactions:addFormTitle")}</h2>
         {wallets.length === 0 || categories.length === 0 ? (
-          <p className="empty-state">
-            {wallets.length === 0 && categories.length === 0
-              ? t("transactions:needWalletAndCategory")
-              : wallets.length === 0
-                ? t("transactions:needWallet")
-                : t("transactions:needCategory")}
-          </p>
+          <>
+            <p className="empty-state">
+              {wallets.length === 0 && categories.length === 0
+                ? t("transactions:needWalletAndCategory")
+                : wallets.length === 0
+                  ? t("transactions:needWallet")
+                  : t("transactions:needCategory")}
+            </p>
+            <SeedDefaultsButton onDone={loadWalletsAndCategories} />
+          </>
         ) : (
           <form className="inline-form" onSubmit={handleSubmit}>
             <label className="field">
@@ -515,6 +538,7 @@ export default function Transactions() {
                 <th>{t("transactions:typeLabel")}</th>
                 <th>{t("transactions:amountLabel")}</th>
                 <th>{t("transactions:noteLabel")}</th>
+                <th>{t("transactions:creatorLabel")}</th>
                 <th></th>
               </tr>
             </thead>
@@ -537,49 +561,59 @@ export default function Transactions() {
                     {formatCurrency(row.amount)}
                   </td>
                   <td data-label={t("transactions:noteLabel")}>{row.note}</td>
+                  <td data-label={t("transactions:creatorLabel")}>{memberName(row.userId)}</td>
                   <td className="row-actions">
-                    {row.hasReceipt ? (
-                      <>
-                        <button
-                          type="button"
-                          className="icon-btn"
-                          onClick={() => viewReceipt(row.id)}
-                          aria-label={t("transactions:viewReceiptAria")}
-                          title={t("transactions:viewReceiptAria")}
-                        >
-                          <ImageIcon />
-                        </button>
-                        <button
-                          type="button"
-                          className="icon-btn icon-btn-danger"
-                          onClick={() => handleDeleteReceipt(row.id)}
-                          aria-label={t("transactions:deleteReceiptAria")}
-                        >
-                          <CloseIcon />
-                        </button>
-                      </>
-                    ) : (
+                    {row.hasReceipt && (
                       <button
                         type="button"
                         className="icon-btn"
-                        onClick={() => triggerUpload(row.id)}
-                        aria-label={t("transactions:attachReceiptAria")}
-                        title={t("transactions:attachReceiptAria")}
+                        onClick={() => viewReceipt(row.id)}
+                        aria-label={t("transactions:viewReceiptAria")}
+                        title={t("transactions:viewReceiptAria")}
                       >
                         <ImageIcon />
                       </button>
                     )}
-                    <button type="button" className="icon-btn" onClick={() => startEdit(row)} aria-label={t("common:edit")}>
-                      <EditIcon />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn icon-btn-danger"
-                      onClick={() => handleDelete(row.id)}
-                      aria-label={t("common:delete")}
-                    >
-                      <TrashIcon />
-                    </button>
+                    {canModify(row) && (
+                      <>
+                        {row.hasReceipt ? (
+                          <button
+                            type="button"
+                            className="icon-btn icon-btn-danger"
+                            onClick={() => handleDeleteReceipt(row.id)}
+                            aria-label={t("transactions:deleteReceiptAria")}
+                          >
+                            <CloseIcon />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            onClick={() => triggerUpload(row.id)}
+                            aria-label={t("transactions:attachReceiptAria")}
+                            title={t("transactions:attachReceiptAria")}
+                          >
+                            <ImageIcon />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          onClick={() => startEdit(row)}
+                          aria-label={t("common:edit")}
+                        >
+                          <EditIcon />
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn icon-btn-danger"
+                          onClick={() => handleDelete(row.id)}
+                          aria-label={t("common:delete")}
+                        >
+                          <TrashIcon />
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}

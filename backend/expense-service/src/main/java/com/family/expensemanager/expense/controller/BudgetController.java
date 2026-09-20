@@ -4,6 +4,8 @@ import com.family.expensemanager.common.dto.ApiResponse;
 import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.security.CurrentUser;
 import com.family.expensemanager.expense.dto.BudgetResponse;
+import com.family.expensemanager.expense.dto.CopyBudgetsRequest;
+import com.family.expensemanager.expense.dto.CopyBudgetsResponse;
 import com.family.expensemanager.expense.dto.CreateBudgetRequest;
 import com.family.expensemanager.expense.service.BudgetService;
 import jakarta.validation.Valid;
@@ -32,6 +34,12 @@ public class BudgetController {
     public ApiResponse<BudgetResponse> create(@Valid @RequestBody CreateBudgetRequest request) {
         log.info("create - start");
         return ApiResponse.ok(budgetService.create(CurrentUser.familyId(), request));
+    }
+
+    @PostMapping("/copy")
+    public ApiResponse<CopyBudgetsResponse> copy(@Valid @RequestBody CopyBudgetsRequest request) {
+        log.info("copy - start, fromMonth={}, toMonth={}", request.fromMonth(), request.toMonth());
+        return ApiResponse.ok(budgetService.copy(CurrentUser.familyId(), request));
     }
 
     @GetMapping

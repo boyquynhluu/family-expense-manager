@@ -17,5 +17,6 @@
   "emptyState": "No categories yet",
   "saveFailed": "Failed to save category",
   "deleteConfirm": "Delete this category? It can only be deleted if no transactions or budgets use it — you can restore it later from Trash.",
-  "deleteFailed": "Failed to delete category"
+  "deleteFailed": "Failed to delete category",
+  "seedDefaultsHint": "Your family has no categories yet. Quickly create a set of common income/expense categories (and a \"Cash\" wallet if none exists) to start recording transactions."
 }

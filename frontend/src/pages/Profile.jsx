@@ -1,11 +1,12 @@
 import QRCode from "qrcode";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { TrashIcon } from "../components/AppIcons";
 import { EyeIcon, EyeOffIcon } from "../components/AuthIcons";
 import Pagination from "../components/Pagination";
+import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
 import { formatServerDateTime } from "../utils/format";
@@ -29,8 +30,101 @@ const RELATIONSHIP_OPTIONS = [
   ["Khác", "relationshipOther"],
 ];
 
+// Its own component so the owner-only /auth/invites request is never fired (and rejected with 403) for regular members.
+function PendingInvitesSection({ reloadSignal }) {
+  const { t } = useTranslation(["profile", "common"]);
+  const { pageData, page, setPage, reload } = usePagedList("/auth/invites");
+  const invites = pageData.content;
+  const [busyInviteId, setBusyInviteId] = useState(null);
+  const handledSignal = useRef(reloadSignal);
+
+  // A new invite lands on the first page (newest first), so jump back there.
+  useEffect(() => {
+    if (handledSignal.current === reloadSignal) return;
+    handledSignal.current = reloadSignal;
+    if (page === 0) reload();
+    else setPage(0);
+  }, [reloadSignal, page, reload, setPage]);
+
+  async function handleCancelInvite(invite) {
+    if (!(await confirmDialog(t("cancelInviteConfirm", { email: invite.email })))) return;
+    setBusyInviteId(invite.id);
+    try {
+      await client.delete(`/auth/invites/${invite.id}`);
+      toast.success(t("inviteCancelled"));
+      reload();
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("cancelInviteFailed"));
+    } finally {
+      setBusyInviteId(null);
+    }
+  }
+
+  async function handleResendInvite(invite) {
+    setBusyInviteId(invite.id);
+    try {
+      await client.post(`/auth/invites/${invite.id}/resend`);
+      toast.success(t("inviteResent", { email: invite.email }));
+      reload();
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("resendInviteFailed"));
+    } finally {
+      setBusyInviteId(null);
+    }
+  }
+
+  return (
+    <div className="section-card">
+      <h2>{t("pendingInvitesTitle")}</h2>
+      {invites.length === 0 ? (
+        <p className="empty-state">{t("noPendingInvites")}</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>{t("emailLabel")}</th>
+              <th>{t("invitedAtHeader")}</th>
+              <th>{t("expiresAtHeader")}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {invites.map((invite) => (
+              <tr key={invite.id}>
+                <td data-label={t("emailLabel")}>{invite.email}</td>
+                <td data-label={t("invitedAtHeader")}>{formatServerDateTime(invite.createdAt)}</td>
+                <td data-label={t("expiresAtHeader")}>{formatServerDateTime(invite.expiresAt)}</td>
+                <td className="row-actions">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => handleResendInvite(invite)}
+                    disabled={busyInviteId === invite.id}
+                  >
+                    {t("resendInviteButton")}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => handleCancelInvite(invite)}
+                    disabled={busyInviteId === invite.id}
+                  >
+                    {t("cancelInviteButton")}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <Pagination pageData={pageData} onPageChange={setPage} />
+    </div>
+  );
+}
+
 export default function Profile() {
   const { t } = useTranslation(["profile", "common"]);
+  const { familyId, loginWithTokens } = useAuth();
 
   function relationshipLabelFor(value) {
     const entry = RELATIONSHIP_OPTIONS.find(([v]) => v === value);
@@ -55,6 +149,10 @@ export default function Profile() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteError, setInviteError] = useState("");
   const [inviting, setInviting] = useState(false);
+  const [invitesReloadSignal, setInvitesReloadSignal] = useState(0);
+  const [familyName, setFamilyName] = useState("");
+  const [renamingFamily, setRenamingFamily] = useState(false);
+  const [leavingFamily, setLeavingFamily] = useState(false);
 
   const { pageData: sessionsPage, setPage: setSessionsPage, reload: loadSessions } = usePagedList("/auth/sessions");
   const sessions = sessionsPage.content;
@@ -77,6 +175,13 @@ export default function Profile() {
       setRelationship(res.data.data.relationship ?? "");
     });
   }, []);
+
+  useEffect(() => {
+    client.get("/auth/my-families").then((res) => {
+      const current = res.data.data.find((f) => f.familyId === familyId);
+      setFamilyName(current?.familyName ?? "");
+    });
+  }, [familyId]);
 
   async function handleRevokeSession(session) {
     if (!(await confirmDialog(t("revokeSessionConfirm")))) return;
@@ -165,6 +270,49 @@ export default function Profile() {
     }
   }
 
+  async function handleRenameFamily(e) {
+    e.preventDefault();
+    setRenamingFamily(true);
+    try {
+      const res = await client.put("/auth/family", { name: familyName.trim() });
+      setFamilyName(familyName.trim());
+      toast.success(res.data.data?.message || t("familyRenamed"));
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("renameFamilyFailed"));
+    } finally {
+      setRenamingFamily(false);
+    }
+  }
+
+  async function handleTransferOwnership(member) {
+    if (!(await confirmDialog(t("transferOwnershipConfirm", { name: member.displayName })))) return;
+    try {
+      const res = await client.post("/auth/family/transfer-ownership", { userId: member.id });
+      // The role claim in the old token would still say OWNER, so swap in the fresh tokens.
+      loginWithTokens(res.data.data.accessToken, res.data.data.refreshToken);
+      toast.success(t("ownershipTransferred"));
+      const me = await client.get("/auth/me");
+      setProfile(me.data.data);
+      loadMembers();
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("transferOwnershipFailed"));
+    }
+  }
+
+  async function handleLeaveFamily() {
+    if (!(await confirmDialog(t("leaveFamilyConfirm")))) return;
+    setLeavingFamily(true);
+    try {
+      const res = await client.post("/auth/family/leave");
+      loginWithTokens(res.data.data.accessToken, res.data.data.refreshToken);
+      // Everything on screen was loaded under the family just left, so a full reload refetches it all.
+      window.location.href = "/";
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("leaveFamilyFailed"));
+      setLeavingFamily(false);
+    }
+  }
+
   async function handleInviteSubmit(e) {
     e.preventDefault();
     setInviteError("");
@@ -173,6 +321,7 @@ export default function Profile() {
       const res = await client.post("/auth/invite", { email: inviteEmail });
       toast.success(res.data.data?.message || t("inviteSentDefault", { email: inviteEmail }));
       setInviteEmail("");
+      setInvitesReloadSignal((n) => n + 1);
     } catch (err) {
       setInviteError(err.response?.data?.message || t("inviteFailed"));
     } finally {
@@ -324,6 +473,20 @@ export default function Profile() {
 
       <div className="section-card">
         <h2>{t("familyMembersTitle")}</h2>
+        {profile.role === "OWNER" && (
+          <form className="inline-form" onSubmit={handleRenameFamily}>
+            <label className="field">
+              <span>
+                {t("familyNameLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
+              <input value={familyName} onChange={(e) => setFamilyName(e.target.value)} maxLength={100} required />
+            </label>
+            <button type="submit" disabled={renamingFamily || !familyName.trim()}>
+              {renamingFamily ? t("common:saving") : t("renameFamilyButton")}
+            </button>
+          </form>
+        )}
         {members.length === 0 ? (
           <p className="empty-state">{t("noMembers")}</p>
         ) : (
@@ -349,14 +512,19 @@ export default function Profile() {
                   {profile.role === "OWNER" && (
                     <td className="row-actions">
                       {m.role !== "OWNER" && (
-                        <button
-                          type="button"
-                          className="icon-btn icon-btn-danger"
-                          onClick={() => handleRemoveMember(m)}
-                          aria-label={t("common:delete")}
-                        >
-                          <TrashIcon />
-                        </button>
+                        <>
+                          <button type="button" className="btn-secondary" onClick={() => handleTransferOwnership(m)}>
+                            {t("transferOwnershipButton")}
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn icon-btn-danger"
+                            onClick={() => handleRemoveMember(m)}
+                            aria-label={t("common:delete")}
+                          >
+                            <TrashIcon />
+                          </button>
+                        </>
                       )}
                     </td>
                   )}
@@ -366,6 +534,12 @@ export default function Profile() {
           </table>
         )}
         <Pagination pageData={membersPage} onPageChange={setMembersPage} />
+
+        {profile.role !== "OWNER" && (
+          <button type="button" className="btn-secondary" onClick={handleLeaveFamily} disabled={leavingFamily}>
+            {t("leaveFamilyButton")}
+          </button>
+        )}
 
         {profile.role === "OWNER" && (
           <>
@@ -392,6 +566,8 @@ export default function Profile() {
           </>
         )}
       </div>
+
+      {profile.role === "OWNER" && <PendingInvitesSection reloadSignal={invitesReloadSignal} />}
 
       <div className="section-card">
         <h2>{t("sessionsTitle")}</h2>

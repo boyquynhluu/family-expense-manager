@@ -74,13 +74,14 @@ public class TransactionController {
     @PutMapping("/{id}")
     public ApiResponse<TransactionResponse> update(@PathVariable Long id, @Valid @RequestBody TransactionRequest request) {
         log.info("update - start, id={}", id);
-        return ApiResponse.ok(transactionService.update(CurrentUser.familyId(), id, request));
+        return ApiResponse.ok(transactionService.update(
+                CurrentUser.familyId(), id, CurrentUser.userId(), isOwner(), request));
     }
 
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         log.info("delete - start, id={}", id);
-        transactionService.delete(CurrentUser.familyId(), id);
+        transactionService.delete(CurrentUser.familyId(), id, CurrentUser.userId(), isOwner());
         return ApiResponse.ok();
     }
 
@@ -94,7 +95,7 @@ public class TransactionController {
     @PostMapping("/{id}/restore")
     public ApiResponse<Void> restore(@PathVariable Long id) {
         log.info("restore - start, id={}", id);
-        transactionService.restore(CurrentUser.familyId(), id);
+        transactionService.restore(CurrentUser.familyId(), id, CurrentUser.userId(), isOwner());
         return ApiResponse.ok();
     }
 
@@ -102,7 +103,8 @@ public class TransactionController {
     public ApiResponse<TransactionResponse> uploadReceipt(
             @PathVariable Long id, @RequestParam("file") MultipartFile file) {
         log.info("uploadReceipt - start, id={}", id);
-        return ApiResponse.ok(transactionService.uploadReceipt(CurrentUser.familyId(), id, file));
+        return ApiResponse.ok(transactionService.uploadReceipt(
+                CurrentUser.familyId(), id, CurrentUser.userId(), isOwner(), file));
     }
 
     @GetMapping("/{id}/receipt")
@@ -117,8 +119,12 @@ public class TransactionController {
     @DeleteMapping("/{id}/receipt")
     public ApiResponse<Void> deleteReceipt(@PathVariable Long id) {
         log.info("deleteReceipt - start, id={}", id);
-        transactionService.deleteReceipt(CurrentUser.familyId(), id);
+        transactionService.deleteReceipt(CurrentUser.familyId(), id, CurrentUser.userId(), isOwner());
         return ApiResponse.ok();
+    }
+
+    private static boolean isOwner() {
+        return "OWNER".equals(CurrentUser.role());
     }
 
     @PostMapping("/import")

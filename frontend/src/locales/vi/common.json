@@ -16,5 +16,9 @@
   "no": "Không",
   "paginationInfo": "{{total}} mục — Trang {{page}}/{{totalPages}}",
   "prevPage": "Trước",
-  "nextPage": "Sau"
+  "nextPage": "Sau",
+  "seedDefaultsButton": "Tạo ví & danh mục mẫu",
+  "seedDefaultsSuccess": "Đã tạo ví và danh mục mẫu",
+  "seedDefaultsNothingToDo": "Gia đình đã có sẵn ví và danh mục",
+  "seedDefaultsFailed": "Không thể tạo dữ liệu mẫu"
 }

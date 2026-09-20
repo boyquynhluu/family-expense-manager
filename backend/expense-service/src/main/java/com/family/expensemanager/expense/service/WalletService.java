@@ -7,6 +7,7 @@ import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.expense.dao.RecurringTransactionDao;
 import com.family.expensemanager.expense.dao.TransactionDao;
 import com.family.expensemanager.expense.dao.WalletDao;
+import com.family.expensemanager.expense.dao.WalletTransferDao;
 import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.dto.CreateWalletRequest;
 import com.family.expensemanager.expense.dto.WalletResponse;
@@ -33,6 +34,7 @@ public class WalletService {
     private final WalletDao walletDao;
     private final TransactionDao transactionDao;
     private final RecurringTransactionDao recurringTransactionDao;
+    private final WalletTransferDao walletTransferDao;
 
     @Transactional
     public WalletResponse create(Long familyId, CreateWalletRequest request) {
@@ -77,6 +79,9 @@ public class WalletService {
         }
         if (recurringTransactionDao.countByWalletId(walletId) > 0) {
             throw new ConflictException("Không thể xoá ví đang có giao dịch định kỳ");
+        }
+        if (walletTransferDao.countByWalletId(walletId) > 0) {
+            throw new ConflictException("Không thể xoá ví đã có giao dịch chuyển tiền");
         }
         wallet.setDeletedAt(LocalDateTime.now());
         walletDao.update(wallet);
@@ -123,7 +128,9 @@ public class WalletService {
     private BigDecimal currentBalanceOf(Wallet wallet) {
         BigDecimal income = transactionDao.sumAmountByWalletAndType(wallet.getId(), TYPE_INCOME);
         BigDecimal expense = transactionDao.sumAmountByWalletAndType(wallet.getId(), TYPE_EXPENSE);
-        return wallet.getInitialBalance().add(income).subtract(expense);
+        BigDecimal transferIn = walletTransferDao.sumAmountIntoWallet(wallet.getId());
+        BigDecimal transferOut = walletTransferDao.sumAmountFromWallet(wallet.getId());
+        return wallet.getInitialBalance().add(income).subtract(expense).add(transferIn).subtract(transferOut);
     }
 
     Wallet requireOwnedByFamily(Long walletId, Long familyId) {

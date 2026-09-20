@@ -1,6 +1,6 @@
 {
   "title": "Notifications",
-  "subtitle": "Budget overrun alerts and other updates",
+  "subtitle": "Budget alerts and other updates",
   "markAllReadButton": "Mark all as read",
   "noNotifications": "No notifications yet",
   "loadFailed": "Failed to load notifications",

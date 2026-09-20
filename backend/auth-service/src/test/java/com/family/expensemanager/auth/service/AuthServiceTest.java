@@ -18,7 +18,9 @@ import com.family.expensemanager.auth.dto.ForgotPasswordRequest;
 import com.family.expensemanager.auth.dto.InviteMemberRequest;
 import com.family.expensemanager.auth.dto.LoginRequest;
 import com.family.expensemanager.auth.dto.RegisterRequest;
+import com.family.expensemanager.auth.dto.RenameFamilyRequest;
 import com.family.expensemanager.auth.dto.ResetPasswordRequest;
+import com.family.expensemanager.auth.dto.TransferOwnershipRequest;
 import com.family.expensemanager.auth.dto.TwoFactorConfirmResponse;
 import com.family.expensemanager.auth.dto.TwoFactorSetupResponse;
 import com.family.expensemanager.auth.dto.UpdateProfileRequest;
@@ -52,6 +54,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -825,6 +828,251 @@ class AuthServiceTest {
 
         verify(refreshTokenDao, never()).revokeAllByUserIdExcept(any(), any());
         verify(revokedSessionStore, never()).markRevoked(any(), anyLong());
+    }
+
+    @Test
+    void renameFamily_updatesTrimmedName() {
+        Family family = new Family();
+        family.setId(1L);
+        family.setName("Cũ");
+        when(familyDao.selectById(1L)).thenReturn(Optional.of(family));
+
+        var response = authService.renameFamily(1L, new RenameFamilyRequest("  Nhà Mới  "));
+
+        assertThat(response.message()).contains("Đã đổi tên");
+        assertThat(family.getName()).isEqualTo("Nhà Mới");
+        verify(familyDao).update(family);
+    }
+
+    @Test
+    void renameFamily_throwsNotFound_whenFamilyMissing() {
+        when(familyDao.selectById(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.renameFamily(1L, new RenameFamilyRequest("Nhà Mới")))
+                .isInstanceOf(NotFoundException.class);
+        verify(familyDao, never()).update(any());
+    }
+
+    @Test
+    void leaveFamily_activatesAnotherMembership_whenMemberHasOthers() {
+        User member = activeLocalUser();
+        member.setId(5L);
+        member.setRole("MEMBER");
+        FamilyMembership leaving = membership(5L, 1L, "MEMBER");
+        when(familyMembershipDao.selectByUserIdAndFamilyId(5L, 1L)).thenReturn(Optional.of(leaving));
+        when(userDao.selectById(5L)).thenReturn(Optional.of(member));
+        when(familyMembershipDao.selectByUserId(5L)).thenReturn(List.of(membership(5L, 2L, "OWNER")));
+
+        var response = authService.leaveFamily(1L, 5L, 7L, null, null);
+
+        verify(familyMembershipDao).delete(leaving);
+        assertThat(member.getFamilyId()).isEqualTo(2L);
+        assertThat(member.getRole()).isEqualTo("OWNER");
+        verify(userDao).update(member);
+        verify(familyDao, never()).insert(any());
+        verify(revokedSessionStore).markRevoked(7L, 15 * 60 * 1000L);
+        assertThat(response.refreshToken()).isNotBlank();
+    }
+
+    @Test
+    void leaveFamily_createsPersonalFamily_whenNoOtherMembershipRemains() {
+        User member = activeLocalUser();
+        member.setId(5L);
+        member.setDisplayName("Bình");
+        member.setRole("MEMBER");
+        when(familyMembershipDao.selectByUserIdAndFamilyId(5L, 1L))
+                .thenReturn(Optional.of(membership(5L, 1L, "MEMBER")));
+        when(userDao.selectById(5L)).thenReturn(Optional.of(member));
+        when(familyMembershipDao.selectByUserId(5L)).thenReturn(List.of());
+        doAnswer(inv -> {
+            ((Family) inv.getArgument(0)).setId(9L);
+            return 1;
+        }).when(familyDao).insert(any(Family.class));
+
+        authService.leaveFamily(1L, 5L, null, null, null);
+
+        ArgumentCaptor<Family> familyCaptor = ArgumentCaptor.forClass(Family.class);
+        verify(familyDao).insert(familyCaptor.capture());
+        assertThat(familyCaptor.getValue().getName()).isEqualTo("Bình's Family");
+        ArgumentCaptor<FamilyMembership> membershipCaptor = ArgumentCaptor.forClass(FamilyMembership.class);
+        verify(familyMembershipDao).insert(membershipCaptor.capture());
+        assertThat(membershipCaptor.getValue().getFamilyId()).isEqualTo(9L);
+        assertThat(membershipCaptor.getValue().getRole()).isEqualTo("OWNER");
+        assertThat(member.getFamilyId()).isEqualTo(9L);
+        assertThat(member.getRole()).isEqualTo("OWNER");
+        verify(userDao).update(member);
+    }
+
+    @Test
+    void leaveFamily_throwsBadRequest_whenCallerIsOwner() {
+        when(familyMembershipDao.selectByUserIdAndFamilyId(1L, 1L))
+                .thenReturn(Optional.of(membership(1L, 1L, "OWNER")));
+
+        assertThatThrownBy(() -> authService.leaveFamily(1L, 1L, 7L, null, null))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("chuyển quyền chủ hộ");
+        verify(familyMembershipDao, never()).delete(any());
+        verify(refreshTokenDao, never()).insert(any());
+    }
+
+    @Test
+    void leaveFamily_throwsNotFound_whenNotAMember() {
+        when(familyMembershipDao.selectByUserIdAndFamilyId(5L, 1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.leaveFamily(1L, 5L, null, null, null))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void transferOwnership_swapsRoles_andSyncsUsersWhoseActiveFamilyIsThisOne() {
+        User caller = activeLocalUser();
+        User target = activeLocalUser();
+        target.setId(5L);
+        target.setRole("MEMBER");
+        FamilyMembership callerMembership = membership(1L, 1L, "OWNER");
+        FamilyMembership targetMembership = membership(5L, 1L, "MEMBER");
+        when(familyMembershipDao.selectByUserIdAndFamilyId(1L, 1L)).thenReturn(Optional.of(callerMembership));
+        when(familyMembershipDao.selectByUserIdAndFamilyId(5L, 1L)).thenReturn(Optional.of(targetMembership));
+        when(userDao.selectById(1L)).thenReturn(Optional.of(caller));
+        when(userDao.selectById(5L)).thenReturn(Optional.of(target));
+
+        var response = authService.transferOwnership(1L, 1L, 7L, new TransferOwnershipRequest(5L), null, null);
+
+        assertThat(targetMembership.getRole()).isEqualTo("OWNER");
+        assertThat(callerMembership.getRole()).isEqualTo("MEMBER");
+        assertThat(target.getRole()).isEqualTo("OWNER");
+        assertThat(caller.getRole()).isEqualTo("MEMBER");
+        verify(familyMembershipDao).update(targetMembership);
+        verify(familyMembershipDao).update(callerMembership);
+        verify(userDao).update(target);
+        verify(userDao).update(caller);
+        verify(revokedSessionStore).markRevoked(7L, 15 * 60 * 1000L);
+        assertThat(response.refreshToken()).isNotBlank();
+    }
+
+    @Test
+    void transferOwnership_leavesTargetUserRoleAlone_whenTheirActiveFamilyIsElsewhere() {
+        User caller = activeLocalUser();
+        User target = activeLocalUser();
+        target.setId(5L);
+        target.setFamilyId(2L);
+        target.setRole("OWNER");
+        FamilyMembership targetMembership = membership(5L, 1L, "MEMBER");
+        when(familyMembershipDao.selectByUserIdAndFamilyId(1L, 1L))
+                .thenReturn(Optional.of(membership(1L, 1L, "OWNER")));
+        when(familyMembershipDao.selectByUserIdAndFamilyId(5L, 1L)).thenReturn(Optional.of(targetMembership));
+        when(userDao.selectById(1L)).thenReturn(Optional.of(caller));
+        when(userDao.selectById(5L)).thenReturn(Optional.of(target));
+
+        authService.transferOwnership(1L, 1L, null, new TransferOwnershipRequest(5L), null, null);
+
+        assertThat(targetMembership.getRole()).isEqualTo("OWNER");
+        assertThat(target.getFamilyId()).isEqualTo(2L);
+        verify(userDao, never()).update(target);
+        verify(userDao).update(caller);
+    }
+
+    @Test
+    void transferOwnership_throwsNotFound_whenTargetNotAMemberOfThisFamily() {
+        when(familyMembershipDao.selectByUserIdAndFamilyId(1L, 1L))
+                .thenReturn(Optional.of(membership(1L, 1L, "OWNER")));
+        when(familyMembershipDao.selectByUserIdAndFamilyId(5L, 1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.transferOwnership(1L, 1L, null, new TransferOwnershipRequest(5L), null, null))
+                .isInstanceOf(NotFoundException.class);
+        verify(familyMembershipDao, never()).update(any());
+    }
+
+    @Test
+    void transferOwnership_throwsBadRequest_whenTargetIsSelf() {
+        assertThatThrownBy(() -> authService.transferOwnership(1L, 1L, null, new TransferOwnershipRequest(1L), null, null))
+                .isInstanceOf(BadRequestException.class);
+        verify(familyMembershipDao, never()).update(any());
+    }
+
+    @Test
+    void getPendingInvitesPaged_returnsPageWithOffset() {
+        when(familyInviteDao.countPendingByFamilyId(1L)).thenReturn(7L);
+        when(familyInviteDao.selectPendingByFamilyIdPaged(1L, 5, 5)).thenReturn(List.of(validInvite()));
+
+        var result = authService.getPendingInvitesPaged(1L, 1, 5);
+
+        assertThat(result.content()).hasSize(1);
+        assertThat(result.content().get(0).email()).isEqualTo("invitee@b.com");
+        assertThat(result.page()).isEqualTo(1);
+        assertThat(result.totalElements()).isEqualTo(7L);
+        assertThat(result.totalPages()).isEqualTo(2);
+    }
+
+    @Test
+    void getPendingInvitesPaged_rejectsInvalidPageOrSize() {
+        assertThatThrownBy(() -> authService.getPendingInvitesPaged(1L, -1, 5))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> authService.getPendingInvitesPaged(1L, 0, 0))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> authService.getPendingInvitesPaged(1L, 0, 101))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void cancelInvite_deletesInvite_whenInFamily() {
+        FamilyInvite invite = validInvite();
+        when(familyInviteDao.selectByIdAndFamilyId(1L, 1L)).thenReturn(Optional.of(invite));
+
+        authService.cancelInvite(1L, 1L);
+
+        verify(familyInviteDao).delete(invite);
+    }
+
+    @Test
+    void cancelInvite_throwsNotFound_whenNotInFamily() {
+        when(familyInviteDao.selectByIdAndFamilyId(1L, 1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.cancelInvite(1L, 1L)).isInstanceOf(NotFoundException.class);
+        verify(familyInviteDao, never()).delete(any());
+    }
+
+    @Test
+    void resendInvite_issuesNewTokenAndExtendsExpiry_thenPublishesEvent() {
+        FamilyInvite invite = validInvite();
+        invite.setExpiresAt(LocalDateTime.now().minusHours(1));
+        Family family = new Family();
+        family.setId(1L);
+        family.setName("Nhà Nguyễn");
+        User caller = activeLocalUser();
+        when(familyInviteDao.selectByIdAndFamilyId(1L, 1L)).thenReturn(Optional.of(invite));
+        when(familyDao.selectById(1L)).thenReturn(Optional.of(family));
+        when(userDao.selectById(1L)).thenReturn(Optional.of(caller));
+
+        var response = authService.resendInvite(1L, 1L, 1L);
+
+        assertThat(response.message()).contains("invitee@b.com");
+        assertThat(invite.getToken()).isNotBlank().isNotEqualTo("tok");
+        assertThat(invite.getExpiresAt()).isAfter(LocalDateTime.now().plusHours(71));
+        verify(familyInviteDao).update(invite);
+
+        ArgumentCaptor<FamilyInviteEvent> eventCaptor = ArgumentCaptor.forClass(FamilyInviteEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().token()).isEqualTo(invite.getToken());
+        assertThat(eventCaptor.getValue().email()).isEqualTo("invitee@b.com");
+        assertThat(eventCaptor.getValue().familyName()).isEqualTo("Nhà Nguyễn");
+    }
+
+    @Test
+    void resendInvite_throwsBadRequest_whenAlreadyAccepted() {
+        FamilyInvite invite = validInvite();
+        invite.setAcceptedAt(LocalDateTime.now());
+        when(familyInviteDao.selectByIdAndFamilyId(1L, 1L)).thenReturn(Optional.of(invite));
+
+        assertThatThrownBy(() -> authService.resendInvite(1L, 1L, 1L)).isInstanceOf(BadRequestException.class);
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void resendInvite_throwsNotFound_whenNotInFamily() {
+        when(familyInviteDao.selectByIdAndFamilyId(1L, 1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.resendInvite(1L, 1L, 1L)).isInstanceOf(NotFoundException.class);
     }
 
     private static RefreshToken refreshToken(Long id, Long userId) {

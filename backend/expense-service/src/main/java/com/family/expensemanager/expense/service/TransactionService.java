@@ -2,6 +2,7 @@ package com.family.expensemanager.expense.service;
 
 import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.event.ExpenseEvent;
+import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.expense.dao.BudgetDao;
@@ -17,6 +18,7 @@ import com.family.expensemanager.expense.dto.TransactionResponse;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -27,6 +29,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -116,9 +119,11 @@ public class TransactionService {
     }
 
     @Transactional
-    public TransactionResponse update(Long familyId, Long transactionId, TransactionRequest request) {
+    public TransactionResponse update(
+            Long familyId, Long transactionId, Long callerUserId, boolean callerIsOwner, TransactionRequest request) {
         log.info("update - start, familyId={}, transactionId={}", familyId, transactionId);
         Transaction transaction = requireOwnedByFamily(transactionId, familyId);
+        requireCanModify(transaction, callerUserId, callerIsOwner);
         Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
         Category category = categoryService.requireOwnedByFamily(request.categoryId(), familyId);
 
@@ -147,9 +152,10 @@ public class TransactionService {
      * a mistaken delete back exactly as it was.
      */
     @Transactional
-    public void delete(Long familyId, Long transactionId) {
+    public void delete(Long familyId, Long transactionId, Long callerUserId, boolean callerIsOwner) {
         log.info("delete - start, familyId={}, transactionId={}", familyId, transactionId);
         Transaction transaction = requireOwnedByFamily(transactionId, familyId);
+        requireCanModify(transaction, callerUserId, callerIsOwner);
         transaction.setDeletedAt(LocalDateTime.now());
         transactionDao.update(transaction);
         evictCaches(familyId, periodMonthOf(transaction.getOccurredAt()));
@@ -170,17 +176,21 @@ public class TransactionService {
     }
 
     @Transactional
-    public void restore(Long familyId, Long transactionId) {
+    public void restore(Long familyId, Long transactionId, Long callerUserId, boolean callerIsOwner) {
         log.info("restore - start, familyId={}, transactionId={}", familyId, transactionId);
+        Transaction deleted = transactionDao.selectDeletedById(transactionId)
+                .filter(t -> t.getFamilyId().equals(familyId))
+                .orElseThrow(() -> new NotFoundException("Giao dịch đã xoá không tồn tại: " + transactionId));
+        requireCanModify(deleted, callerUserId, callerIsOwner);
         if (transactionDao.restore(transactionId, familyId) == 0) {
             throw new NotFoundException("Giao dịch đã xoá không tồn tại: " + transactionId);
         }
-        Transaction restored = requireOwnedByFamily(transactionId, familyId);
-        evictCaches(familyId, periodMonthOf(restored.getOccurredAt()));
+        evictCaches(familyId, periodMonthOf(deleted.getOccurredAt()));
     }
 
     @Transactional
-    public TransactionResponse uploadReceipt(Long familyId, Long transactionId, MultipartFile file) {
+    public TransactionResponse uploadReceipt(
+            Long familyId, Long transactionId, Long callerUserId, boolean callerIsOwner, MultipartFile file) {
         log.info("uploadReceipt - start, familyId={}, transactionId={}", familyId, transactionId);
         if (file.isEmpty()) {
             throw new BadRequestException("File ảnh trống");
@@ -189,6 +199,7 @@ public class TransactionService {
             throw new BadRequestException("Chỉ chấp nhận ảnh JPEG, PNG hoặc WEBP");
         }
         Transaction transaction = requireOwnedByFamily(transactionId, familyId);
+        requireCanModify(transaction, callerUserId, callerIsOwner);
         String oldPath = transaction.getReceiptPath();
 
         String newPath;
@@ -225,9 +236,10 @@ public class TransactionService {
     }
 
     @Transactional
-    public void deleteReceipt(Long familyId, Long transactionId) {
+    public void deleteReceipt(Long familyId, Long transactionId, Long callerUserId, boolean callerIsOwner) {
         log.info("deleteReceipt - start, familyId={}, transactionId={}", familyId, transactionId);
         Transaction transaction = requireOwnedByFamily(transactionId, familyId);
+        requireCanModify(transaction, callerUserId, callerIsOwner);
         if (transaction.getReceiptPath() == null) {
             return;
         }
@@ -244,15 +256,45 @@ public class TransactionService {
         log.info("checkBudgetCrossing - start, familyId={}, categoryId={}, periodMonth={}",
                 familyId, category.getId(), periodMonth);
         Optional<Budget> budget = budgetDao.selectByCategoryAndPeriod(category.getId(), periodMonth);
-        budget.ifPresent(b -> {
-            BigDecimal totalAfter = totalBefore.add(transaction.getAmount());
-            if (totalBefore.compareTo(b.getLimitAmount()) <= 0 && totalAfter.compareTo(b.getLimitAmount()) > 0) {
-                eventPublisher.publishEvent(new ExpenseEvent(
-                        ExpenseEvent.BUDGET_EXCEEDED, familyId, userId, transaction.getId(), category.getId(),
-                        transaction.getAmount(), periodMonth, b.getLimitAmount(), totalAfter, category.getName(),
-                        userEmail, userDisplayName, Instant.now()));
-            }
+        budget.ifPresent(b -> publishBudgetCrossing(
+                b, familyId, userId, userEmail, userDisplayName, transaction, category.getId(), category.getName(),
+                periodMonth, totalBefore, totalBefore.add(transaction.getAmount())));
+
+        budgetDao.selectOverallByPeriod(familyId, periodMonth).ifPresent(b -> {
+            // The transaction is already inserted (same DB transaction), so this sum includes it.
+            BigDecimal overallAfter = transactionDao.sumAmountByFamilyPeriodAndType(
+                    familyId, periodMonth, TYPE_EXPENSE);
+            publishBudgetCrossing(b, familyId, userId, userEmail, userDisplayName, transaction, null,
+                    "Tổng chi tiêu", periodMonth, overallAfter.subtract(transaction.getAmount()), overallAfter);
         });
+    }
+
+    private void publishBudgetCrossing(Budget budget, Long familyId, Long userId, String userEmail,
+                                        String userDisplayName, Transaction transaction, Long categoryId,
+                                        String categoryName, String periodMonth, BigDecimal totalBefore,
+                                        BigDecimal totalAfter) {
+        BigDecimal limit = budget.getLimitAmount();
+        BigDecimal warningThreshold = limit.multiply(new BigDecimal("0.8"));
+        String eventType = null;
+        if (totalBefore.compareTo(limit) <= 0 && totalAfter.compareTo(limit) > 0) {
+            eventType = ExpenseEvent.BUDGET_EXCEEDED;
+        } else if (totalBefore.compareTo(warningThreshold) < 0 && totalAfter.compareTo(warningThreshold) >= 0
+                && totalAfter.compareTo(limit) <= 0) {
+            eventType = ExpenseEvent.BUDGET_WARNING;
+        }
+        if (eventType == null) {
+            return;
+        }
+        eventPublisher.publishEvent(new ExpenseEvent(
+                eventType, familyId, userId, transaction.getId(), categoryId, transaction.getAmount(), periodMonth,
+                limit, totalAfter, categoryName, userEmail, userDisplayName, Instant.now()));
+    }
+
+    private void requireCanModify(Transaction transaction, Long callerUserId, boolean callerIsOwner) {
+        if (!callerIsOwner && !Objects.equals(transaction.getUserId(), callerUserId)) {
+            throw new ApiException(HttpStatus.FORBIDDEN,
+                    "Chỉ chủ hộ hoặc người tạo giao dịch mới có quyền thực hiện thao tác này");
+        }
     }
 
     private Transaction requireOwnedByFamily(Long transactionId, Long familyId) {

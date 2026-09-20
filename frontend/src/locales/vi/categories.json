@@ -17,5 +17,6 @@
   "emptyState": "Chưa có danh mục nào",
   "saveFailed": "Lưu danh mục thất bại",
   "deleteConfirm": "Xoá danh mục này? Chỉ xoá được khi chưa có giao dịch hoặc ngân sách nào dùng danh mục này — có thể khôi phục sau trong Thùng rác.",
-  "deleteFailed": "Xoá danh mục thất bại"
+  "deleteFailed": "Xoá danh mục thất bại",
+  "seedDefaultsHint": "Gia đình bạn chưa có danh mục. Tạo nhanh bộ danh mục thu chi phổ biến (và ví \"Tiền mặt\" nếu chưa có) để bắt đầu ghi giao dịch."
 }

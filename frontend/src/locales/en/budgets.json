@@ -1,9 +1,8 @@
 {
   "title": "Budgets",
-  "subtitle": "Set spending limits per category for each month",
+  "subtitle": "Set spending limits per category, or for the whole family's total spending, for each month",
   "editTitle": "Update budget",
   "newTitle": "Set a new budget",
-  "noCategoriesMessage": "You need to create at least 1 expense category before setting a budget.",
   "categoryLabel": "Category",
   "monthLabel": "Month",
   "limitLabel": "Limit",
@@ -16,5 +15,15 @@
   "statusSafe": "Safe",
   "saveFailed": "Failed to save budget",
   "deleteConfirm": "Delete this budget?",
-  "deleteFailed": "Failed to delete budget"
+  "deleteFailed": "Failed to delete budget",
+  "overallOption": "All categories (total spending)",
+  "overallLabel": "Total spending",
+  "copyTitle": "Copy budgets",
+  "copyHint": "Copy every budget of one month into another month. Budgets that already exist in the target month are kept as they are.",
+  "copyFromLabel": "From month",
+  "copyToLabel": "To month",
+  "copyButton": "Copy",
+  "copyResult": "Copied {{copied}} budget(s), skipped {{skipped}} that already existed",
+  "copySameMonth": "Source and target months must be different",
+  "copyFailed": "Failed to copy budgets"
 }

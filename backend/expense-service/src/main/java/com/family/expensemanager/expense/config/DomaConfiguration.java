@@ -11,6 +11,8 @@ import com.family.expensemanager.expense.dao.TransactionDao;
 import com.family.expensemanager.expense.dao.TransactionDaoImpl;
 import com.family.expensemanager.expense.dao.WalletDao;
 import com.family.expensemanager.expense.dao.WalletDaoImpl;
+import com.family.expensemanager.expense.dao.WalletTransferDao;
+import com.family.expensemanager.expense.dao.WalletTransferDaoImpl;
 import org.seasar.doma.jdbc.Config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -49,5 +51,10 @@ public class DomaConfiguration {
     @Bean
     public RecurringTransactionDao recurringTransactionDao(Config domaConfig) {
         return new RecurringTransactionDaoImpl(domaConfig);
+    }
+
+    @Bean
+    public WalletTransferDao walletTransferDao(Config domaConfig) {
+        return new WalletTransferDaoImpl(domaConfig);
     }
 }

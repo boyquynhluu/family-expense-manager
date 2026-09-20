@@ -44,10 +44,13 @@ import com.family.expensemanager.auth.dto.InviteMemberRequest;
 import com.family.expensemanager.auth.dto.LoginRequest;
 import com.family.expensemanager.auth.dto.LoginResponse;
 import com.family.expensemanager.auth.dto.MessageResponse;
+import com.family.expensemanager.auth.dto.PendingInviteResponse;
 import com.family.expensemanager.auth.dto.RefreshRequest;
 import com.family.expensemanager.auth.dto.RegisterRequest;
+import com.family.expensemanager.auth.dto.RenameFamilyRequest;
 import com.family.expensemanager.auth.dto.ResetPasswordRequest;
 import com.family.expensemanager.auth.dto.SessionResponse;
+import com.family.expensemanager.auth.dto.TransferOwnershipRequest;
 import com.family.expensemanager.auth.dto.TwoFactorConfirmResponse;
 import com.family.expensemanager.auth.dto.TwoFactorSetupResponse;
 import com.family.expensemanager.auth.dto.UpdateProfileRequest;
@@ -466,6 +469,96 @@ public class AuthService {
     }
 
     @PreAuthorize("hasRole('OWNER')")
+    public MessageResponse renameFamily(Long familyId, RenameFamilyRequest request) {
+        log.info("renameFamily - start, familyId={}", familyId);
+        Family family = familyDao.selectById(familyId)
+                .orElseThrow(() -> new NotFoundException("Gia đình không tồn tại: " + familyId));
+        family.setName(request.name().trim());
+        familyDao.update(family);
+        return new MessageResponse("Đã đổi tên gia đình");
+    }
+
+    /**
+     * Returns fresh tokens because the caller's active family (and so the JWT's
+     * familyId/role claims) changes; the session that made this call is revoked so
+     * its old token can't keep acting on the family they just left.
+     */
+    public AuthResponse leaveFamily(Long familyId, Long userId, Long currentSessionId,
+                                     String deviceInfo, String ipAddress) {
+        log.info("leaveFamily - start, familyId={}, userId={}", familyId, userId);
+        FamilyMembership membership = familyMembershipDao.selectByUserIdAndFamilyId(userId, familyId)
+                .orElseThrow(() -> new NotFoundException("Bạn không thuộc gia đình này"));
+        if (ROLE_OWNER.equals(membership.getRole())) {
+            throw new BadRequestException(
+                    "Chủ hộ không thể rời gia đình. Hãy chuyển quyền chủ hộ cho thành viên khác trước.");
+        }
+        User user = userDao.selectById(userId)
+                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+        familyMembershipDao.delete(membership);
+
+        List<FamilyMembership> remaining = familyMembershipDao.selectByUserId(userId);
+        if (!remaining.isEmpty()) {
+            FamilyMembership fallback = remaining.get(0);
+            user.setFamilyId(fallback.getFamilyId());
+            user.setRole(fallback.getRole());
+        } else {
+            // Every account needs at least one family to be active in, or it can't log in usefully.
+            Family personal = new Family();
+            personal.setName(user.getDisplayName() + "'s Family");
+            personal.setCreatedAt(LocalDateTime.now());
+            familyDao.insert(personal);
+            addMembership(userId, personal.getId(), ROLE_OWNER);
+            user.setFamilyId(personal.getId());
+            user.setRole(ROLE_OWNER);
+        }
+        userDao.update(user);
+
+        logout(userId, currentSessionId);
+        return issueTokens(user, deviceInfo, ipAddress);
+    }
+
+    /**
+     * Hands the OWNER role to another existing member. FAMILY_MEMBERSHIPS is the source
+     * of truth; USERS.role is mirrored only for users whose currently-active family is
+     * this one (it tracks the active family's role, see {@link #switchFamily}). Swapping
+     * both roles in one step means the family never has zero OWNERs.
+     */
+    @PreAuthorize("hasRole('OWNER')")
+    public AuthResponse transferOwnership(Long familyId, Long callerUserId, Long currentSessionId,
+                                           TransferOwnershipRequest request, String deviceInfo, String ipAddress) {
+        Long targetUserId = request.userId();
+        log.info("transferOwnership - start, familyId={}, targetUserId={}", familyId, targetUserId);
+        if (targetUserId.equals(callerUserId)) {
+            throw new BadRequestException("Bạn đã là chủ hộ của gia đình này");
+        }
+        FamilyMembership callerMembership = familyMembershipDao.selectByUserIdAndFamilyId(callerUserId, familyId)
+                .orElseThrow(() -> new NotFoundException("Bạn không thuộc gia đình này"));
+        FamilyMembership targetMembership = familyMembershipDao.selectByUserIdAndFamilyId(targetUserId, familyId)
+                .orElseThrow(() -> new NotFoundException("Thành viên không tồn tại: " + targetUserId));
+        User caller = userDao.selectById(callerUserId)
+                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+        User target = userDao.selectById(targetUserId)
+                .orElseThrow(() -> new NotFoundException("Thành viên không tồn tại: " + targetUserId));
+
+        targetMembership.setRole(ROLE_OWNER);
+        familyMembershipDao.update(targetMembership);
+        callerMembership.setRole(ROLE_MEMBER);
+        familyMembershipDao.update(callerMembership);
+
+        if (familyId.equals(target.getFamilyId())) {
+            target.setRole(ROLE_OWNER);
+            userDao.update(target);
+        }
+        if (familyId.equals(caller.getFamilyId())) {
+            caller.setRole(ROLE_MEMBER);
+            userDao.update(caller);
+        }
+
+        logout(callerUserId, currentSessionId);
+        return issueTokens(caller, deviceInfo, ipAddress);
+    }
+
+    @PreAuthorize("hasRole('OWNER')")
     public MessageResponse inviteMember(Long familyId, Long inviterUserId, InviteMemberRequest request) {
         log.info("inviteMember - start, familyId={}, email={}", familyId, request.email());
         userDao.selectByEmail(request.email()).ifPresent(existing ->
@@ -478,20 +571,69 @@ public class AuthService {
         User inviter = userDao.selectById(inviterUserId)
                 .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
 
-        String token = generateOpaqueToken();
         FamilyInvite invite = new FamilyInvite();
         invite.setFamilyId(familyId);
         invite.setEmail(request.email());
-        invite.setToken(token);
         invite.setInvitedByUserId(inviterUserId);
-        invite.setExpiresAt(LocalDateTime.now().plus(inviteTokenTtl));
         invite.setCreatedAt(LocalDateTime.now());
+        renewInviteToken(invite);
         familyInviteDao.insert(invite);
 
-        eventPublisher.publishEvent(new FamilyInviteEvent(
-                familyId, family.getName(), request.email(), inviter.getDisplayName(), token, Instant.now()));
+        publishInviteEvent(family, inviter, invite);
 
         return new MessageResponse("Đã gửi lời mời đến " + request.email());
+    }
+
+    private void renewInviteToken(FamilyInvite invite) {
+        invite.setToken(generateOpaqueToken());
+        invite.setExpiresAt(LocalDateTime.now().plus(inviteTokenTtl));
+    }
+
+    private void publishInviteEvent(Family family, User inviter, FamilyInvite invite) {
+        eventPublisher.publishEvent(new FamilyInviteEvent(
+                family.getId(), family.getName(), invite.getEmail(), inviter.getDisplayName(),
+                invite.getToken(), Instant.now()));
+    }
+
+    @PreAuthorize("hasRole('OWNER')")
+    public PageResponse<PendingInviteResponse> getPendingInvitesPaged(Long familyId, int page, int size) {
+        log.info("getPendingInvitesPaged - start, familyId={}, page={}, size={}", familyId, page, size);
+        validatePage(page, size);
+        long totalElements = familyInviteDao.countPendingByFamilyId(familyId);
+        List<PendingInviteResponse> content = familyInviteDao.selectPendingByFamilyIdPaged(familyId, size, page * size)
+                .stream()
+                .map(PendingInviteResponse::from)
+                .toList();
+        return PageResponse.of(content, page, size, totalElements);
+    }
+
+    @PreAuthorize("hasRole('OWNER')")
+    public void cancelInvite(Long familyId, Long inviteId) {
+        log.info("cancelInvite - start, familyId={}, inviteId={}", familyId, inviteId);
+        FamilyInvite invite = familyInviteDao.selectByIdAndFamilyId(inviteId, familyId)
+                .orElseThrow(() -> new NotFoundException("Lời mời không tồn tại: " + inviteId));
+        familyInviteDao.delete(invite);
+    }
+
+    /** Issues a fresh token (the old link stops working) and extends the expiry, so an expired invite can be revived too. */
+    @PreAuthorize("hasRole('OWNER')")
+    public MessageResponse resendInvite(Long familyId, Long callerUserId, Long inviteId) {
+        log.info("resendInvite - start, familyId={}, inviteId={}", familyId, inviteId);
+        FamilyInvite invite = familyInviteDao.selectByIdAndFamilyId(inviteId, familyId)
+                .orElseThrow(() -> new NotFoundException("Lời mời không tồn tại: " + inviteId));
+        if (invite.getAcceptedAt() != null) {
+            throw new BadRequestException("Lời mời này đã được sử dụng");
+        }
+        Family family = familyDao.selectById(familyId)
+                .orElseThrow(() -> new NotFoundException("Gia đình không tồn tại: " + familyId));
+        User caller = userDao.selectById(callerUserId)
+                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+
+        renewInviteToken(invite);
+        familyInviteDao.update(invite);
+        publishInviteEvent(family, caller, invite);
+
+        return new MessageResponse("Đã gửi lại lời mời đến " + invite.getEmail());
     }
 
     public InviteDetailsResponse getInviteDetails(String token) {

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { EditIcon, TrashIcon } from "../components/AppIcons";
+import SeedDefaultsButton from "../components/SeedDefaultsButton";
 import { confirmDialog } from "../utils/confirm";
 import { useAuth } from "../hooks/useAuth";
 
@@ -119,7 +120,11 @@ export default function Categories() {
       <div className="section-card">
         <h2>{t("categories:listTitle")}</h2>
         {categories.length === 0 ? (
-          <p className="empty-state">{t("categories:emptyState")}</p>
+          <div>
+            <p className="empty-state">{t("categories:emptyState")}</p>
+            <p className="page-header-subtitle">{t("categories:seedDefaultsHint")}</p>
+            <SeedDefaultsButton onDone={load} />
+          </div>
         ) : (
           <div className="category-chip-grid">
             {categories.map((c) => (

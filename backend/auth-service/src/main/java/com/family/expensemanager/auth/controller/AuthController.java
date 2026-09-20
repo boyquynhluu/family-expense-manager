@@ -10,11 +10,14 @@ import com.family.expensemanager.auth.dto.InviteMemberRequest;
 import com.family.expensemanager.auth.dto.LoginRequest;
 import com.family.expensemanager.auth.dto.LoginResponse;
 import com.family.expensemanager.auth.dto.MessageResponse;
+import com.family.expensemanager.auth.dto.PendingInviteResponse;
 import com.family.expensemanager.auth.dto.RefreshRequest;
 import com.family.expensemanager.auth.dto.RegisterRequest;
+import com.family.expensemanager.auth.dto.RenameFamilyRequest;
 import com.family.expensemanager.auth.dto.ResetPasswordRequest;
 import com.family.expensemanager.auth.dto.SessionResponse;
 import com.family.expensemanager.auth.dto.SwitchFamilyRequest;
+import com.family.expensemanager.auth.dto.TransferOwnershipRequest;
 import com.family.expensemanager.auth.dto.TwoFactorCodeRequest;
 import com.family.expensemanager.auth.dto.TwoFactorConfirmResponse;
 import com.family.expensemanager.auth.dto.TwoFactorDisableRequest;
@@ -162,6 +165,49 @@ public class AuthController {
         log.info("removeMember - start, userId={}", userId);
         authService.removeMember(CurrentUser.familyId(), CurrentUser.userId(), userId);
         return ApiResponse.ok(new MessageResponse("Đã xoá thành viên khỏi gia đình"));
+    }
+
+    @PutMapping("/family")
+    public ApiResponse<MessageResponse> renameFamily(@Valid @RequestBody RenameFamilyRequest request) {
+        log.info("renameFamily - start");
+        return ApiResponse.ok(authService.renameFamily(CurrentUser.familyId(), request));
+    }
+
+    @PostMapping("/family/leave")
+    public ApiResponse<AuthResponse> leaveFamily(HttpServletRequest httpRequest) {
+        log.info("leaveFamily - start");
+        return ApiResponse.ok(authService.leaveFamily(CurrentUser.familyId(), CurrentUser.userId(),
+                CurrentUser.sessionId(), RequestMetadataUtil.deviceInfo(httpRequest),
+                RequestMetadataUtil.ipAddress(httpRequest)));
+    }
+
+    @PostMapping("/family/transfer-ownership")
+    public ApiResponse<AuthResponse> transferOwnership(@Valid @RequestBody TransferOwnershipRequest request,
+                                                        HttpServletRequest httpRequest) {
+        log.info("transferOwnership - start, targetUserId={}", request.userId());
+        return ApiResponse.ok(authService.transferOwnership(CurrentUser.familyId(), CurrentUser.userId(),
+                CurrentUser.sessionId(), request, RequestMetadataUtil.deviceInfo(httpRequest),
+                RequestMetadataUtil.ipAddress(httpRequest)));
+    }
+
+    @GetMapping("/invites")
+    public ApiResponse<PageResponse<PendingInviteResponse>> pendingInvites(@RequestParam(defaultValue = "0") int page,
+                                                                           @RequestParam(defaultValue = "5") int size) {
+        log.info("pendingInvites - start, page={}, size={}", page, size);
+        return ApiResponse.ok(authService.getPendingInvitesPaged(CurrentUser.familyId(), page, size));
+    }
+
+    @DeleteMapping("/invites/{id}")
+    public ApiResponse<MessageResponse> cancelInvite(@PathVariable Long id) {
+        log.info("cancelInvite - start, id={}", id);
+        authService.cancelInvite(CurrentUser.familyId(), id);
+        return ApiResponse.ok(new MessageResponse("Đã huỷ lời mời"));
+    }
+
+    @PostMapping("/invites/{id}/resend")
+    public ApiResponse<MessageResponse> resendInvite(@PathVariable Long id) {
+        log.info("resendInvite - start, id={}", id);
+        return ApiResponse.ok(authService.resendInvite(CurrentUser.familyId(), CurrentUser.userId(), id));
     }
 
     @GetMapping("/my-families")

@@ -35,5 +35,11 @@ public interface BudgetDao {
     Optional<Budget> selectByCategoryAndPeriod(Long categoryId, String periodMonth);
 
     @Select
+    Optional<Budget> selectOverallByPeriod(Long familyId, String periodMonth);
+
+    @Select
+    List<Budget> selectByFamilyAndPeriod(Long familyId, String periodMonth);
+
+    @Select
     long countByCategoryId(Long categoryId);
 }

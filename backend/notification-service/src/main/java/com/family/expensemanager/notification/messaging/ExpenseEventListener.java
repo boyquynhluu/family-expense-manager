@@ -18,6 +18,7 @@ import org.springframework.util.StreamUtils;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.text.NumberFormat;
 import java.util.Locale;
@@ -26,17 +27,19 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Consumes {@code expense-events}. Per README "Hợp đồng Kafka", this service only
- * acts on {@link ExpenseEvent#BUDGET_EXCEEDED} at this stage — {@code EXPENSE_CREATED}
- * events are ignored. On a budget-exceeded event it both records an in-app
- * {@link Notification} and emails the transaction's creator, same pattern as
+ * acts on {@link ExpenseEvent#BUDGET_EXCEEDED} and {@link ExpenseEvent#BUDGET_WARNING} —
+ * {@code EXPENSE_CREATED} events are ignored. On a budget-exceeded event it both records
+ * an in-app {@link Notification} and emails the transaction's creator, same pattern as
  * {@link PasswordResetEventListener} — see README tech-debt item "Cảnh báo vượt ngân
- * sách không gửi email", which this closes.
+ * sách không gửi email", which this closes. A budget-warning event (80% reached) only
+ * records the in-app notification, no email.
  */
 @Component
 @Slf4j(topic = "ExpenseEventListener")
 public class ExpenseEventListener {
 
     private static final String TEMPLATE_PATH = "mail-templates/budget-exceeded-email.html";
+    private static final String OVERALL_BUDGET_LABEL = "Tổng chi tiêu";
 
     private final NotificationDao notificationDao;
     private final ObjectMapper objectMapper;
@@ -60,6 +63,10 @@ public class ExpenseEventListener {
 
     @KafkaListener(topics = "${kafka.topic.expense-events}")
     public void onExpenseEvent(ExpenseEvent event) throws MessagingException {
+        if (ExpenseEvent.BUDGET_WARNING.equals(event.eventType())) {
+            recordWarningNotification(event);
+            return;
+        }
         if (!ExpenseEvent.BUDGET_EXCEEDED.equals(event.eventType())) {
             return;
         }
@@ -80,9 +87,10 @@ public class ExpenseEventListener {
         notification.setUserId(event.userId());
         notification.setType(event.eventType());
         notification.setTitle("Vượt ngân sách tháng " + event.periodMonth());
+        String subject = event.categoryId() == null ? OVERALL_BUDGET_LABEL : "Danh mục #" + event.categoryId();
         notification.setMessage(String.format(
-                "Danh mục #%d đã chi %s / giới hạn %s trong tháng %s",
-                event.categoryId(), formatAmount(event.totalSpent()), formatAmount(event.limitAmount()),
+                "%s đã chi %s / giới hạn %s trong tháng %s",
+                subject, formatAmount(event.totalSpent()), formatAmount(event.limitAmount()),
                 event.periodMonth()));
         notification.setPayloadJson(toJson(event));
         notification.setIsRead(false);
@@ -90,10 +98,40 @@ public class ExpenseEventListener {
         notificationDao.insert(notification);
     }
 
+    private void recordWarningNotification(ExpenseEvent event) {
+        Notification notification = new Notification();
+        notification.setFamilyId(event.familyId());
+        notification.setUserId(event.userId());
+        notification.setType(event.eventType());
+        notification.setTitle("Sắp vượt ngân sách tháng " + event.periodMonth());
+        notification.setMessage(String.format(
+                "%s đã chi %s / giới hạn %s (đạt %d%%)",
+                budgetLabel(event), formatAmount(event.totalSpent()), formatAmount(event.limitAmount()),
+                percentUsed(event)));
+        notification.setPayloadJson(toJson(event));
+        notification.setIsRead(false);
+
+        notificationDao.insert(notification);
+    }
+
+    private String budgetLabel(ExpenseEvent event) {
+        if (event.categoryId() == null) {
+            return OVERALL_BUDGET_LABEL;
+        }
+        return event.categoryName() != null ? "Danh mục " + event.categoryName() : "Danh mục #" + event.categoryId();
+    }
+
+    private long percentUsed(ExpenseEvent event) {
+        return event.totalSpent().multiply(BigDecimal.valueOf(100))
+                .divide(event.limitAmount(), 0, RoundingMode.DOWN).longValue();
+    }
+
     private void sendBudgetExceededEmail(ExpenseEvent event) throws MessagingException {
+        String categoryName = event.categoryName() != null ? event.categoryName() : OVERALL_BUDGET_LABEL;
+        String displayName = event.userDisplayName() != null ? event.userDisplayName() : event.userEmail();
         String html = template
-                .replace("{{displayName}}", event.userDisplayName())
-                .replace("{{categoryName}}", event.categoryName())
+                .replace("{{displayName}}", displayName)
+                .replace("{{categoryName}}", categoryName)
                 .replace("{{periodMonth}}", event.periodMonth())
                 .replace("{{totalSpent}}", formatAmount(event.totalSpent()))
                 .replace("{{limitAmount}}", formatAmount(event.limitAmount()))
@@ -103,7 +141,7 @@ public class ExpenseEventListener {
         MimeMessageHelper helper = new MimeMessageHelper(message, StandardCharsets.UTF_8.name());
         helper.setFrom(fromAddress);
         helper.setTo(event.userEmail());
-        helper.setSubject("Cảnh báo vượt ngân sách — " + event.categoryName());
+        helper.setSubject("Cảnh báo vượt ngân sách — " + categoryName);
         helper.setText(html, true);
 
         mailSender.send(message);

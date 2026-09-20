@@ -8,7 +8,8 @@ import java.time.Instant;
  * (key = familyId) and consumed by notification-service. See README "Hợp đồng Kafka".
  * {@code periodMonth}/{@code limitAmount}/{@code totalSpent}/{@code categoryName}/
  * {@code userEmail}/{@code userDisplayName} are only populated for
- * {@link #BUDGET_EXCEEDED} — notification-service has no direct access to expense-
+ * {@link #BUDGET_EXCEEDED} and {@link #BUDGET_WARNING} (both with a null {@code categoryId}
+ * and {@code categoryName} "Tổng chi tiêu" for the family-wide budget) — notification-service has no direct access to expense-
  * service's categories or auth-service's users, so expense-service (which has both,
  * the latter via the caller's JWT claims) fills them in at publish time rather than
  * notification-service making a synchronous cross-service call to look them up.
@@ -30,4 +31,5 @@ public record ExpenseEvent(
 
     public static final String EXPENSE_CREATED = "EXPENSE_CREATED";
     public static final String BUDGET_EXCEEDED = "BUDGET_EXCEEDED";
+    public static final String BUDGET_WARNING = "BUDGET_WARNING";
 }

@@ -4,11 +4,13 @@ import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.expense.dao.BudgetDao;
 import com.family.expensemanager.expense.domain.entity.Budget;
+import com.family.expensemanager.expense.dto.CopyBudgetsRequest;
 import com.family.expensemanager.expense.dto.CreateBudgetRequest;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -18,7 +20,10 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -53,6 +58,97 @@ class BudgetServiceTest {
 
         assertThatThrownBy(() -> budgetService.create(1L, new CreateBudgetRequest(5L, "2026-01", BigDecimal.TEN)))
                 .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void create_savesOverallBudget_whenCategoryIdNull() {
+        var response = budgetService.create(1L, new CreateBudgetRequest(null, "2026-01", BigDecimal.valueOf(1000)));
+
+        verify(categoryService, never()).requireOwnedByFamily(any(), any());
+        assertThat(response.categoryId()).isNull();
+        assertThat(response.familyId()).isEqualTo(1L);
+    }
+
+    @Test
+    void create_rejectsSecondOverallBudget_forSameMonth() {
+        when(budgetDao.selectOverallByPeriod(1L, "2026-01")).thenReturn(Optional.of(overallBudget(3L)));
+
+        assertThatThrownBy(() -> budgetService.create(1L, new CreateBudgetRequest(null, "2026-01", BigDecimal.TEN)))
+                .isInstanceOf(BadRequestException.class);
+        verify(budgetDao, never()).insert(any());
+    }
+
+    @Test
+    void create_rejectsDuplicateCategoryBudget_forSameMonth() {
+        when(budgetDao.selectByCategoryAndPeriod(5L, "2026-01")).thenReturn(Optional.of(budget(3L, 1L)));
+
+        assertThatThrownBy(() -> budgetService.create(1L, new CreateBudgetRequest(5L, "2026-01", BigDecimal.TEN)))
+                .isInstanceOf(BadRequestException.class);
+        verify(budgetDao, never()).insert(any());
+    }
+
+    @Test
+    void update_allowsSavingOverallBudget_thatIsItself() {
+        Budget existing = overallBudget(3L);
+        when(budgetDao.selectById(3L)).thenReturn(Optional.of(existing));
+        when(budgetDao.selectOverallByPeriod(1L, "2026-01")).thenReturn(Optional.of(existing));
+
+        var response = budgetService.update(3L, 1L, new CreateBudgetRequest(null, "2026-01", BigDecimal.valueOf(99)));
+
+        assertThat(response.limitAmount()).isEqualByComparingTo("99");
+        verify(budgetDao).update(existing);
+    }
+
+    @Test
+    void update_rejectsOverallBudget_whenAnotherOneExistsInMonth() {
+        when(budgetDao.selectById(4L)).thenReturn(Optional.of(budget(4L, 1L)));
+        when(budgetDao.selectOverallByPeriod(1L, "2026-01")).thenReturn(Optional.of(overallBudget(3L)));
+
+        assertThatThrownBy(() -> budgetService.update(4L, 1L, new CreateBudgetRequest(null, "2026-01", BigDecimal.TEN)))
+                .isInstanceOf(BadRequestException.class);
+        verify(budgetDao, never()).update(any());
+    }
+
+    @Test
+    void copy_copiesMissingBudgets_andSkipsExistingOnes() {
+        Budget food = budget(1L, 1L);
+        Budget overall = overallBudget(2L);
+        Budget transport = budget(3L, 1L);
+        transport.setCategoryId(6L);
+        Budget existingFoodInTarget = budget(9L, 1L);
+        existingFoodInTarget.setPeriodMonth("2026-02");
+        when(budgetDao.selectByFamilyAndPeriod(1L, "2026-01")).thenReturn(List.of(food, overall, transport));
+        when(budgetDao.selectByFamilyAndPeriod(1L, "2026-02")).thenReturn(List.of(existingFoodInTarget));
+
+        var result = budgetService.copy(1L, new CopyBudgetsRequest("2026-01", "2026-02"));
+
+        assertThat(result.copied()).isEqualTo(2);
+        assertThat(result.skipped()).isEqualTo(1);
+        ArgumentCaptor<Budget> captor = ArgumentCaptor.forClass(Budget.class);
+        verify(budgetDao, times(2)).insert(captor.capture());
+        assertThat(captor.getAllValues()).extracting(Budget::getCategoryId).containsExactly(null, 6L);
+        assertThat(captor.getAllValues()).allSatisfy(b -> {
+            assertThat(b.getFamilyId()).isEqualTo(1L);
+            assertThat(b.getPeriodMonth()).isEqualTo("2026-02");
+        });
+    }
+
+    @Test
+    void copy_skipsExistingOverallBudget() {
+        when(budgetDao.selectByFamilyAndPeriod(1L, "2026-01")).thenReturn(List.of(overallBudget(2L)));
+        when(budgetDao.selectByFamilyAndPeriod(1L, "2026-02")).thenReturn(List.of(overallBudget(8L)));
+
+        var result = budgetService.copy(1L, new CopyBudgetsRequest("2026-01", "2026-02"));
+
+        assertThat(result.copied()).isZero();
+        assertThat(result.skipped()).isEqualTo(1);
+        verify(budgetDao, never()).insert(any());
+    }
+
+    @Test
+    void copy_rejectsSameMonth() {
+        assertThatThrownBy(() -> budgetService.copy(1L, new CopyBudgetsRequest("2026-01", "2026-01")))
+                .isInstanceOf(BadRequestException.class);
     }
 
     @Test
@@ -116,6 +212,12 @@ class BudgetServiceTest {
                 .isInstanceOf(BadRequestException.class);
         assertThatThrownBy(() -> budgetService.listByFamilyPaged(1L, 0, 101))
                 .isInstanceOf(BadRequestException.class);
+    }
+
+    private static Budget overallBudget(Long id) {
+        Budget budget = budget(id, 1L);
+        budget.setCategoryId(null);
+        return budget;
     }
 
     private static Budget budget(Long id, Long familyId) {

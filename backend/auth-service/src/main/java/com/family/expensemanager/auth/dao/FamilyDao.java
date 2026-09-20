@@ -7,12 +7,16 @@ import com.family.expensemanager.auth.domain.entity.Family;
 import org.seasar.doma.Dao;
 import org.seasar.doma.Insert;
 import org.seasar.doma.Select;
+import org.seasar.doma.Update;
 
 @Dao
 public interface FamilyDao {
 
     @Insert
     int insert(Family family);
+
+    @Update
+    int update(Family family);
 
     @Select
     Optional<Family> selectById(Long id);
