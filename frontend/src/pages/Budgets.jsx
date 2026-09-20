@@ -138,11 +138,17 @@ export default function Budgets() {
               </select>
             </label>
             <label className="field">
-              {t("budgets:monthLabel")}
+              <span>
+                {t("budgets:monthLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <input type="month" value={periodMonth} onChange={(e) => setPeriodMonth(e.target.value)} required />
             </label>
             <label className="field">
-              {t("budgets:limitLabel")}
+              <span>
+                {t("budgets:limitLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <input
                 type="number"
                 step="0.01"

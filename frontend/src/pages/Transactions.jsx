@@ -37,6 +37,8 @@ export default function Transactions() {
   const [filter, setFilter] = useState(emptyFilter);
   const [page, setPage] = useState(0);
   const [error, setError] = useState("");
+  const [receiptFile, setReceiptFile] = useState(null);
+  const [receiptInputKey, setReceiptInputKey] = useState(0);
   const fileInputRef = useRef(null);
   const [uploadTargetId, setUploadTargetId] = useState(null);
   const importInputRef = useRef(null);
@@ -95,6 +97,8 @@ export default function Transactions() {
 
   function cancelEdit() {
     setEditingId(null);
+    setReceiptFile(null);
+    setReceiptInputKey((k) => k + 1);
     setForm((f) => ({ ...emptyForm, walletId: f.walletId, categoryId: f.categoryId }));
   }
 
@@ -109,17 +113,33 @@ export default function Transactions() {
       occurredAt: form.occurredAt,
       note: form.note || null,
     };
+    let savedId;
     try {
       if (editingId) {
         await client.put(`/expenses/transactions/${editingId}`, payload);
+        savedId = editingId;
       } else {
-        await client.post("/expenses/transactions", payload);
+        const res = await client.post("/expenses/transactions", payload);
+        savedId = res.data.data.id;
       }
-      cancelEdit();
-      load();
     } catch (err) {
       setError(err.response?.data?.message || t("transactions:saveFailed"));
+      return;
     }
+
+    if (receiptFile) {
+      const formData = new FormData();
+      formData.append("file", receiptFile);
+      try {
+        await client.post(`/expenses/transactions/${savedId}/receipt`, formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      } catch (err) {
+        setError(err.response?.data?.message || t("transactions:uploadReceiptFailed"));
+      }
+    }
+    cancelEdit();
+    load();
   }
 
   async function handleDelete(id) {
@@ -287,7 +307,10 @@ export default function Transactions() {
         ) : (
           <form className="inline-form" onSubmit={handleSubmit}>
             <label className="field">
-              {t("transactions:walletLabel")}
+              <span>
+                {t("transactions:walletLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <select value={form.walletId} onChange={(e) => updateField("walletId", e.target.value)} required>
                 {wallets.map((w) => (
                   <option key={w.id} value={w.id}>
@@ -297,7 +320,10 @@ export default function Transactions() {
               </select>
             </label>
             <label className="field">
-              {t("transactions:categoryLabel")}
+              <span>
+                {t("transactions:categoryLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <select value={form.categoryId} onChange={(e) => updateField("categoryId", e.target.value)} required>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -314,7 +340,10 @@ export default function Transactions() {
               </select>
             </label>
             <label className="field">
-              {t("transactions:amountLabel")}
+              <span>
+                {t("transactions:amountLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <input
                 type="number"
                 step="0.01"
@@ -325,7 +354,10 @@ export default function Transactions() {
               />
             </label>
             <label className="field">
-              {t("transactions:timeLabel")}
+              <span>
+                {t("transactions:timeLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <input
                 type="datetime-local"
                 value={form.occurredAt}
@@ -341,6 +373,37 @@ export default function Transactions() {
                 onChange={(e) => updateField("note", e.target.value)}
               />
             </label>
+            <div className="field">
+              {t("transactions:receiptLabel")}
+              <div className={`file-picker${receiptFile ? " has-file" : ""}`}>
+                <label className="file-picker-trigger">
+                  <input
+                    key={receiptInputKey}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
+                  />
+                  <ImageIcon />
+                  <span className="file-picker-name">
+                    {receiptFile ? receiptFile.name : t("transactions:chooseReceipt")}
+                  </span>
+                </label>
+                {receiptFile && (
+                  <button
+                    type="button"
+                    className="file-picker-clear"
+                    onClick={() => {
+                      setReceiptFile(null);
+                      setReceiptInputKey((k) => k + 1);
+                    }}
+                    aria-label={t("transactions:clearReceipt")}
+                    title={t("transactions:clearReceipt")}
+                  >
+                    <CloseIcon />
+                  </button>
+                )}
+              </div>
+            </div>
             <button type="submit">{editingId ? t("transactions:submitUpdate") : t("transactions:submitAdd")}</button>
             {editingId && (
               <button type="button" className="btn-secondary" onClick={cancelEdit}>
@@ -482,6 +545,7 @@ export default function Transactions() {
                           className="icon-btn"
                           onClick={() => viewReceipt(row.id)}
                           aria-label={t("transactions:viewReceiptAria")}
+                          title={t("transactions:viewReceiptAria")}
                         >
                           <ImageIcon />
                         </button>
@@ -500,6 +564,7 @@ export default function Transactions() {
                         className="icon-btn"
                         onClick={() => triggerUpload(row.id)}
                         aria-label={t("transactions:attachReceiptAria")}
+                        title={t("transactions:attachReceiptAria")}
                       >
                         <ImageIcon />
                       </button>

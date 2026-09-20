@@ -22,12 +22,16 @@ export default function Login() {
   // Set only when the backend says the account has 2FA enabled (README "9. Không có
   // 2FA") — while set, the form below switches to asking for the 6-digit code instead
   // of email/password.
-  const [twoFactorToken, setTwoFactorToken] = useState(null);
+  const [twoFactorToken, setTwoFactorToken] = useState(location.state?.twoFactorToken ?? null);
   const [totpCode, setTotpCode] = useState("");
 
   useEffect(() => {
     if (location.state?.passwordResetSuccess) {
       toast.success(t("passwordResetSuccess"));
+      navigate(location.pathname, { replace: true, state: {} });
+    } else if (location.state?.twoFactorToken) {
+      // Already copied into component state above; drop it from history so a refresh
+      // doesn't replay a (single-use) challenge.
       navigate(location.pathname, { replace: true, state: {} });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -42,6 +42,9 @@
   "clearFilter": "Xoá lọc",
   "noMatchFilter": "Không có giao dịch nào khớp bộ lọc",
   "emptyState": "Chưa có giao dịch nào",
+  "receiptLabel": "Ảnh hoá đơn (tuỳ chọn)",
+  "chooseReceipt": "Chọn ảnh...",
+  "clearReceipt": "Bỏ ảnh đã chọn",
   "viewReceiptAria": "Xem hoá đơn",
   "deleteReceiptAria": "Xoá ảnh hoá đơn",
   "attachReceiptAria": "Đính kèm hoá đơn"

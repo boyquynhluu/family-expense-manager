@@ -80,7 +80,10 @@ export default function Categories() {
         <h2>{editingId ? t("categories:editTitle") : t("categories:addTitle")}</h2>
         <form className="inline-form" onSubmit={handleSubmit}>
           <label className="field">
-            {t("categories:nameLabel")}
+            <span>
+              {t("categories:nameLabel")}
+              <span className="required-mark" aria-hidden="true"> *</span>
+            </span>
             <input
               placeholder={t("categories:namePlaceholder")}
               value={name}

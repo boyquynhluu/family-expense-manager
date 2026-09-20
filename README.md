@@ -305,3 +305,383 @@ Bảng port của các service/tool phổ biến trong hạ tầng nói chung �
 ### Đã làm đầy đủ (không cần lo)
 
 > Đăng ký/đăng nhập + xác thực email + quên mật khẩu, mời thành viên gia đình, OAuth2 (Google), rate-limit chống brute-force, phân quyền admin hệ thống, export báo cáo CSV/Excel, CI build+test tự động, deploy frontend GitHub Pages, Swagger đầy đủ cho mọi service.
+
+## Luồng hoạt động của các mục 1–13 (đã hoàn thành)
+
+> 13 mục ở phần [Task cần làm](#task-cần-làm) phía trên đều đã được code xong. Phần này vẽ lại **đường đi của request/dữ liệu** cho từng mục để dễ hình dung (sơ đồ Mermaid, GitHub tự render).
+
+### Bản đồ tổng quan: mục nào nằm ở đâu
+
+```mermaid
+flowchart LR
+    U["Trình duyệt<br/>React (i18n vi/en) — mục 13"]
+    GW["api-gateway :8080<br/>JWT filter + RateLimit"]
+    AU["auth-service :8081<br/>mục 6, 8, 9"]
+    EX["expense-service :8082<br/>mục 1, 3, 4, 5, 7, 10"]
+    NO["notification-service :8083<br/>mục 2"]
+    DB[("MySQL<br/>Flyway migrations")]
+    RD[("Redis<br/>phiên bị thu hồi, challenge 2FA")]
+    KF{{"Kafka<br/>expense-events"}}
+    OB["Prometheus / Loki / Grafana<br/>mục 12"]
+    IT["Integration test<br/>Testcontainers — mục 11"]
+
+    U --> GW
+    GW --> AU
+    GW --> EX
+    GW --> NO
+    AU --> DB
+    EX --> DB
+    NO --> DB
+    AU --> RD
+    EX --> RD
+    NO --> RD
+    EX -- "BUDGET_EXCEEDED" --> KF --> NO
+    AU -.-> OB
+    EX -.-> OB
+    NO -.-> OB
+    IT -.->|"chạy DAO thật trên MySQL container"| DB
+```
+
+### Mục 1 — Phân trang/lọc chạy ở backend (dùng chung cho mọi danh sách, 5 dòng/trang)
+
+```mermaid
+sequenceDiagram
+    actor U as Người dùng
+    participant FE as Trang React (usePagedList + Pagination)
+    participant GW as api-gateway
+    participant C as Controller
+    participant S as Service
+    participant D as DAO (Doma)
+    participant DB as MySQL
+
+    U->>FE: Mở trang / bấm Trước, Sau
+    FE->>GW: GET /api/.../danh-sach?page=0&size=5 (+ bộ lọc)
+    GW->>C: chuyển tiếp (đã qua JWT)
+    C->>S: listPaged(familyId, page, size)
+    S->>S: page >= 0 và 1 <= size <= 100, sai thì 400
+    S->>D: count(familyId)
+    D->>DB: SELECT COUNT(*)
+    S->>D: selectPaged(familyId, limit, offset)
+    D->>DB: SELECT ... LIMIT ? OFFSET ?
+    DB-->>S: đúng 1 trang dữ liệu
+    S-->>FE: PageResponse (content, page, totalElements, totalPages)
+    FE-->>U: Hiện bảng + thanh phân trang
+    Note over FE: Xoá dòng cuối của trang cuối thì tự lùi 1 trang
+```
+
+Áp dụng cho: Giao dịch, Ngân sách, Giao dịch định kỳ, 3 bảng Thùng rác, Thông báo, Admin (gia đình/người dùng), Thành viên gia đình, Phiên đăng nhập. **Ví và Danh mục cố ý không phân trang** vì còn làm dữ liệu cho dropdown ở các trang khác.
+
+### Mục 2 — Cảnh báo vượt ngân sách gửi cả email
+
+```mermaid
+sequenceDiagram
+    actor U as Người dùng
+    participant EX as expense-service (TransactionService.create)
+    participant DB as MySQL
+    participant KF as Kafka (expense-events)
+    participant NO as notification-service (ExpenseEventListener)
+    participant SMTP as Mail server
+
+    U->>EX: Tạo giao dịch chi tiêu
+    EX->>DB: Lưu giao dịch
+    EX->>DB: Tổng chi của danh mục trong tháng so với ngân sách
+    alt Tổng chi vượt giới hạn
+        EX->>KF: Gửi event BUDGET_EXCEEDED
+        KF->>NO: Consume event
+        NO->>DB: Ghi 1 dòng vào NOTIFICATIONS (thông báo trong app)
+        NO->>SMTP: Gửi email cảnh báo cho người tạo giao dịch
+    else Chưa vượt
+        EX-->>U: Kết thúc, không có event
+    end
+    U->>NO: Mở chuông thông báo (unread-count, danh sách phân trang)
+```
+
+### Mục 3 — Giao dịch định kỳ (tự sinh giao dịch hàng tháng)
+
+```mermaid
+flowchart TD
+    A["Tạo/sửa rule định kỳ<br/>POST/PUT /recurring-transactions"] --> B["Tính nextRunDate<br/>nếu startDate đã qua thì tính từ hôm nay"]
+    B --> C[("RECURRING_TRANSACTIONS<br/>nextRunDate, lastRunDate = NULL")]
+    C --> UI1["Giao diện hiện 'Chưa thực hiện'"]
+
+    S["Scheduler cron 01:00 mỗi ngày"] --> Q["selectDue: rule đang bật và nextRunDate <= hôm nay"]
+    Q --> L{"Còn nextRunDate <= hôm nay?"}
+    L -- "Có" --> T["TransactionService.create<br/>giống nhập tay"]
+    T --> U["lastRunDate = ngày vừa chạy<br/>nextRunDate = tháng kế tiếp"]
+    U --> L
+    L -- "Không" --> E["Lưu rule"]
+    E --> UI2["Giao diện hiện 'Hoàn thành'"]
+    T -. "vượt ngân sách" .-> K["Chạy tiếp luồng mục 2"]
+```
+
+Nếu server tắt vài tháng thì vòng lặp `Còn nextRunDate <= hôm nay` sẽ sinh bù đủ các tháng bị lỡ. Rule mới tạo không bị bù vì `nextRunDate` luôn tính từ hôm nay trở đi.
+
+### Mục 4 — Ảnh hoá đơn cho giao dịch
+
+```mermaid
+sequenceDiagram
+    actor U as Người dùng
+    participant FE as Transactions.jsx
+    participant TC as TransactionController
+    participant RS as ReceiptStorageService
+    participant Disk as Ổ đĩa (volume receipt.storage-path)
+    participant DB as MySQL
+
+    U->>FE: Chọn ảnh hoá đơn
+    FE->>TC: POST /transactions/{id}/receipt (multipart)
+    TC->>RS: Kiểm tra giao dịch thuộc gia đình rồi lưu file
+    RS->>Disk: Ghi file ảnh
+    RS-->>TC: đường dẫn tương đối
+    TC->>DB: Lưu đường dẫn vào giao dịch
+    U->>FE: Bấm xem hoá đơn
+    FE->>TC: GET /transactions/{id}/receipt
+    TC->>Disk: Đọc file
+    TC-->>FE: Trả ảnh
+    U->>FE: Bấm xoá ảnh
+    FE->>TC: DELETE /transactions/{id}/receipt
+    TC->>Disk: Xoá file và xoá đường dẫn trong DB
+```
+
+### Mục 5 — Import (chiều ngược lại của Export)
+
+```mermaid
+flowchart LR
+    EXP["GET /transactions/export<br/>CSV hoặc Excel"] --> FILE["File có cột:<br/>Thời gian, Ví, Danh mục, Loại, Số tiền, Ghi chú"]
+    FILE -->|"chỉnh trong Excel hoặc tự soạn"| IMP["POST /transactions/import"]
+    IMP --> H["TransactionImportService<br/>tìm dòng tiêu đề, chấp nhận vài dòng trống phía trên"]
+    H --> R{"Từng dòng"}
+    R -->|"hợp lệ"| CR["TransactionService.create<br/>giống nhập tay: event, cache"]
+    R -->|"lỗi: ví hoặc danh mục lạ, số tiền sai"| SK["Bỏ qua và ghi vào báo cáo lỗi"]
+    CR --> RES["Kết quả: số dòng đã nhập và danh sách dòng lỗi"]
+    SK --> RES
+```
+
+### Mục 6 — Một tài khoản thuộc nhiều gia đình
+
+```mermaid
+sequenceDiagram
+    actor U as Người dùng
+    participant FE as React
+    participant AU as auth-service
+    participant DB as MySQL (FAMILY_MEMBERSHIPS)
+
+    U->>FE: Nhận link mời hoặc tạo gia đình mới
+    FE->>AU: POST /auth/invite/{token}/accept
+    AU->>DB: Thêm 1 dòng membership (user, family, role)
+    U->>FE: Mở bộ chọn gia đình
+    FE->>AU: GET /auth/my-families
+    AU-->>FE: Danh sách gia đình đang tham gia
+    U->>FE: Chọn gia đình khác
+    FE->>AU: POST /auth/switch-family
+    AU->>DB: Kiểm tra user là thành viên gia đình đích
+    AU-->>FE: Access token mới có familyId và role của gia đình đó
+    FE-->>U: Tải lại dữ liệu (mọi API sau đó lọc theo familyId mới)
+```
+
+### Mục 7 — Một loại tiền tệ cho mỗi gia đình (ràng buộc chủ động)
+
+```mermaid
+flowchart TD
+    A["Tạo hoặc sửa ví<br/>POST/PUT /wallets"] --> B["WalletService.requireConsistentCurrency"]
+    B --> C{"Ví khác trong gia đình<br/>có cùng currency không?"}
+    C -- "Có, hoặc chưa có ví nào" --> D["Lưu ví"]
+    C -- "Khác" --> E["Trả 400, không lưu"]
+    D --> F["Dashboard/Summary cộng tổng an toàn<br/>vì cùng một đơn vị tiền"]
+```
+
+### Mục 8 — Quản lý phiên đăng nhập, đăng xuất từ xa
+
+```mermaid
+sequenceDiagram
+    actor U as Người dùng
+    participant FE as Profile.jsx
+    participant AU as auth-service
+    participant DB as MySQL (REFRESH_TOKENS)
+    participant RD as Redis (RevokedSessionStore)
+    participant SV as Service bất kỳ (JwtAuthenticationFilter)
+
+    U->>AU: Đăng nhập
+    AU->>DB: Tạo 1 phiên: thiết bị, IP, thời điểm tạo và dùng gần nhất
+    U->>FE: Mở tab Phiên đăng nhập
+    FE->>AU: GET /auth/sessions?page=0&size=5
+    AU-->>FE: Các phiên còn hiệu lực (phân trang)
+    U->>FE: Bấm thu hồi một phiên, hoặc revoke-others
+    FE->>AU: DELETE /auth/sessions/{id} hoặc POST /sessions/revoke-others
+    AU->>DB: Đánh dấu phiên đã thu hồi
+    AU->>RD: Ghi phiên bị thu hồi để hiệu lực ngay
+    Note over SV,RD: Thiết bị bị đá gọi API tiếp theo
+    SV->>RD: Phiên này có bị thu hồi không?
+    RD-->>SV: Có
+    SV-->>U: 401, buộc đăng nhập lại
+```
+
+### Mục 9 — Xác thực 2 lớp (TOTP)
+
+```mermaid
+sequenceDiagram
+    actor U as Người dùng
+    participant FE as React
+    participant AU as auth-service
+    participant RD as Redis (TwoFactorChallengeStore)
+    participant APP as App Authenticator
+
+    rect rgb(235, 245, 255)
+    Note over U,APP: Bật 2FA
+    U->>FE: Bật 2FA
+    FE->>AU: POST /auth/2fa/setup
+    AU-->>FE: Secret và QR
+    U->>APP: Quét QR
+    APP-->>U: Mã 6 số
+    FE->>AU: POST /auth/2fa/confirm (mã 6 số)
+    AU-->>FE: Đã bật, kèm mã khôi phục
+    end
+
+    rect rgb(240, 255, 240)
+    Note over U,APP: Đăng nhập khi đã bật 2FA
+    U->>AU: POST /auth/login (email, mật khẩu)
+    AU->>RD: Mật khẩu đúng, tạo challenge token sống ngắn
+    AU-->>FE: Yêu cầu bước 2, chưa cấp token đăng nhập
+    U->>AU: POST /auth/2fa/verify-login (challenge + mã 6 số hoặc mã khôi phục)
+    AU->>RD: Kiểm tra và xoá challenge
+    AU-->>FE: Access token và refresh token
+    end
+```
+
+#### Cấu trúc chi tiết của 2FA
+
+**a) Thành phần và nơi lưu dữ liệu**
+
+```mermaid
+flowchart LR
+    subgraph FE["Frontend"]
+        LG["Login.jsx<br/>bước 1: email + mật khẩu<br/>bước 2: nhập mã 6 số"]
+        PF["Profile.jsx<br/>bật / tắt 2FA, hiện QR và mã khôi phục"]
+    end
+
+    subgraph AUTH["auth-service"]
+        AC["AuthController<br/>/auth/login<br/>/auth/2fa/setup, confirm, disable, verify-login"]
+        AS["AuthService"]
+        TS["TotpService<br/>sinh secret, tạo URI cho QR, kiểm tra mã<br/>RFC 6238: SHA1, 6 số, 30 giây, lệch ±1 bước"]
+        CS["TwoFactorChallengeStore"]
+    end
+
+    U[("USERS<br/>totp_secret, totp_enabled")]
+    R[("TWO_FACTOR_RECOVERY_CODES<br/>8 mã, lưu bản băm bcrypt, used_at")]
+    RD[("Redis<br/>2fa-challenge:token<br/>sống 5 phút, dùng 1 lần")]
+    RT[("REFRESH_TOKENS + JWT<br/>phiên đăng nhập, xem mục 8")]
+
+    LG --> AC
+    PF --> AC
+    AC --> AS
+    AS --> TS
+    AS --> CS --> RD
+    AS --> U
+    AS --> R
+    AS -->|"issueTokens"| RT
+```
+
+**b) Trạng thái 2FA của một tài khoản**
+
+```mermaid
+stateDiagram-v2
+    [*] --> Tat: Tài khoản mới, totp_enabled = false
+    Tat --> ChoXacNhan: POST /2fa/setup — lưu secret mới, vẫn totp_enabled = false
+    ChoXacNhan --> ChoXacNhan: /2fa/setup lần nữa — đổi sang secret mới
+    ChoXacNhan --> Bat: POST /2fa/confirm với mã đúng — totp_enabled = true, sinh 8 mã khôi phục
+    ChoXacNhan --> ChoXacNhan: /2fa/confirm với mã sai, báo lỗi 400
+    Bat --> Tat: POST /2fa/disable với mật khẩu đúng — xoá secret và mã khôi phục
+    note right of ChoXacNhan
+        Chưa xác nhận thì đăng nhập vẫn chỉ cần mật khẩu,
+        nên thiết lập dở dang không làm ai bị khoá tài khoản
+    end note
+```
+
+**c) Luồng đăng nhập có 2FA**
+
+```mermaid
+flowchart TD
+    A["POST /auth/login<br/>email + mật khẩu"] --> B{"Mật khẩu đúng<br/>và tài khoản đã xác thực email?"}
+    B -- "Không" --> X1["401 Email hoặc mật khẩu không đúng"]
+    B -- "Có" --> C{"totp_enabled = true?"}
+    C -- "Không" --> T["issueTokens<br/>cấp access token + refresh token, tạo phiên"]
+    C -- "Có" --> D["Tạo challengeToken ngẫu nhiên<br/>lưu Redis 5 phút<br/>trả requiresTwoFactor, KHÔNG cấp token"]
+    D --> E["FE hiện màn nhập mã"]
+    E --> F["POST /auth/2fa/verify-login<br/>challengeToken + mã"]
+    F --> G{"Lấy và XOÁ challenge trong Redis<br/>còn hạn?"}
+    G -- "Không" --> X2["401 Yêu cầu đăng nhập đã hết hạn<br/>phải nhập lại mật khẩu"]
+    G -- "Có" --> H{"Mã là 6 số<br/>và khớp TOTP hiện tại hoặc ±30 giây?"}
+    H -- "Có" --> T
+    H -- "Không" --> I{"Khớp 1 mã khôi phục chưa dùng?"}
+    I -- "Có" --> J["Ghi used_at, mã này hết hiệu lực"] --> T
+    I -- "Không" --> X3["401 Mã xác thực không đúng<br/>challenge đã bị xoá, phải đăng nhập lại"]
+
+    G2["Đăng nhập Google (OAuth2)<br/>OAuth2AuthenticationSuccessHandler"] --> G3{"totp_enabled = true?"}
+    G3 -- "Không" --> T
+    G3 -- "Có" --> G4["Redirect về /oauth2/callback?twoFactorToken=...<br/>FE chuyển sang /login ở bước nhập mã"] --> E
+```
+
+**Điểm cần lưu ý khi đọc code:**
+
+- `challengeToken` là chuỗi ngẫu nhiên lưu ở Redis, không phải JWT, nên không dùng được để gọi API khác. Mỗi challenge chỉ dùng được một lần, kể cả khi nhập sai mã.
+- Mã khôi phục lưu dạng băm bcrypt, chỉ hiện dạng gốc đúng một lần lúc `confirm`. Bật lại 2FA sẽ xoá bộ mã cũ và sinh bộ mới.
+- Đăng nhập Google/Facebook cũng phải qua bước 2FA nếu tài khoản đã bật (sơ đồ c): server không cấp token mà redirect kèm `twoFactorToken`, FE chuyển sang màn nhập mã rồi gọi `/2fa/verify-login` như đăng nhập thường.
+- `POST /2fa/setup` bị từ chối (400) khi 2FA đang bật. Muốn thiết lập lại phải tắt trước bằng `/2fa/disable` (cần mật khẩu), nên chỉ có access token thì không gỡ được 2FA.
+- Tài khoản chỉ đăng nhập bằng Google (chưa có mật khẩu) sau khi bật 2FA sẽ chưa tắt được, vì `/2fa/disable` yêu cầu mật khẩu.
+- `totp_secret` đang lưu dạng thô trong DB, chưa mã hoá.
+
+### Mục 10 — Xoá mềm và thùng rác
+
+```mermaid
+stateDiagram-v2
+    [*] --> Active: Tạo ví / danh mục / giao dịch
+    Active --> InTrash: DELETE, chỉ đặt deleted_at
+    InTrash --> Active: POST /{id}/restore, xoá deleted_at
+    note right of Active
+        Danh sách bình thường
+        chỉ lấy dòng deleted_at IS NULL
+    end note
+    note right of InTrash
+        GET /trash (phân trang 5 dòng)
+        hiện ở trang Thùng rác
+    end note
+```
+
+### Mục 11 — Integration test chạm DB thật
+
+```mermaid
+flowchart LR
+    A["mvn verify"] --> B["maven-failsafe-plugin<br/>chạy các file *IT.java"]
+    B --> C["Testcontainers khởi động MySQL container"]
+    C --> D["Flyway chạy toàn bộ V1..Vn"]
+    D --> E["DAO Doma insert/select trên DB thật"]
+    E --> F["Bắt lỗi kiểu cột NOT NULL thiếu giá trị<br/>mà unit test mock DAO không thấy"]
+    G["mvn test"] --> H["Surefire chỉ chạy *Test.java (mock, nhanh)"]
+```
+
+Cần Docker chạy được với JVM. Trên máy Windows dùng Docker Desktop hiện tại Testcontainers chưa kết nối được (lỗi named pipe), nên `*IT.java` cần được chạy thử ở máy khác hoặc CI.
+
+### Mục 12 — Observability (metrics và log tập trung)
+
+```mermaid
+flowchart LR
+    SV["5 service Spring Boot<br/>/actuator/prometheus"] -->|"scrape định kỳ"| P["Prometheus :9090"]
+    CT["Log của các container Docker"] --> PT["Promtail"] --> L["Loki :3100"]
+    P --> G["Grafana :3001<br/>dashboard có sẵn, tự nạp datasource"]
+    L --> G
+    G --> V["Xem metrics và tra log trên một màn hình"]
+```
+
+### Mục 13 — Đa ngôn ngữ (vi/en)
+
+```mermaid
+flowchart TD
+    A["Mở trang"] --> B{"localStorage có fem-language?"}
+    B -- "Có" --> C["Dùng ngôn ngữ đã lưu"]
+    B -- "Chưa" --> D["Mặc định Tiếng Việt<br/>không lấy theo ngôn ngữ trình duyệt"]
+    C --> R["Render chữ từ src/locales/{vi,en}/&lt;trang&gt;.json"]
+    D --> R
+    S["Bấm nút VI | EN<br/>(có ở cả trang công khai và sau đăng nhập)"] --> W["i18n.changeLanguage + lưu localStorage"]
+    W --> R
+```
+
+Thêm trang mới chỉ cần tạo file `locales/vi/<tên>.json` và `locales/en/<tên>.json`, i18n tự nhận (`import.meta.glob`).

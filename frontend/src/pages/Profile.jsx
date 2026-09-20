@@ -233,7 +233,10 @@ export default function Profile() {
             <input value={profile.email} disabled />
           </label>
           <label className="field">
-            {t("displayNameLabel")}
+            <span>
+              {t("displayNameLabel")}
+              <span className="required-mark" aria-hidden="true"> *</span>
+            </span>
             <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
           </label>
           <label className="field">
@@ -267,7 +270,10 @@ export default function Profile() {
         ) : (
           <form className="inline-form" onSubmit={handlePasswordSubmit}>
             <label className="field">
-              {t("currentPasswordLabel")}
+              <span>
+                {t("currentPasswordLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <div className="password-field-wrapper">
                 <input
                   type={showCurrentPassword ? "text" : "password"}
@@ -286,7 +292,10 @@ export default function Profile() {
               </div>
             </label>
             <label className="field">
-              {t("newPasswordLabel")}
+              <span>
+                {t("newPasswordLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <div className="password-field-wrapper">
                 <input
                   type={showNewPassword ? "text" : "password"}
@@ -363,7 +372,10 @@ export default function Profile() {
             <h3>{t("inviteMemberTitle")}</h3>
             <form className="inline-form" onSubmit={handleInviteSubmit}>
               <label className="field">
-                {t("emailLabel")}
+                <span>
+                  {t("emailLabel")}
+                  <span className="required-mark" aria-hidden="true"> *</span>
+                </span>
                 <input
                   type="email"
                   value={inviteEmail}
@@ -458,7 +470,10 @@ export default function Profile() {
               {t("secretKeyLabel")} <code>{twoFactorSetup.secret}</code>
             </p>
             <label className="field">
-              {t("verificationCodeLabel")}
+              <span>
+                {t("verificationCodeLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <input
                 value={twoFactorCode}
                 onChange={(e) => setTwoFactorCode(e.target.value)}
@@ -479,7 +494,10 @@ export default function Profile() {
           disablingTwoFactor ? (
             <form className="inline-form" onSubmit={handleDisableTwoFactor}>
               <label className="field">
-                {t("confirmDisablePasswordLabel")}
+                <span>
+                  {t("confirmDisablePasswordLabel")}
+                  <span className="required-mark" aria-hidden="true"> *</span>
+                </span>
                 <input
                   type="password"
                   value={disablePassword}

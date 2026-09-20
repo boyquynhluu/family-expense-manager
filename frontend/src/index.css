@@ -258,6 +258,31 @@ select:focus {
   flex-shrink: 0;
 }
 
+/* Auth inputs have no <label>, only a placeholder, so mark required ones with a red
+   asterisk between the input and the show/hide-password toggle. */
+.auth-input-group:has(input:required) input {
+  order: 1;
+}
+
+.auth-input-group:has(input:required)::after {
+  content: "*";
+  order: 2;
+  color: #b91c1c;
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.auth-input-group:has(input:required) .auth-input-toggle {
+  order: 3;
+}
+
+.auth-terms:has(input:required)::after {
+  content: "*";
+  color: #b91c1c;
+  font-weight: 700;
+}
+
 .auth-input-toggle {
   display: flex;
   align-items: center;
@@ -765,6 +790,89 @@ select:focus {
 .field select {
   font-weight: 400;
   color: #1f2430;
+}
+
+.required-mark {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.file-picker {
+  display: flex;
+  align-items: center;
+  width: 210px;
+  border: 1px dashed #c7cad1;
+  border-radius: 6px;
+  background: #fff;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.file-picker:hover,
+.file-picker:focus-within {
+  border-color: #4f46e5;
+  background: #f5f5ff;
+}
+
+.file-picker.has-file {
+  border-style: solid;
+  border-color: #4f46e5;
+  background: #f5f5ff;
+}
+
+.file-picker-trigger {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.file-picker.has-file .file-picker-trigger {
+  color: #1f2430;
+}
+
+.file-picker-trigger svg {
+  flex-shrink: 0;
+  color: #4f46e5;
+}
+
+.file-picker-trigger input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.file-picker-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-picker-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-right: 0.3rem;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #6b7280;
+}
+
+.file-picker-clear:hover:not(:disabled) {
+  background: #fee2e2;
+  color: #dc2626;
 }
 
 .password-field-wrapper {

@@ -571,6 +571,27 @@ class AuthServiceTest {
     }
 
     @Test
+    void setupTwoFactor_rejected_whenTwoFactorAlreadyEnabled() {
+        User user = activeLocalUser();
+        user.setTotpEnabled(true);
+        user.setTotpSecret("EXISTING");
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.setupTwoFactor(1L)).isInstanceOf(BadRequestException.class);
+
+        assertThat(user.getTotpSecret()).isEqualTo("EXISTING");
+        assertThat(user.getTotpEnabled()).isTrue();
+        verify(userDao, never()).update(any());
+    }
+
+    @Test
+    void issueTwoFactorChallenge_delegatesToChallengeStore() {
+        when(twoFactorChallengeStore.issueChallenge(1L)).thenReturn("challenge-token");
+
+        assertThat(authService.issueTwoFactorChallenge(1L)).isEqualTo("challenge-token");
+    }
+
+    @Test
     void confirmTwoFactor_enablesAndReturnsRecoveryCodes_whenCodeValid() {
         User user = activeLocalUser();
         user.setTotpSecret("SECRET123");

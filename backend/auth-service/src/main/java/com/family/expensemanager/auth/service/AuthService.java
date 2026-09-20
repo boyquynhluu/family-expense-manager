@@ -212,6 +212,11 @@ public class AuthService {
         return LoginResponse.ofTokens(issueTokens(user, deviceInfo, ipAddress));
     }
 
+    /** For login paths that authenticate the user without a password (OAuth2) but must still demand the 2FA code. */
+    public String issueTwoFactorChallenge(Long userId) {
+        return twoFactorChallengeStore.issueChallenge(userId);
+    }
+
     /** Second step of login for a 2FA-enabled account — accepts either a live TOTP code or an unused recovery code. */
     public AuthResponse verifyTwoFactorLogin(String challengeToken, String code, String deviceInfo, String ipAddress) {
         log.info("verifyTwoFactorLogin - start");
@@ -342,6 +347,9 @@ public class AuthService {
         log.info("setupTwoFactor - start, userId={}", userId);
         User user = userDao.selectById(userId)
                 .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+        if (Boolean.TRUE.equals(user.getTotpEnabled())) {
+            throw new BadRequestException("2FA đang bật. Hãy tắt 2FA (cần nhập mật khẩu) trước khi thiết lập lại");
+        }
 
         String secret = totpService.generateSecret();
         user.setTotpSecret(secret);

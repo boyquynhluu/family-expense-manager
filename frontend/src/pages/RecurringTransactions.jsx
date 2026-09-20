@@ -139,7 +139,10 @@ export default function RecurringTransactions() {
         ) : (
           <form className="inline-form" onSubmit={handleSubmit}>
             <label className="field">
-              {t("recurringTransactions:walletLabel")}
+              <span>
+                {t("recurringTransactions:walletLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <select value={form.walletId} onChange={(e) => updateField("walletId", e.target.value)} required>
                 {wallets.map((w) => (
                   <option key={w.id} value={w.id}>
@@ -149,7 +152,10 @@ export default function RecurringTransactions() {
               </select>
             </label>
             <label className="field">
-              {t("recurringTransactions:categoryLabel")}
+              <span>
+                {t("recurringTransactions:categoryLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <select value={form.categoryId} onChange={(e) => updateField("categoryId", e.target.value)} required>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -166,7 +172,10 @@ export default function RecurringTransactions() {
               </select>
             </label>
             <label className="field">
-              {t("recurringTransactions:amountLabel")}
+              <span>
+                {t("recurringTransactions:amountLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <input
                 type="number"
                 step="0.01"
@@ -177,7 +186,10 @@ export default function RecurringTransactions() {
               />
             </label>
             <label className="field">
-              {t("recurringTransactions:dayOfMonthLabel")}
+              <span>
+                {t("recurringTransactions:dayOfMonthLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <input
                 type="number"
                 min="1"
@@ -188,7 +200,10 @@ export default function RecurringTransactions() {
               />
             </label>
             <label className="field">
-              {t("recurringTransactions:startDateLabel")}
+              <span>
+                {t("recurringTransactions:startDateLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
               <input
                 type="date"
                 value={form.startDate}

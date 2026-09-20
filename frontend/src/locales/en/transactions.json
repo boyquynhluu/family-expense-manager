@@ -42,6 +42,9 @@
   "clearFilter": "Clear filter",
   "noMatchFilter": "No transactions match the filter",
   "emptyState": "No transactions yet",
+  "receiptLabel": "Receipt photo (optional)",
+  "chooseReceipt": "Choose photo...",
+  "clearReceipt": "Remove selected photo",
   "viewReceiptAria": "View receipt",
   "deleteReceiptAria": "Delete receipt image",
   "attachReceiptAria": "Attach receipt"

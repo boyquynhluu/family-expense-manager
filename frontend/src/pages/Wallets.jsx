@@ -82,7 +82,10 @@ export default function Wallets() {
         <h2>{editingId ? t("wallets:editTitle") : t("wallets:addTitle")}</h2>
         <form className="inline-form" onSubmit={handleSubmit}>
           <label className="field">
-            {t("wallets:nameLabel")}
+            <span>
+              {t("wallets:nameLabel")}
+              <span className="required-mark" aria-hidden="true"> *</span>
+            </span>
             <input
               placeholder={t("wallets:namePlaceholder")}
               value={name}
@@ -91,7 +94,10 @@ export default function Wallets() {
             />
           </label>
           <label className="field">
-            {t("wallets:currencyLabel")}
+            <span>
+              {t("wallets:currencyLabel")}
+              <span className="required-mark" aria-hidden="true"> *</span>
+            </span>
             <input
               placeholder={t("wallets:currencyPlaceholder")}
               value={currency}
@@ -101,7 +107,10 @@ export default function Wallets() {
             />
           </label>
           <label className="field">
-            {t("wallets:initialBalanceLabel")}
+            <span>
+              {t("wallets:initialBalanceLabel")}
+              <span className="required-mark" aria-hidden="true"> *</span>
+            </span>
             <input
               type="number"
               step="0.01"
