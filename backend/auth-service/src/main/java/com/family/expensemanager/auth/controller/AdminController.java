@@ -3,6 +3,7 @@ package com.family.expensemanager.auth.controller;
 import com.family.expensemanager.auth.dto.FamilyAdminResponse;
 import com.family.expensemanager.auth.dto.MessageResponse;
 import com.family.expensemanager.auth.dto.SetSystemAdminRequest;
+import com.family.expensemanager.auth.dto.SetUserLockedRequest;
 import com.family.expensemanager.auth.dto.UserAdminResponse;
 import com.family.expensemanager.auth.service.AdminService;
 import com.family.expensemanager.common.dto.ApiResponse;
@@ -52,5 +53,13 @@ public class AdminController {
         log.info("setSystemAdmin - start, id={}", id);
         adminService.setSystemAdmin(id, request.isSystemAdmin());
         return ApiResponse.ok(new MessageResponse("Đã cập nhật quyền admin"));
+    }
+
+    @PutMapping("/users/{id}/locked")
+    public ApiResponse<MessageResponse> setLocked(@PathVariable Long id,
+                                                   @Valid @RequestBody SetUserLockedRequest request) {
+        log.info("setLocked - start, id={}", id);
+        adminService.setLocked(id, request.locked());
+        return ApiResponse.ok(new MessageResponse(request.locked() ? "Đã khoá tài khoản" : "Đã mở khoá tài khoản"));
     }
 }

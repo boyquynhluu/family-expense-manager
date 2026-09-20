@@ -115,5 +115,33 @@
   "twoFactorStatusEnabledSuffix": "for this account.",
   "twoFactorStatusDisabledSuffix": "Turn it on to require an extra verification code on every login.",
   "disableTwoFactorButton": "Disable 2FA",
-  "enableTwoFactorButton": "Enable 2FA"
+  "enableTwoFactorButton": "Enable 2FA",
+
+  "confirmDisableCodeLabel": "Enter an authentication code (or recovery code) to confirm disabling 2FA",
+  "codeOrRecoveryPlaceholder": "6-digit code or recovery code",
+
+  "changeEmailTitle": "Change email",
+  "changeEmailNotice": "We will send a confirmation link to the new address. The email only changes once you open that link, and every device is signed out so you log in again.",
+  "newEmailLabel": "New email",
+  "changeEmailButton": "Send confirmation link",
+  "sendingChangeEmail": "Sending...",
+  "changeEmailSent": "A confirmation link was sent to {{email}}. Please check your inbox.",
+  "changeEmailFailed": "Could not request the email change",
+  "reauthNeedsTwoFactor": "This account signs in through {{provider}} and has no password. Enable two-factor authentication (2FA) below to do this.",
+
+  "exportDataTitle": "Personal data",
+  "exportDataNotice": "Download a copy of your account details, the families you belong to and your login sessions as a JSON file (no passwords or secrets included).",
+  "exportDataButton": "Download my personal data",
+  "exportingData": "Downloading...",
+  "exportSuccess": "Personal data downloaded",
+  "exportFailed": "Could not download your personal data",
+
+  "deleteAccountTitle": "Delete account",
+  "deleteAccountNotice": "Permanently delete your account. If you are the owner of a family that still has other members, transfer ownership first. A family with only you in it is deleted too. This cannot be undone.",
+  "deleteAccountButton": "Delete my account",
+  "deletingAccountLoading": "Deleting...",
+  "deleteAccountConfirmTitle": "Delete account?",
+  "deleteAccountConfirm": "Your account will be permanently deleted and cannot be recovered. Are you sure you want to continue?",
+  "deleteAccountConfirmButton": "Delete permanently",
+  "deleteAccountFailed": "Failed to delete the account"
 }

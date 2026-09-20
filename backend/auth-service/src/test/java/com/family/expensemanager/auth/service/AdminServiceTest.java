@@ -26,6 +26,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -39,12 +41,14 @@ class AdminServiceTest {
     private UserDao userDao;
     @Mock
     private FamilyMembershipDao familyMembershipDao;
+    @Mock
+    private AuthService authService;
 
     private AdminService adminService;
 
     @BeforeEach
     void setUp() {
-        adminService = new AdminService(familyDao, userDao, familyMembershipDao);
+        adminService = new AdminService(familyDao, userDao, familyMembershipDao, authService);
     }
 
     @AfterEach
@@ -106,6 +110,7 @@ class AdminServiceTest {
         assertThat(result.content()).hasSize(1);
         assertThat(result.content().get(0).familyName()).isEqualTo("Nhà Nguyễn");
         assertThat(result.content().get(0).isSystemAdmin()).isFalse();
+        assertThat(result.content().get(0).locked()).isFalse();
         assertThat(result.totalElements()).isEqualTo(1L);
     }
 
@@ -158,6 +163,64 @@ class AdminServiceTest {
         withCurrentUserId(5L);
 
         assertThatThrownBy(() -> adminService.setSystemAdmin(5L, false)).isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void setLocked_locksUser_andRevokesEverySessionImmediately() {
+        User target = user(5L, 1L, "MEMBER", "member@b.com", "Thành viên");
+        when(userDao.selectById(5L)).thenReturn(Optional.of(target));
+        withCurrentUserId(99L);
+
+        adminService.setLocked(5L, true);
+
+        assertThat(target.getLocked()).isTrue();
+        assertThat(target.getLockedAt()).isNotNull();
+        verify(userDao).update(target);
+        verify(authService).revokeAllSessions(5L);
+    }
+
+    @Test
+    void setLocked_unlocksUser_clearsTimestamp_withoutTouchingSessions() {
+        User target = user(5L, 1L, "MEMBER", "member@b.com", "Thành viên");
+        target.setLocked(true);
+        target.setLockedAt(LocalDateTime.now().minusDays(1));
+        when(userDao.selectById(5L)).thenReturn(Optional.of(target));
+        withCurrentUserId(99L);
+
+        adminService.setLocked(5L, false);
+
+        assertThat(target.getLocked()).isFalse();
+        assertThat(target.getLockedAt()).isNull();
+        verify(userDao).update(target);
+        verify(authService, never()).revokeAllSessions(any());
+    }
+
+    @Test
+    void setLocked_throwsBadRequest_whenAdminLocksThemselves() {
+        withCurrentUserId(5L);
+
+        assertThatThrownBy(() -> adminService.setLocked(5L, true)).isInstanceOf(BadRequestException.class);
+        verify(userDao, never()).update(any());
+    }
+
+    @Test
+    void setLocked_throwsBadRequest_whenTargetIsAnotherSystemAdmin() {
+        User target = user(5L, 1L, "OWNER", "admin2@b.com", "Admin 2");
+        target.setIsSystemAdmin(true);
+        when(userDao.selectById(5L)).thenReturn(Optional.of(target));
+        withCurrentUserId(99L);
+
+        assertThatThrownBy(() -> adminService.setLocked(5L, true)).isInstanceOf(BadRequestException.class);
+        verify(userDao, never()).update(any());
+        verify(authService, never()).revokeAllSessions(any());
+    }
+
+    @Test
+    void setLocked_throwsNotFound_whenTargetMissing() {
+        when(userDao.selectById(5L)).thenReturn(Optional.empty());
+        withCurrentUserId(99L);
+
+        assertThatThrownBy(() -> adminService.setLocked(5L, true)).isInstanceOf(NotFoundException.class);
     }
 
     private static Family family(Long id, String name) {

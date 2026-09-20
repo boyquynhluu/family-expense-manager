@@ -177,4 +177,74 @@ class WalletTransferServiceTest {
         transfer.setCreatedAt(OCCURRED_AT);
         return transfer;
     }
+
+    @Test
+    void update_savesAllColumns_forCreator() {
+        WalletTransfer existing = transfer(5L, 7L, 42L);
+        when(walletTransferDao.selectById(5L)).thenReturn(Optional.of(existing));
+        when(walletService.requireOwnedByFamily(3L, 7L)).thenReturn(wallet(3L, 7L, "VND"));
+        when(walletService.requireOwnedByFamily(4L, 7L)).thenReturn(wallet(4L, 7L, "VND"));
+
+        var response = service.update(7L, 42L, "MEMBER", 5L, request(3L, 4L, "250000"));
+
+        verify(walletTransferDao).update(existing);
+        assertThat(existing.getFromWalletId()).isEqualTo(3L);
+        assertThat(existing.getToWalletId()).isEqualTo(4L);
+        assertThat(existing.getAmount()).isEqualByComparingTo("250000");
+        assertThat(existing.getNote()).isEqualTo("note");
+        assertThat(existing.getOccurredAt()).isEqualTo(OCCURRED_AT);
+        assertThat(existing.getFamilyId()).isEqualTo(7L);
+        assertThat(existing.getCreatedByUserId()).isEqualTo(42L);
+        assertThat(existing.getCreatedAt()).isNotNull();
+        assertThat(response.id()).isEqualTo(5L);
+        assertThat(response.toWalletId()).isEqualTo(4L);
+    }
+
+    @Test
+    void update_succeeds_forOwnerWhoIsNotTheCreator() {
+        WalletTransfer existing = transfer(5L, 7L, 42L);
+        when(walletTransferDao.selectById(5L)).thenReturn(Optional.of(existing));
+        when(walletService.requireOwnedByFamily(1L, 7L)).thenReturn(wallet(1L, 7L, "VND"));
+        when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "VND"));
+
+        service.update(7L, 99L, "OWNER", 5L, request(1L, 2L, "10"));
+
+        verify(walletTransferDao).update(existing);
+    }
+
+    @Test
+    void update_throwsAccessDenied_forOtherMember() {
+        when(walletTransferDao.selectById(5L)).thenReturn(Optional.of(transfer(5L, 7L, 42L)));
+
+        assertThatThrownBy(() -> service.update(7L, 99L, "MEMBER", 5L, request(1L, 2L, "10")))
+                .isInstanceOf(AccessDeniedException.class);
+        verify(walletTransferDao, never()).update(any());
+    }
+
+    @Test
+    void update_throwsNotFound_whenTransferMissingOrInAnotherFamily() {
+        when(walletTransferDao.selectById(5L)).thenReturn(Optional.of(transfer(5L, 8L, 42L)));
+        when(walletTransferDao.selectById(6L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.update(7L, 42L, "OWNER", 5L, request(1L, 2L, "10")))
+                .isInstanceOf(NotFoundException.class);
+        assertThatThrownBy(() -> service.update(7L, 42L, "OWNER", 6L, request(1L, 2L, "10")))
+                .isInstanceOf(NotFoundException.class);
+        verify(walletTransferDao, never()).update(any());
+    }
+
+    @Test
+    void update_throwsBadRequest_whenSameWalletAmountTooSmallOrCurrenciesDiffer() {
+        when(walletTransferDao.selectById(5L)).thenReturn(Optional.of(transfer(5L, 7L, 42L)));
+        when(walletService.requireOwnedByFamily(1L, 7L)).thenReturn(wallet(1L, 7L, "VND"));
+        when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "USD"));
+
+        assertThatThrownBy(() -> service.update(7L, 42L, "OWNER", 5L, request(1L, 1L, "10")))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> service.update(7L, 42L, "OWNER", 5L, request(1L, 2L, "0.001")))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> service.update(7L, 42L, "OWNER", 5L, request(1L, 2L, "10")))
+                .isInstanceOf(BadRequestException.class);
+        verify(walletTransferDao, never()).update(any());
+    }
 }

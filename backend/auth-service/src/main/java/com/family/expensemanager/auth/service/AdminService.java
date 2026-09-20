@@ -1,5 +1,6 @@
 package com.family.expensemanager.auth.service;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +46,7 @@ public class AdminService {
     private final FamilyDao familyDao;
     private final UserDao userDao;
     private final FamilyMembershipDao familyMembershipDao;
+    private final AuthService authService;
 
     @PreAuthorize("hasRole('ADMIN')")
     public PageResponse<FamilyAdminResponse> listFamiliesPaged(int page, int size) {
@@ -98,6 +100,26 @@ public class AdminService {
                 .orElseThrow(() -> new NotFoundException("Tài khoản không tồn tại: " + targetUserId));
         user.setIsSystemAdmin(isSystemAdmin);
         userDao.update(user);
+    }
+
+    /** Locking also revokes every session of the target at once, so a locked user is kicked out immediately. */
+    @PreAuthorize("hasRole('ADMIN')")
+    public void setLocked(Long targetUserId, boolean locked) {
+        log.info("setLocked - start, targetUserId={}, locked={}", targetUserId, locked);
+        if (locked && targetUserId.equals(CurrentUser.userId())) {
+            throw new BadRequestException("Không thể tự khoá tài khoản của chính mình");
+        }
+        User user = userDao.selectById(targetUserId)
+                .orElseThrow(() -> new NotFoundException("Tài khoản không tồn tại: " + targetUserId));
+        if (locked && Boolean.TRUE.equals(user.getIsSystemAdmin())) {
+            throw new BadRequestException("Không thể khoá tài khoản quản trị hệ thống khác");
+        }
+        user.setLocked(locked);
+        user.setLockedAt(locked ? LocalDateTime.now() : null);
+        userDao.update(user);
+        if (locked) {
+            authService.revokeAllSessions(targetUserId);
+        }
     }
 
     private FamilyAdminResponse toFamilyAdminResponse(Family family) {

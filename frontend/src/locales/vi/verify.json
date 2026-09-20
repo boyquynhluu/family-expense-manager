@@ -3,5 +3,9 @@
   "verifySuccess": "Xác thực email thành công.",
   "verifyFailed": "Xác thực email thất bại. Token có thể đã hết hạn.",
   "verifying": "Đang xác thực email...",
-  "backToLogin": "Quay lại đăng nhập"
+  "backToLogin": "Quay lại đăng nhập",
+
+  "emailChangeVerifying": "Đang xác nhận email mới...",
+  "emailChangeSuccess": "Đổi email thành công. Vui lòng đăng nhập lại bằng email mới.",
+  "emailChangeFailed": "Đổi email thất bại. Link có thể đã hết hạn hoặc email đã được sử dụng."
 }

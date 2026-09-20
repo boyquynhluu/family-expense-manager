@@ -49,5 +49,18 @@
   "clearReceipt": "Bỏ ảnh đã chọn",
   "viewReceiptAria": "Xem hoá đơn",
   "deleteReceiptAria": "Xoá ảnh hoá đơn",
-  "attachReceiptAria": "Đính kèm hoá đơn"
+  "attachReceiptAria": "Đính kèm hoá đơn",
+  "searchLabel": "Tìm kiếm",
+  "searchPlaceholder": "Tìm theo ghi chú",
+  "minAmountLabel": "Số tiền từ",
+  "maxAmountLabel": "Số tiền đến",
+  "loadFailed": "Không tải được danh sách giao dịch",
+  "selectedCount": "Đã chọn {{count}} giao dịch",
+  "bulkDeleteButton": "Xoá đã chọn",
+  "clearSelection": "Bỏ chọn",
+  "bulkDeleteConfirm": "Xoá {{count}} giao dịch đã chọn? Có thể khôi phục sau trong Thùng rác.",
+  "bulkDeleteResult": "Đã xoá {{deleted}} giao dịch (bỏ qua {{skipped}}, không đủ quyền {{forbidden}})",
+  "selectAllAria": "Chọn tất cả giao dịch trên trang này",
+  "selectRowAria": "Chọn giao dịch",
+  "duplicateAria": "Sao chép"
 }

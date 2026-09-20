@@ -16,7 +16,11 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const [error, setError] = useState(location.state?.oauth2Error ? t("oauth2Error") : "");
+  const [error, setError] = useState(
+    location.state?.oauth2Error
+      ? t(location.state.oauth2ErrorCode === "account_locked" ? "accountLocked" : "oauth2Error")
+      : ""
+  );
   const [loading, setLoading] = useState(false);
 
   // Set only when the backend says the account has 2FA enabled (README "9. Không có

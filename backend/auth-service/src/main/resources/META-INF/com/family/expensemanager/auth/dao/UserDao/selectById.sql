@@ -15,7 +15,13 @@ SELECT
     is_system_admin,
     relationship,
     totp_secret,
-    totp_enabled
+    totp_enabled,
+    locked,
+    locked_at,
+    pending_email,
+    pending_email_token,
+    pending_email_expires_at,
+    totp_last_step
 FROM
     USERS
 WHERE

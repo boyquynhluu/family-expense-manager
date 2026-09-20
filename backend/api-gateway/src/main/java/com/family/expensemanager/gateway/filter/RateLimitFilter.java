@@ -100,5 +100,4 @@ public class RateLimitFilter extends OncePerRequestFilter implements Ordered {
         long staleCutoff = now - 10 * 60_000;
         windows.entrySet().removeIf(e -> e.getValue().windowStart < staleCutoff);
     }
-
 }

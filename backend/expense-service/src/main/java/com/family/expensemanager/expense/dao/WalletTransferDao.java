@@ -5,6 +5,7 @@ import org.seasar.doma.Dao;
 import org.seasar.doma.Delete;
 import org.seasar.doma.Insert;
 import org.seasar.doma.Select;
+import org.seasar.doma.Update;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -15,6 +16,9 @@ public interface WalletTransferDao {
 
     @Insert
     int insert(WalletTransfer transfer);
+
+    @Update
+    int update(WalletTransfer transfer);
 
     @Delete
     int delete(WalletTransfer transfer);

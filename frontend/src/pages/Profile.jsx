@@ -10,6 +10,7 @@ import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
 import { formatServerDateTime } from "../utils/format";
+import { clearTokens } from "../utils/tokenStorage";
 
 // The stored value is always this fixed Vietnamese word regardless of UI language —
 // only the displayed label is translated (see relationshipLabelFor below) — otherwise
@@ -168,6 +169,17 @@ export default function Profile() {
   const [disableError, setDisableError] = useState("");
   const [savingTwoFactor, setSavingTwoFactor] = useState(false);
 
+  const [newEmail, setNewEmail] = useState("");
+  const [emailCredential, setEmailCredential] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [changingEmail, setChangingEmail] = useState(false);
+
+  const [exporting, setExporting] = useState(false);
+
+  const [deleteCredential, setDeleteCredential] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
   useEffect(() => {
     client.get("/auth/me").then((res) => {
       setProfile(res.data.data);
@@ -242,7 +254,9 @@ export default function Profile() {
     setDisableError("");
     setSavingTwoFactor(true);
     try {
-      await client.post("/auth/2fa/disable", { password: disablePassword });
+      // Accounts without a password (Google-only) confirm with a TOTP/recovery code instead.
+      const hasPassword = profile.hasPassword !== false;
+      await client.post("/auth/2fa/disable", hasPassword ? { password: disablePassword } : { code: disablePassword });
       setProfile((p) => ({ ...p, totpEnabled: false }));
       setDisablingTwoFactor(false);
       setDisablePassword("");
@@ -361,9 +375,107 @@ export default function Profile() {
     }
   }
 
+  async function handleChangeEmailSubmit(e) {
+    e.preventDefault();
+    setEmailError("");
+    setChangingEmail(true);
+    try {
+      const email = newEmail.trim();
+      await client.post("/auth/me/email", { newEmail: email, ...credentialBody(emailCredential) });
+      toast.success(t("changeEmailSent", { email }));
+      setNewEmail("");
+      setEmailCredential("");
+    } catch (err) {
+      setEmailError(err.response?.data?.message || t("changeEmailFailed"));
+    } finally {
+      setChangingEmail(false);
+    }
+  }
+
+  async function handleExportData() {
+    setExporting(true);
+    try {
+      const res = await client.get("/auth/me/export");
+      const blob = new Blob([JSON.stringify(res.data.data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "du-lieu-ca-nhan.json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success(t("exportSuccess"));
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("exportFailed"));
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleDeleteAccount(e) {
+    e.preventDefault();
+    setDeleteError("");
+    const confirmed = await confirmDialog(t("deleteAccountConfirm"), {
+      title: t("deleteAccountConfirmTitle"),
+      confirmButtonText: t("deleteAccountConfirmButton"),
+    });
+    if (!confirmed) return;
+    setDeletingAccount(true);
+    try {
+      await client.delete("/auth/me", { data: credentialBody(deleteCredential) });
+      // The account and its sessions are gone server-side, so there is nothing left to log out of.
+      clearTokens();
+      window.location.href = "/login";
+    } catch (err) {
+      setDeleteError(err.response?.data?.message || t("deleteAccountFailed"));
+      setDeletingAccount(false);
+    }
+  }
+
   if (!profile) return null;
 
   const isLocalAccount = profile.provider === "LOCAL";
+  const hasPassword = profile.hasPassword !== false;
+  const canReauthenticate = hasPassword || profile.totpEnabled;
+
+  // Sensitive actions re-check the password, or (for accounts without one) a live 2FA code.
+  function credentialBody(value) {
+    return hasPassword ? { password: value } : { code: value };
+  }
+
+  function renderCredentialField(value, onChange) {
+    return hasPassword ? (
+      <label className="field">
+        <span>
+          {t("currentPasswordLabel")}
+          <span className="required-mark" aria-hidden="true"> *</span>
+        </span>
+        <input
+          type="password"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoComplete="current-password"
+          required
+        />
+      </label>
+    ) : (
+      <label className="field">
+        <span>
+          {t("verificationCodeLabel")}
+          <span className="required-mark" aria-hidden="true"> *</span>
+        </span>
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={t("sixDigitCodePlaceholder")}
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          required
+        />
+      </label>
+    );
+  }
 
   return (
     <div>
@@ -469,6 +581,35 @@ export default function Profile() {
           </form>
         )}
         {passwordError && <p className="error-text">{passwordError}</p>}
+      </div>
+
+      <div className="section-card">
+        <h2>{t("changeEmailTitle")}</h2>
+        <p>{t("changeEmailNotice")}</p>
+        {!canReauthenticate ? (
+          <p className="empty-state">{t("reauthNeedsTwoFactor", { provider: profile.provider })}</p>
+        ) : (
+          <form className="inline-form" onSubmit={handleChangeEmailSubmit}>
+            <label className="field">
+              <span>
+                {t("newEmailLabel")}
+                <span className="required-mark" aria-hidden="true"> *</span>
+              </span>
+              <input
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder={t("emailPlaceholderExample")}
+                required
+              />
+            </label>
+            {renderCredentialField(emailCredential, setEmailCredential)}
+            <button type="submit" disabled={changingEmail}>
+              {changingEmail ? t("sendingChangeEmail") : t("changeEmailButton")}
+            </button>
+          </form>
+        )}
+        {emailError && <p className="error-text">{emailError}</p>}
       </div>
 
       <div className="section-card">
@@ -671,13 +812,15 @@ export default function Profile() {
             <form className="inline-form" onSubmit={handleDisableTwoFactor}>
               <label className="field">
                 <span>
-                  {t("confirmDisablePasswordLabel")}
+                  {hasPassword ? t("confirmDisablePasswordLabel") : t("confirmDisableCodeLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
                 <input
-                  type="password"
+                  type={hasPassword ? "password" : "text"}
                   value={disablePassword}
                   onChange={(e) => setDisablePassword(e.target.value)}
+                  placeholder={hasPassword ? undefined : t("codeOrRecoveryPlaceholder")}
+                  autoComplete={hasPassword ? "current-password" : "one-time-code"}
                   required
                 />
               </label>
@@ -705,6 +848,30 @@ export default function Profile() {
             </button>
           </>
         )}
+      </div>
+
+      <div className="section-card">
+        <h2>{t("exportDataTitle")}</h2>
+        <p>{t("exportDataNotice")}</p>
+        <button type="button" onClick={handleExportData} disabled={exporting}>
+          {exporting ? t("exportingData") : t("exportDataButton")}
+        </button>
+      </div>
+
+      <div className="section-card">
+        <h2>{t("deleteAccountTitle")}</h2>
+        <p>{t("deleteAccountNotice")}</p>
+        {!canReauthenticate ? (
+          <p className="empty-state">{t("reauthNeedsTwoFactor", { provider: profile.provider })}</p>
+        ) : (
+          <form className="inline-form" onSubmit={handleDeleteAccount}>
+            {renderCredentialField(deleteCredential, setDeleteCredential)}
+            <button type="submit" disabled={deletingAccount} style={{ background: "#dc2626" }}>
+              {deletingAccount ? t("deletingAccountLoading") : t("deleteAccountButton")}
+            </button>
+          </form>
+        )}
+        {deleteError && <p className="error-text">{deleteError}</p>}
       </div>
     </div>
   );

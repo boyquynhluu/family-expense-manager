@@ -29,5 +29,16 @@
   "activated": "Đã kích hoạt",
   "notActivated": "Chưa kích hoạt",
   "revokeAdminButton": "Gỡ quyền admin",
-  "grantAdminButton": "Cấp quyền admin"
+  "grantAdminButton": "Cấp quyền admin",
+
+  "locked": "Đã khoá",
+  "lockButton": "Khoá",
+  "unlockButton": "Mở khoá",
+  "lockConfirm": "Khoá tài khoản {{email}}? Người này sẽ bị đăng xuất khỏi mọi thiết bị và không thể đăng nhập cho đến khi được mở khoá.",
+  "unlockConfirm": "Mở khoá tài khoản {{email}}?",
+  "lockSwalTitle": "Khoá tài khoản?",
+  "unlockSwalTitle": "Mở khoá tài khoản?",
+  "lockSuccess": "Đã khoá tài khoản",
+  "unlockSuccess": "Đã mở khoá tài khoản",
+  "lockFailed": "Cập nhật trạng thái khoá thất bại"
 }

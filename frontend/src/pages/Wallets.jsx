@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
@@ -35,6 +35,8 @@ export default function Wallets() {
   const transfers = transfersPage.content;
   const [transferForm, setTransferForm] = useState(emptyTransferForm);
   const [transferError, setTransferError] = useState("");
+  const [editingTransferId, setEditingTransferId] = useState(null);
+  const transferFormRef = useRef(null);
   const [name, setName] = useState("");
   const [currency, setCurrency] = useState("VND");
   const [initialBalance, setInitialBalance] = useState("0");
@@ -105,6 +107,25 @@ export default function Wallets() {
     return isOwner || String(transfer.createdByUserId) === String(userId);
   }
 
+  function startTransferEdit(transfer) {
+    setEditingTransferId(transfer.id);
+    setTransferError("");
+    setTransferForm({
+      fromWalletId: String(transfer.fromWalletId),
+      toWalletId: String(transfer.toWalletId),
+      amount: String(transfer.amount),
+      occurredAt: transfer.occurredAt.slice(0, 16),
+      note: transfer.note ?? "",
+    });
+    transferFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function cancelTransferEdit() {
+    setEditingTransferId(null);
+    setTransferError("");
+    setTransferForm(emptyTransferForm());
+  }
+
   async function handleTransferSubmit(e) {
     e.preventDefault();
     setTransferError("");
@@ -112,19 +133,27 @@ export default function Wallets() {
       setTransferError(t("wallets:transferSameWallet"));
       return;
     }
+    const payload = {
+      fromWalletId: Number(transferForm.fromWalletId),
+      toWalletId: Number(transferForm.toWalletId),
+      amount: Number(transferForm.amount),
+      occurredAt: transferForm.occurredAt,
+      note: transferForm.note || null,
+    };
     try {
-      await client.post("/expenses/transfers", {
-        fromWalletId: Number(transferForm.fromWalletId),
-        toWalletId: Number(transferForm.toWalletId),
-        amount: Number(transferForm.amount),
-        occurredAt: transferForm.occurredAt,
-        note: transferForm.note || null,
-      });
-      toast.success(t("wallets:transferSaved"));
-      setTransferForm(emptyTransferForm());
-      // Newest transfers come first, so jump to page 0 (reload if already there).
-      if (transfersPageIndex === 0) reloadTransfers();
-      else setTransfersPage(0);
+      if (editingTransferId) {
+        await client.put(`/expenses/transfers/${editingTransferId}`, payload);
+        toast.success(t("wallets:transferUpdated"));
+        cancelTransferEdit();
+        reloadTransfers();
+      } else {
+        await client.post("/expenses/transfers", payload);
+        toast.success(t("wallets:transferSaved"));
+        setTransferForm(emptyTransferForm());
+        // Newest transfers come first, so jump to page 0 (reload if already there).
+        if (transfersPageIndex === 0) reloadTransfers();
+        else setTransfersPage(0);
+      }
       load();
     } catch (err) {
       setTransferError(err.response?.data?.message || t("wallets:transferSaveFailed"));
@@ -136,6 +165,7 @@ export default function Wallets() {
     try {
       await client.delete(`/expenses/transfers/${id}`);
       toast.success(t("wallets:transferDeleted"));
+      if (editingTransferId === id) cancelTransferEdit();
       reloadTransfers();
       load();
     } catch (err) {
@@ -271,8 +301,8 @@ export default function Wallets() {
         )}
       </div>
 
-      <div className="section-card">
-        <h2>{t("wallets:transferTitle")}</h2>
+      <div className="section-card" ref={transferFormRef}>
+        <h2>{editingTransferId ? t("wallets:transferEditTitle") : t("wallets:transferTitle")}</h2>
         <p className="page-header-subtitle">{t("wallets:transferSubtitle")}</p>
         {wallets.length < 2 ? (
           <p className="empty-state">{t("wallets:transferNeedTwoWallets")}</p>
@@ -352,7 +382,14 @@ export default function Wallets() {
                 onChange={(e) => updateTransferField("note", e.target.value)}
               />
             </label>
-            <button type="submit">{t("wallets:transferSubmit")}</button>
+            <button type="submit">
+              {editingTransferId ? t("wallets:transferSubmitUpdate") : t("wallets:transferSubmit")}
+            </button>
+            {editingTransferId && (
+              <button type="button" className="btn-secondary" onClick={cancelTransferEdit}>
+                {t("common:cancel")}
+              </button>
+            )}
           </form>
         )}
         {transferError && <p className="error-text">{transferError}</p>}
@@ -388,14 +425,24 @@ export default function Wallets() {
                     <td data-label={t("wallets:colNote")}>{tr.note || "-"}</td>
                     <td className="row-actions">
                       {canDeleteTransfer(tr) && (
-                        <button
-                          type="button"
-                          className="icon-btn icon-btn-danger"
-                          onClick={() => handleTransferDelete(tr.id)}
-                          aria-label={t("common:delete")}
-                        >
-                          <TrashIcon />
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            onClick={() => startTransferEdit(tr)}
+                            aria-label={t("common:edit")}
+                          >
+                            <EditIcon />
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn icon-btn-danger"
+                            onClick={() => handleTransferDelete(tr.id)}
+                            aria-label={t("common:delete")}
+                          >
+                            <TrashIcon />
+                          </button>
+                        </>
                       )}
                     </td>
                   </tr>

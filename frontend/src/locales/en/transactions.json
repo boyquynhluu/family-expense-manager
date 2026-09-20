@@ -49,5 +49,18 @@
   "clearReceipt": "Remove selected photo",
   "viewReceiptAria": "View receipt",
   "deleteReceiptAria": "Delete receipt image",
-  "attachReceiptAria": "Attach receipt"
+  "attachReceiptAria": "Attach receipt",
+  "searchLabel": "Search",
+  "searchPlaceholder": "Search by note",
+  "minAmountLabel": "Amount from",
+  "maxAmountLabel": "Amount to",
+  "loadFailed": "Failed to load transactions",
+  "selectedCount": "{{count}} transaction(s) selected",
+  "bulkDeleteButton": "Delete selected",
+  "clearSelection": "Clear selection",
+  "bulkDeleteConfirm": "Delete {{count}} selected transaction(s)? They can be restored later from the Trash.",
+  "bulkDeleteResult": "Deleted {{deleted}} transaction(s) ({{skipped}} skipped, {{forbidden}} not permitted)",
+  "selectAllAria": "Select all transactions on this page",
+  "selectRowAria": "Select transaction",
+  "duplicateAria": "Duplicate"
 }

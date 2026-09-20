@@ -39,6 +39,39 @@ public class WalletTransferService {
     @Transactional
     public WalletTransferResponse create(Long familyId, Long userId, CreateWalletTransferRequest request) {
         log.info("create - start, familyId={}, from={}, to={}", familyId, request.fromWalletId(), request.toWalletId());
+        Wallet[] wallets = requireValidWallets(familyId, request);
+
+        WalletTransfer transfer = new WalletTransfer();
+        transfer.setFamilyId(familyId);
+        transfer.setFromWalletId(wallets[0].getId());
+        transfer.setToWalletId(wallets[1].getId());
+        transfer.setAmount(request.amount());
+        transfer.setNote(request.note());
+        transfer.setOccurredAt(request.occurredAt());
+        transfer.setCreatedByUserId(userId);
+        transfer.setCreatedAt(LocalDateTime.now());
+        walletTransferDao.insert(transfer);
+        return WalletTransferResponse.from(transfer);
+    }
+
+    @Transactional
+    public WalletTransferResponse update(
+            Long familyId, Long userId, String role, Long transferId, CreateWalletTransferRequest request) {
+        log.info("update - start, familyId={}, userId={}, transferId={}", familyId, userId, transferId);
+        WalletTransfer transfer = requireOwnedByFamily(transferId, familyId);
+        requireCreatorOrOwner(transfer, userId, role, "sửa");
+        Wallet[] wallets = requireValidWallets(familyId, request);
+
+        transfer.setFromWalletId(wallets[0].getId());
+        transfer.setToWalletId(wallets[1].getId());
+        transfer.setAmount(request.amount());
+        transfer.setNote(request.note());
+        transfer.setOccurredAt(request.occurredAt());
+        walletTransferDao.update(transfer);
+        return WalletTransferResponse.from(transfer);
+    }
+
+    private Wallet[] requireValidWallets(Long familyId, CreateWalletTransferRequest request) {
         if (request.fromWalletId().equals(request.toWalletId())) {
             throw new BadRequestException("Ví nguồn và ví đích phải khác nhau");
         }
@@ -50,18 +83,20 @@ public class WalletTransferService {
         if (!from.getCurrency().equals(to.getCurrency())) {
             throw new BadRequestException("Hai ví phải cùng loại tiền tệ");
         }
+        return new Wallet[] {from, to};
+    }
 
-        WalletTransfer transfer = new WalletTransfer();
-        transfer.setFamilyId(familyId);
-        transfer.setFromWalletId(from.getId());
-        transfer.setToWalletId(to.getId());
-        transfer.setAmount(request.amount());
-        transfer.setNote(request.note());
-        transfer.setOccurredAt(request.occurredAt());
-        transfer.setCreatedByUserId(userId);
-        transfer.setCreatedAt(LocalDateTime.now());
-        walletTransferDao.insert(transfer);
-        return WalletTransferResponse.from(transfer);
+    private WalletTransfer requireOwnedByFamily(Long transferId, Long familyId) {
+        return walletTransferDao.selectById(transferId)
+                .filter(t -> t.getFamilyId().equals(familyId))
+                .orElseThrow(() -> new NotFoundException("Giao dịch chuyển tiền không tồn tại: " + transferId));
+    }
+
+    private void requireCreatorOrOwner(WalletTransfer transfer, Long userId, String role, String action) {
+        if (!ROLE_OWNER.equals(role) && !transfer.getCreatedByUserId().equals(userId)) {
+            throw new AccessDeniedException(
+                    "Chỉ người tạo hoặc chủ gia đình mới được " + action + " giao dịch chuyển tiền");
+        }
     }
 
     public PageResponse<WalletTransferResponse> listByFamilyPaged(Long familyId, int page, int size) {
@@ -83,13 +118,8 @@ public class WalletTransferService {
     @Transactional
     public void delete(Long familyId, Long userId, String role, Long transferId) {
         log.info("delete - start, familyId={}, userId={}, transferId={}", familyId, userId, transferId);
-        WalletTransfer transfer = walletTransferDao.selectById(transferId)
-                .filter(t -> t.getFamilyId().equals(familyId))
-                .orElseThrow(() -> new NotFoundException("Giao dịch chuyển tiền không tồn tại: " + transferId));
-        boolean isOwner = ROLE_OWNER.equals(role);
-        if (!isOwner && !transfer.getCreatedByUserId().equals(userId)) {
-            throw new AccessDeniedException("Chỉ người tạo hoặc chủ gia đình mới được xoá giao dịch chuyển tiền");
-        }
+        WalletTransfer transfer = requireOwnedByFamily(transferId, familyId);
+        requireCreatorOrOwner(transfer, userId, role, "xoá");
         walletTransferDao.delete(transfer);
     }
 }

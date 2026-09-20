@@ -14,7 +14,10 @@ const emptyForm = {
   type: "EXPENSE",
   amount: "",
   note: "",
+  frequency: "MONTHLY",
   dayOfMonth: "1",
+  dayOfWeek: "1",
+  monthOfYear: "1",
   startDate: "",
   endDate: "",
 };
@@ -54,7 +57,10 @@ export default function RecurringTransactions() {
       type: rule.type,
       amount: String(rule.amount),
       note: rule.note ?? "",
-      dayOfMonth: String(rule.dayOfMonth),
+      frequency: rule.frequency ?? "MONTHLY",
+      dayOfMonth: String(rule.dayOfMonth ?? 1),
+      dayOfWeek: String(rule.dayOfWeek ?? 1),
+      monthOfYear: String(rule.monthOfYear ?? 1),
       startDate: rule.startDate,
       endDate: rule.endDate ?? "",
     });
@@ -74,7 +80,10 @@ export default function RecurringTransactions() {
       type: form.type,
       amount: Number(form.amount),
       note: form.note || null,
-      dayOfMonth: Number(form.dayOfMonth),
+      frequency: form.frequency,
+      dayOfMonth: form.frequency === "WEEKLY" ? null : Number(form.dayOfMonth),
+      dayOfWeek: form.frequency === "WEEKLY" ? Number(form.dayOfWeek) : null,
+      monthOfYear: form.frequency === "YEARLY" ? Number(form.monthOfYear) : null,
       startDate: form.startDate,
       endDate: form.endDate || null,
     };
@@ -114,6 +123,21 @@ export default function RecurringTransactions() {
 
   function canModify(rule) {
     return isOwner || String(rule.createdByUserId) === String(userId);
+  }
+
+  function scheduleText(rule) {
+    if (rule.frequency === "WEEKLY") {
+      return t("recurringTransactions:scheduleWeekly", {
+        weekday: t(`recurringTransactions:weekday${rule.dayOfWeek}`),
+      });
+    }
+    if (rule.frequency === "YEARLY") {
+      return t("recurringTransactions:scheduleYearly", {
+        day: String(rule.dayOfMonth).padStart(2, "0"),
+        month: String(rule.monthOfYear).padStart(2, "0"),
+      });
+    }
+    return t("recurringTransactions:scheduleMonthly", { day: rule.dayOfMonth });
   }
 
   function walletName(id) {
@@ -194,18 +218,61 @@ export default function RecurringTransactions() {
             </label>
             <label className="field">
               <span>
-                {t("recurringTransactions:dayOfMonthLabel")}
+                {t("recurringTransactions:frequencyLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <input
-                type="number"
-                min="1"
-                max="31"
-                value={form.dayOfMonth}
-                onChange={(e) => updateField("dayOfMonth", e.target.value)}
-                required
-              />
+              <select value={form.frequency} onChange={(e) => updateField("frequency", e.target.value)} required>
+                <option value="MONTHLY">{t("recurringTransactions:frequencyMonthly")}</option>
+                <option value="WEEKLY">{t("recurringTransactions:frequencyWeekly")}</option>
+                <option value="YEARLY">{t("recurringTransactions:frequencyYearly")}</option>
+              </select>
             </label>
+            {form.frequency === "WEEKLY" && (
+              <label className="field">
+                <span>
+                  {t("recurringTransactions:dayOfWeekLabel")}
+                  <span className="required-mark" aria-hidden="true"> *</span>
+                </span>
+                <select value={form.dayOfWeek} onChange={(e) => updateField("dayOfWeek", e.target.value)} required>
+                  {[1, 2, 3, 4, 5, 6, 7].map((d) => (
+                    <option key={d} value={d}>
+                      {t(`recurringTransactions:weekday${d}`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {form.frequency === "YEARLY" && (
+              <label className="field">
+                <span>
+                  {t("recurringTransactions:monthOfYearLabel")}
+                  <span className="required-mark" aria-hidden="true"> *</span>
+                </span>
+                <select value={form.monthOfYear} onChange={(e) => updateField("monthOfYear", e.target.value)} required>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
+                    <option key={m} value={m}>
+                      {t("recurringTransactions:monthOption", { month: m })}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {form.frequency !== "WEEKLY" && (
+              <label className="field">
+                <span>
+                  {t("recurringTransactions:dayOfMonthLabel")}
+                  <span className="required-mark" aria-hidden="true"> *</span>
+                </span>
+                <input
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={form.dayOfMonth}
+                  onChange={(e) => updateField("dayOfMonth", e.target.value)}
+                  required
+                />
+              </label>
+            )}
             <label className="field">
               <span>
                 {t("recurringTransactions:startDateLabel")}
@@ -255,7 +322,7 @@ export default function RecurringTransactions() {
                 <th>{t("recurringTransactions:categoryLabel")}</th>
                 <th>{t("recurringTransactions:typeLabel")}</th>
                 <th>{t("recurringTransactions:amountLabel")}</th>
-                <th>{t("recurringTransactions:dayOfMonthLabel")}</th>
+                <th>{t("recurringTransactions:scheduleLabel")}</th>
                 <th>{t("recurringTransactions:nextRunLabel")}</th>
                 <th>{t("recurringTransactions:executionStatusLabel")}</th>
                 <th>{t("recurringTransactions:statusLabel")}</th>
@@ -279,9 +346,7 @@ export default function RecurringTransactions() {
                     {r.type === "EXPENSE" ? "-" : "+"}
                     {formatCurrency(r.amount)}
                   </td>
-                  <td data-label={t("recurringTransactions:dayOfMonthLabel")}>
-                    {t("recurringTransactions:dayPrefix")} {r.dayOfMonth}
-                  </td>
+                  <td data-label={t("recurringTransactions:scheduleLabel")}>{scheduleText(r)}</td>
                   <td data-label={t("recurringTransactions:nextRunLabel")}>{r.active ? r.nextRunDate : "-"}</td>
                   <td data-label={t("recurringTransactions:executionStatusLabel")}>
                     <span className={`badge ${r.lastRunDate ? "badge-income" : "badge-neutral"}`}>

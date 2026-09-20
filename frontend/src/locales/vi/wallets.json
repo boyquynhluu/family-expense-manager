@@ -44,5 +44,8 @@
   "transferDeleteConfirm": "Xoá giao dịch chuyển tiền này? Số dư của hai ví sẽ được hoàn lại như trước khi chuyển.",
   "transferDeleted": "Đã xoá giao dịch chuyển tiền",
   "transferDeleteFailed": "Xoá giao dịch chuyển tiền thất bại",
+  "transferEditTitle": "Cập nhật giao dịch chuyển tiền",
+  "transferSubmitUpdate": "Cập nhật",
+  "transferUpdated": "Đã cập nhật giao dịch chuyển tiền",
   "ownerOnlyManage": "Chỉ chủ hộ mới được thêm/sửa/xoá ví."
 }

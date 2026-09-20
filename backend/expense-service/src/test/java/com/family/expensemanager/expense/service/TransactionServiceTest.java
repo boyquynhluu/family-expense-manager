@@ -72,9 +72,12 @@ class TransactionServiceTest {
 
     @Test
     void listByFamilyPaged_passesFilterAndOffsetThrough_toTheDao() {
-        TransactionReportFilter filter = new TransactionReportFilter(5L, 7L, "EXPENSE", null, null);
-        when(transactionDao.countByFamilyIdFiltered(1L, 5L, 7L, "EXPENSE", null, null)).thenReturn(45L);
-        when(transactionDao.selectByFamilyIdFiltered(1L, 5L, 7L, "EXPENSE", null, null, 20, 40))
+        TransactionReportFilter filter = new TransactionReportFilter(
+                5L, 7L, "EXPENSE", null, null, "an sang", new BigDecimal("10"), new BigDecimal("500"));
+        when(transactionDao.countByFamilyIdFiltered(
+                1L, 5L, 7L, "EXPENSE", null, null, "%an sang%", new BigDecimal("10"), new BigDecimal("500"))).thenReturn(45L);
+        when(transactionDao.selectByFamilyIdFiltered(
+                1L, 5L, 7L, "EXPENSE", null, null, "%an sang%", new BigDecimal("10"), new BigDecimal("500"), 20, 40))
                 .thenReturn(List.of(transaction(99L)));
 
         var page = transactionService.listByFamilyPaged(1L, filter, 2, 20);
@@ -90,14 +93,14 @@ class TransactionServiceTest {
 
     @Test
     void listByFamilyPaged_throwsBadRequest_whenPageNegative() {
-        TransactionReportFilter filter = new TransactionReportFilter(null, null, null, null, null);
+        TransactionReportFilter filter = new TransactionReportFilter(null, null, null, null, null, null, null, null);
         assertThatThrownBy(() -> transactionService.listByFamilyPaged(1L, filter, -1, 20))
                 .isInstanceOf(BadRequestException.class);
     }
 
     @Test
     void listByFamilyPaged_throwsBadRequest_whenSizeOutOfRange() {
-        TransactionReportFilter filter = new TransactionReportFilter(null, null, null, null, null);
+        TransactionReportFilter filter = new TransactionReportFilter(null, null, null, null, null, null, null, null);
         assertThatThrownBy(() -> transactionService.listByFamilyPaged(1L, filter, 0, 0))
                 .isInstanceOf(BadRequestException.class);
         assertThatThrownBy(() -> transactionService.listByFamilyPaged(1L, filter, 0, 101))
@@ -573,5 +576,87 @@ class TransactionServiceTest {
         verify(transactionDao).insert(captor.capture());
         assertThat(response.createdByName()).isEqualTo(captor.getValue().getCreatedByName());
         return captor.getValue();
+    }
+
+    @Test
+    void bulkDelete_countsDeletedSkippedAndForbidden_andIgnoresDuplicateIds() {
+        Transaction mine = transaction(1L);
+        Transaction someoneElses = transaction(2L);
+        someoneElses.setUserId(OTHER_USER_ID);
+        Transaction otherFamily = transaction(4L);
+        otherFamily.setFamilyId(2L);
+        when(transactionDao.selectById(1L)).thenReturn(Optional.of(mine));
+        when(transactionDao.selectById(2L)).thenReturn(Optional.of(someoneElses));
+        when(transactionDao.selectById(3L)).thenReturn(Optional.empty());
+        when(transactionDao.selectById(4L)).thenReturn(Optional.of(otherFamily));
+
+        var result = transactionService.bulkDelete(1L, List.of(1L, 2L, 3L, 4L, 1L), CREATOR_ID, false);
+
+        assertThat(result.deleted()).isEqualTo(1);
+        assertThat(result.forbidden()).isEqualTo(1);
+        assertThat(result.skipped()).isEqualTo(2);
+        assertThat(mine.getDeletedAt()).isNotNull();
+        assertThat(someoneElses.getDeletedAt()).isNull();
+        assertThat(otherFamily.getDeletedAt()).isNull();
+        verify(transactionDao).update(mine);
+        verify(transactionDao, never()).update(someoneElses);
+        verify(transactionDao, never()).update(otherFamily);
+    }
+
+    @Test
+    void bulkDelete_deletesEverything_whenCallerIsOwner() {
+        Transaction first = transaction(1L);
+        Transaction second = transaction(2L);
+        second.setUserId(OTHER_USER_ID);
+        when(transactionDao.selectById(1L)).thenReturn(Optional.of(first));
+        when(transactionDao.selectById(2L)).thenReturn(Optional.of(second));
+
+        var result = transactionService.bulkDelete(1L, List.of(1L, 2L), 99L, true);
+
+        assertThat(result.deleted()).isEqualTo(2);
+        assertThat(result.skipped()).isZero();
+        assertThat(result.forbidden()).isZero();
+    }
+
+    @Test
+    void bulkDelete_throwsBadRequest_whenMoreThan100Ids() {
+        List<Long> ids = java.util.stream.LongStream.rangeClosed(1, 101).boxed().toList();
+
+        assertThatThrownBy(() -> transactionService.bulkDelete(1L, ids, CREATOR_ID, true))
+                .isInstanceOf(BadRequestException.class);
+        verify(transactionDao, never()).selectById(any());
+    }
+
+    @Test
+    void listByFamilyPaged_throwsBadRequest_whenMinAmountGreaterThanMaxAmount() {
+        TransactionReportFilter filter = new TransactionReportFilter(
+                null, null, null, null, null, null, new BigDecimal("500"), new BigDecimal("100"));
+
+        assertThatThrownBy(() -> transactionService.listByFamilyPaged(1L, filter, 0, 20))
+                .isInstanceOf(BadRequestException.class);
+        verify(transactionDao, never()).countByFamilyIdFiltered(
+                any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void listByFamilyPaged_passesNullPattern_whenSearchTextBlank() {
+        TransactionReportFilter filter = new TransactionReportFilter(
+                null, null, null, null, null, "   ", null, null);
+        when(transactionDao.countByFamilyIdFiltered(1L, null, null, null, null, null, null, null, null))
+                .thenReturn(0L);
+        when(transactionDao.selectByFamilyIdFiltered(1L, null, null, null, null, null, null, null, null, 10, 0))
+                .thenReturn(List.of());
+
+        var page = transactionService.listByFamilyPaged(1L, filter, 0, 10);
+
+        assertThat(page.content()).isEmpty();
+    }
+
+    @Test
+    void noteLikePattern_escapesWildcardsAndEscapeChar_andLowerCases() {
+        TransactionReportFilter filter = new TransactionReportFilter(
+                null, null, null, null, null, "  50%_Off! ", null, null);
+
+        assertThat(filter.noteLikePattern()).isEqualTo("%50!%!_off!!%");
     }
 }

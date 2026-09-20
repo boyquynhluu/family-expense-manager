@@ -19,6 +19,7 @@ public final class ClientIpResolver {
 
     private static final String FORWARDED_FOR_HEADER = "X-Forwarded-For";
     private static final Pattern IP_LITERAL = Pattern.compile("[0-9a-fA-F:.]{2,45}");
+    private static final Pattern IPV4_LITERAL = Pattern.compile("\\d{1,3}(\\.\\d{1,3}){3}");
 
     private ClientIpResolver() {
     }
@@ -38,11 +39,12 @@ public final class ClientIpResolver {
         }
         int scopeIndex = address.indexOf('%');
         String literal = scopeIndex >= 0 ? address.substring(0, scopeIndex) : address;
-        if (!IP_LITERAL.matcher(literal).matches()) {
+        boolean ipv4 = IPV4_LITERAL.matcher(literal).matches();
+        if (!ipv4 && !(literal.indexOf(':') >= 0 && IP_LITERAL.matcher(literal).matches())) {
             return false;
         }
         try {
-            // Literal-only input (checked above), so this never triggers a DNS lookup.
+            // Only IPv4/IPv6 literals get here (checked above), so no DNS lookup can happen.
             InetAddress inet = InetAddress.getByName(literal);
             return inet.isLoopbackAddress()
                     || inet.isSiteLocalAddress()

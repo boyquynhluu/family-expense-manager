@@ -44,5 +44,8 @@
   "transferDeleteConfirm": "Delete this transfer? Both wallet balances will go back to what they were before the transfer.",
   "transferDeleted": "Transfer deleted",
   "transferDeleteFailed": "Failed to delete transfer",
+  "transferEditTitle": "Update transfer",
+  "transferSubmitUpdate": "Update",
+  "transferUpdated": "Transfer updated",
   "ownerOnlyManage": "Only the household owner can add, edit or delete wallets."
 }

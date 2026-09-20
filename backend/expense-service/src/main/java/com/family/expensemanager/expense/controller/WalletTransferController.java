@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -38,6 +39,14 @@ public class WalletTransferController {
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "5") int size) {
         log.info("list - start, page={}, size={}", page, size);
         return ApiResponse.ok(walletTransferService.listByFamilyPaged(CurrentUser.familyId(), page, size));
+    }
+
+    @PutMapping("/{id}")
+    public ApiResponse<WalletTransferResponse> update(
+            @PathVariable Long id, @Valid @RequestBody CreateWalletTransferRequest request) {
+        log.info("update - start, id={}", id);
+        return ApiResponse.ok(walletTransferService.update(
+                CurrentUser.familyId(), CurrentUser.userId(), CurrentUser.role(), id, request));
     }
 
     @DeleteMapping("/{id}")

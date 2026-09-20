@@ -29,7 +29,7 @@ export default function OAuth2Callback() {
     }
 
     if (error || !accessToken || !refreshToken) {
-      navigate("/login", { replace: true, state: { oauth2Error: true } });
+      navigate("/login", { replace: true, state: { oauth2Error: true, oauth2ErrorCode: error } });
       return;
     }
 

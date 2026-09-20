@@ -2,7 +2,9 @@ package com.family.expensemanager.auth.controller;
 
 import com.family.expensemanager.auth.dto.AcceptInviteRequest;
 import com.family.expensemanager.auth.dto.AuthResponse;
+import com.family.expensemanager.auth.dto.ChangeEmailRequest;
 import com.family.expensemanager.auth.dto.ChangePasswordRequest;
+import com.family.expensemanager.auth.dto.DeleteAccountRequest;
 import com.family.expensemanager.auth.dto.FamilyMembershipResponse;
 import com.family.expensemanager.auth.dto.ForgotPasswordRequest;
 import com.family.expensemanager.auth.dto.InviteDetailsResponse;
@@ -11,6 +13,7 @@ import com.family.expensemanager.auth.dto.LoginRequest;
 import com.family.expensemanager.auth.dto.LoginResponse;
 import com.family.expensemanager.auth.dto.MessageResponse;
 import com.family.expensemanager.auth.dto.PendingInviteResponse;
+import com.family.expensemanager.auth.dto.PersonalDataExportResponse;
 import com.family.expensemanager.auth.dto.RefreshRequest;
 import com.family.expensemanager.auth.dto.RegisterRequest;
 import com.family.expensemanager.auth.dto.RenameFamilyRequest;
@@ -58,6 +61,8 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j(topic = "AuthController")
 public class AuthController {
 
+    private static final String EMAIL_CHANGED_MESSAGE = "Đổi email thành công. Vui lòng đăng nhập lại bằng email mới.";
+
     private final AuthService authService;
 
     @PostMapping("/register")
@@ -69,8 +74,20 @@ public class AuthController {
     @GetMapping("/verify")
     public ApiResponse<MessageResponse> verify(@RequestParam String token) {
         log.info("verify - start");
+        if (authService.isEmailChangeToken(token)) {
+            // notification-service always links to /verify?token=..., so e-mail change tokens arrive here too.
+            authService.verifyEmailChange(token);
+            return ApiResponse.ok(new MessageResponse(EMAIL_CHANGED_MESSAGE));
+        }
         authService.verifyEmail(token);
         return ApiResponse.ok(new MessageResponse("Xác thực email thành công. Bạn có thể đăng nhập."));
+    }
+
+    @GetMapping("/verify-email-change")
+    public ApiResponse<MessageResponse> verifyEmailChange(@RequestParam String token) {
+        log.info("verifyEmailChange - start");
+        authService.verifyEmailChange(token);
+        return ApiResponse.ok(new MessageResponse(EMAIL_CHANGED_MESSAGE));
     }
 
     @PostMapping("/login")
@@ -134,6 +151,25 @@ public class AuthController {
         return ApiResponse.ok(new MessageResponse("Đổi mật khẩu thành công."));
     }
 
+    @PostMapping("/me/email")
+    public ApiResponse<MessageResponse> requestEmailChange(@Valid @RequestBody ChangeEmailRequest request) {
+        log.info("requestEmailChange - start");
+        return ApiResponse.ok(authService.requestEmailChange(CurrentUser.userId(), request));
+    }
+
+    @GetMapping("/me/export")
+    public ApiResponse<PersonalDataExportResponse> exportPersonalData() {
+        log.info("exportPersonalData - start");
+        return ApiResponse.ok(authService.exportPersonalData(CurrentUser.userId(), CurrentUser.sessionId()));
+    }
+
+    @DeleteMapping("/me")
+    public ApiResponse<MessageResponse> deleteAccount(@Valid @RequestBody DeleteAccountRequest request) {
+        log.info("deleteAccount - start");
+        authService.deleteAccount(CurrentUser.userId(), request);
+        return ApiResponse.ok(new MessageResponse("Đã xoá tài khoản"));
+    }
+
     @PostMapping("/2fa/setup")
     public ApiResponse<TwoFactorSetupResponse> setupTwoFactor() {
         log.info("setupTwoFactor - start");
@@ -149,7 +185,7 @@ public class AuthController {
     @PostMapping("/2fa/disable")
     public ApiResponse<MessageResponse> disableTwoFactor(@Valid @RequestBody TwoFactorDisableRequest request) {
         log.info("disableTwoFactor - start");
-        authService.disableTwoFactor(CurrentUser.userId(), request.password());
+        authService.disableTwoFactor(CurrentUser.userId(), request.password(), request.code());
         return ApiResponse.ok(new MessageResponse("Đã tắt xác thực 2 lớp"));
     }
 

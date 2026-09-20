@@ -115,5 +115,33 @@
   "twoFactorStatusEnabledSuffix": "cho tài khoản này.",
   "twoFactorStatusDisabledSuffix": "Bật để yêu cầu thêm mã xác thực mỗi lần đăng nhập.",
   "disableTwoFactorButton": "Tắt 2FA",
-  "enableTwoFactorButton": "Bật 2FA"
+  "enableTwoFactorButton": "Bật 2FA",
+
+  "confirmDisableCodeLabel": "Nhập mã xác thực (hoặc mã khôi phục) để xác nhận tắt 2FA",
+  "codeOrRecoveryPlaceholder": "Mã 6 số hoặc mã khôi phục",
+
+  "changeEmailTitle": "Đổi email",
+  "changeEmailNotice": "Chúng tôi sẽ gửi link xác nhận đến email mới. Email chỉ được đổi sau khi bạn mở link đó, và mọi thiết bị sẽ bị đăng xuất để đăng nhập lại.",
+  "newEmailLabel": "Email mới",
+  "changeEmailButton": "Gửi link xác nhận",
+  "sendingChangeEmail": "Đang gửi...",
+  "changeEmailSent": "Đã gửi link xác nhận đến {{email}}. Vui lòng kiểm tra hộp thư.",
+  "changeEmailFailed": "Không gửi được yêu cầu đổi email",
+  "reauthNeedsTwoFactor": "Tài khoản này đăng nhập qua {{provider}} và chưa có mật khẩu. Hãy bật xác thực 2 lớp (2FA) bên dưới để thực hiện thao tác này.",
+
+  "exportDataTitle": "Dữ liệu cá nhân",
+  "exportDataNotice": "Tải về bản sao thông tin tài khoản, các gia đình bạn tham gia và các phiên đăng nhập dưới dạng tệp JSON (không gồm mật khẩu hay mã bí mật).",
+  "exportDataButton": "Tải dữ liệu cá nhân",
+  "exportingData": "Đang tải...",
+  "exportSuccess": "Đã tải dữ liệu cá nhân",
+  "exportFailed": "Không tải được dữ liệu cá nhân",
+
+  "deleteAccountTitle": "Xoá tài khoản",
+  "deleteAccountNotice": "Xoá vĩnh viễn tài khoản của bạn. Nếu bạn là chủ hộ của gia đình còn thành viên khác, hãy chuyển quyền chủ hộ trước. Gia đình chỉ có mình bạn sẽ bị xoá cùng. Không thể hoàn tác.",
+  "deleteAccountButton": "Xoá tài khoản của tôi",
+  "deletingAccountLoading": "Đang xoá...",
+  "deleteAccountConfirmTitle": "Xoá tài khoản?",
+  "deleteAccountConfirm": "Tài khoản của bạn sẽ bị xoá vĩnh viễn và không thể khôi phục. Bạn chắc chắn muốn tiếp tục?",
+  "deleteAccountConfirmButton": "Xoá vĩnh viễn",
+  "deleteAccountFailed": "Xoá tài khoản thất bại"
 }

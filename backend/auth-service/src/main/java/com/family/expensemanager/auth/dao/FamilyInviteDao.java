@@ -36,4 +36,12 @@ public interface FamilyInviteDao {
     /** One page of pending invites, newest first. */
     @Select
     List<FamilyInvite> selectPendingByFamilyIdPaged(Long familyId, int limit, int offset);
+
+    /** Bulk delete needed before a USERS row can be removed (FAMILY_INVITES.invited_by_user_id is a FK). */
+    @Delete(sqlFile = true)
+    int deleteByInvitedByUserId(Long userId);
+
+    /** Bulk delete needed before an emptied FAMILIES row can be removed. */
+    @Delete(sqlFile = true)
+    int deleteByFamilyId(Long familyId);
 }

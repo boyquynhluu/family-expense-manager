@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import com.family.expensemanager.auth.domain.entity.Family;
 import org.seasar.doma.Dao;
+import org.seasar.doma.Delete;
 import org.seasar.doma.Insert;
 import org.seasar.doma.Select;
 import org.seasar.doma.Update;
@@ -17,6 +18,9 @@ public interface FamilyDao {
 
     @Update
     int update(Family family);
+
+    @Delete
+    int delete(Family family);
 
     @Select
     Optional<Family> selectById(Long id);

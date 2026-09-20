@@ -13,10 +13,13 @@ import com.family.expensemanager.auth.domain.entity.RefreshToken;
 import com.family.expensemanager.auth.domain.entity.TwoFactorRecoveryCode;
 import com.family.expensemanager.auth.domain.entity.User;
 import com.family.expensemanager.auth.dto.AcceptInviteRequest;
+import com.family.expensemanager.auth.dto.ChangeEmailRequest;
 import com.family.expensemanager.auth.dto.ChangePasswordRequest;
+import com.family.expensemanager.auth.dto.DeleteAccountRequest;
 import com.family.expensemanager.auth.dto.ForgotPasswordRequest;
 import com.family.expensemanager.auth.dto.InviteMemberRequest;
 import com.family.expensemanager.auth.dto.LoginRequest;
+import com.family.expensemanager.auth.dto.RefreshRequest;
 import com.family.expensemanager.auth.dto.RegisterRequest;
 import com.family.expensemanager.auth.dto.RenameFamilyRequest;
 import com.family.expensemanager.auth.dto.ResetPasswordRequest;
@@ -24,12 +27,15 @@ import com.family.expensemanager.auth.dto.TransferOwnershipRequest;
 import com.family.expensemanager.auth.dto.TwoFactorConfirmResponse;
 import com.family.expensemanager.auth.dto.TwoFactorSetupResponse;
 import com.family.expensemanager.auth.dto.UpdateProfileRequest;
+import com.family.expensemanager.auth.security.LoginAttemptStore;
+import com.family.expensemanager.auth.security.TotpSecretCipher;
 import com.family.expensemanager.auth.security.TotpService;
 import com.family.expensemanager.auth.security.TwoFactorChallengeStore;
 import com.family.expensemanager.common.event.FamilyInviteEvent;
 import com.family.expensemanager.common.event.FamilyMemberEvent;
 import com.family.expensemanager.common.event.PasswordResetEvent;
 import com.family.expensemanager.common.event.UserVerificationEvent;
+import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
@@ -44,9 +50,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 
@@ -87,7 +98,12 @@ class AuthServiceTest {
     @Mock
     private TwoFactorChallengeStore twoFactorChallengeStore;
     @Mock
+    private LoginAttemptStore loginAttemptStore;
+    @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    private final TotpSecretCipher totpSecretCipher =
+            new TotpSecretCipher("ZGV2LW9ubHktdG90cC1lbmNyeXB0aW9uLWtleS0zMmI=");
 
     private AuthService authService;
 
@@ -95,8 +111,8 @@ class AuthServiceTest {
     void setUp() {
         authService = new AuthService(
                 familyDao, userDao, refreshTokenDao, familyInviteDao, familyMembershipDao, twoFactorRecoveryCodeDao,
-                passwordEncoder, jwtUtil, revokedSessionStore, totpService, twoFactorChallengeStore, eventPublisher,
-                15, 7, 24, 1, 72);
+                passwordEncoder, jwtUtil, revokedSessionStore, totpService, twoFactorChallengeStore, loginAttemptStore,
+                totpSecretCipher, eventPublisher, 15, 7, 24, 1, 72);
     }
 
     @Test
@@ -117,6 +133,7 @@ class AuthServiceTest {
         assertThat(inserted.getActive()).isFalse();
         assertThat(inserted.getPasswordHash()).isEqualTo("hashed");
         assertThat(inserted.getVerificationToken()).isNotBlank();
+        assertThat(inserted.getLocked()).isFalse();
 
         verify(eventPublisher).publishEvent(any(UserVerificationEvent.class));
     }
@@ -177,6 +194,7 @@ class AuthServiceTest {
         assertThat(response.tokens().accessToken()).isEqualTo("access-token");
         assertThat(response.tokens().refreshToken()).isNotBlank();
         verify(refreshTokenDao).insert(any());
+        verify(loginAttemptStore).reset("a@b.com");
     }
 
     @Test
@@ -193,6 +211,7 @@ class AuthServiceTest {
         assertThat(response.twoFactorToken()).isEqualTo("challenge-token");
         assertThat(response.tokens()).isNull();
         verify(refreshTokenDao, never()).insert(any());
+        verify(loginAttemptStore, never()).reset(any());
     }
 
     @Test
@@ -203,6 +222,7 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.login(new LoginRequest("a@b.com", "wrong"), null, null))
                 .isInstanceOf(UnauthorizedException.class);
+        verify(loginAttemptStore).recordFailure("a@b.com");
     }
 
     @Test
@@ -214,6 +234,7 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.login(new LoginRequest("a@b.com", "password1"), null, null))
                 .isInstanceOf(UnauthorizedException.class);
+        verify(loginAttemptStore, never()).recordFailure(any());
     }
 
     @Test
@@ -232,7 +253,129 @@ class AuthServiceTest {
         when(userDao.selectByEmail("nobody@b.com")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.login(new LoginRequest("nobody@b.com", "password1"), null, null))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("Email hoặc mật khẩu không đúng");
+        verify(loginAttemptStore).recordFailure("nobody@b.com");
+    }
+
+    @Test
+    void login_throwsTooManyRequests_whenEmailLockedOut_withoutCheckingCredentials() {
+        when(loginAttemptStore.remainingLockMinutes("a@b.com")).thenReturn(7L);
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest("a@b.com", "password1"), null, null))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS))
+                .hasMessage("Tài khoản tạm khoá do đăng nhập sai nhiều lần, thử lại sau 7 phút");
+        verify(userDao, never()).selectByEmail(any());
+        verify(loginAttemptStore, never()).recordFailure(any());
+    }
+
+    @Test
+    void login_throwsForbidden_whenAccountLockedByAdmin_evenWithCorrectPassword() {
+        User user = activeLocalUser();
+        user.setLocked(true);
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password1", "hashed")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest("a@b.com", "password1"), null, null))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN))
+                .hasMessage("Tài khoản đã bị khoá bởi quản trị viên");
+        verify(refreshTokenDao, never()).insert(any());
+        verify(twoFactorChallengeStore, never()).issueChallenge(any());
+    }
+
+    @Test
+    void login_doesNotRevealLockedStatus_whenPasswordWrong() {
+        User user = activeLocalUser();
+        user.setLocked(true);
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("wrong", "hashed")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest("a@b.com", "wrong"), null, null))
                 .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void refresh_throwsForbidden_whenAccountLocked() {
+        User user = activeLocalUser();
+        user.setLocked(true);
+        RefreshToken stored = refreshToken(3L, 1L);
+        when(refreshTokenDao.selectByTokenHash(sha256("raw-refresh"))).thenReturn(Optional.of(stored));
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.refresh(new RefreshRequest("raw-refresh"), null, null))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
+        verify(refreshTokenDao, never()).update(any());
+        verify(refreshTokenDao, never()).insert(any());
+    }
+
+    @Test
+    void switchFamily_throwsForbidden_whenAccountLocked() {
+        User user = activeLocalUser();
+        user.setLocked(true);
+        when(familyMembershipDao.selectByUserIdAndFamilyId(1L, 2L)).thenReturn(Optional.of(membership(1L, 2L, "MEMBER")));
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.switchFamily(1L, 2L, null, null))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
+        verify(userDao, never()).update(any());
+    }
+
+    @Test
+    void processOAuth2User_rejectsLockedUser_foundByProvider() {
+        User user = activeLocalUser();
+        user.setLocked(true);
+        when(userDao.selectByProviderAndProviderId("GOOGLE", "g-1")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.processOAuth2User("GOOGLE", "g-1", "a@b.com", "An"))
+                .isInstanceOf(OAuth2AuthenticationException.class);
+    }
+
+    @Test
+    void processOAuth2User_rejectsLockedUser_foundByEmail_withoutLinkingProvider() {
+        User user = activeLocalUser();
+        user.setLocked(true);
+        when(userDao.selectByProviderAndProviderId("GOOGLE", "g-1")).thenReturn(Optional.empty());
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.processOAuth2User("GOOGLE", "g-1", "a@b.com", "An"))
+                .isInstanceOf(OAuth2AuthenticationException.class);
+        verify(userDao, never()).update(any());
+    }
+
+    @Test
+    void issueTokens_throwsForbidden_whenAccountLocked() {
+        User user = activeLocalUser();
+        user.setLocked(true);
+
+        assertThatThrownBy(() -> authService.issueTokens(user))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
+        verify(refreshTokenDao, never()).insert(any());
+    }
+
+    @Test
+    void revokeAllSessions_revokesInDbAndBlocksEveryActiveSessionInRedis() {
+        when(refreshTokenDao.selectActiveByUserId(5L)).thenReturn(List.of(refreshToken(2L, 5L), refreshToken(3L, 5L)));
+
+        authService.revokeAllSessions(5L);
+
+        verify(refreshTokenDao).revokeAllByUserId(5L);
+        verify(revokedSessionStore).markRevoked(2L, 15 * 60 * 1000L);
+        verify(revokedSessionStore).markRevoked(3L, 15 * 60 * 1000L);
+    }
+
+    @Test
+    void revokeAllSessions_doesNothing_whenNoActiveSession() {
+        when(refreshTokenDao.selectActiveByUserId(5L)).thenReturn(List.of());
+
+        authService.revokeAllSessions(5L);
+
+        verify(refreshTokenDao, never()).revokeAllByUserId(any());
+        verify(revokedSessionStore, never()).markRevoked(any(), anyLong());
     }
 
     @Test
@@ -272,6 +415,7 @@ class AuthServiceTest {
         assertThat(user.getPasswordHash()).isEqualTo("new-hashed");
         assertThat(user.getResetPasswordToken()).isNull();
         verify(userDao).update(user);
+        verify(loginAttemptStore).reset("a@b.com");
     }
 
     @Test
@@ -572,7 +716,8 @@ class AuthServiceTest {
 
         assertThat(response.secret()).isEqualTo("SECRET123");
         assertThat(response.otpAuthUri()).isEqualTo("otpauth://totp/x");
-        assertThat(user.getTotpSecret()).isEqualTo("SECRET123");
+        assertThat(user.getTotpSecret()).startsWith("enc:v1:").doesNotContain("SECRET123");
+        assertThat(totpSecretCipher.decrypt(user.getTotpSecret())).isEqualTo("SECRET123");
         assertThat(user.getTotpEnabled()).isFalse();
         verify(userDao).update(user);
     }
@@ -603,12 +748,14 @@ class AuthServiceTest {
         User user = activeLocalUser();
         user.setTotpSecret("SECRET123");
         when(userDao.selectById(1L)).thenReturn(Optional.of(user));
-        when(totpService.verifyCode("SECRET123", "123456")).thenReturn(true);
+        when(totpService.matchStep("SECRET123", "123456")).thenReturn(Optional.of(100L));
         when(passwordEncoder.encode(any())).thenReturn("hashed-code");
 
         TwoFactorConfirmResponse response = authService.confirmTwoFactor(1L, "123456");
 
         assertThat(user.getTotpEnabled()).isTrue();
+        assertThat(user.getTotpLastStep()).isEqualTo(100L);
+        assertThat(user.getTotpSecret()).startsWith("enc:v1:");
         assertThat(response.recoveryCodes()).hasSize(8);
         verify(twoFactorRecoveryCodeDao).deleteByUserId(1L);
         verify(twoFactorRecoveryCodeDao, times(8)).insert(any());
@@ -619,7 +766,7 @@ class AuthServiceTest {
         User user = activeLocalUser();
         user.setTotpSecret("SECRET123");
         when(userDao.selectById(1L)).thenReturn(Optional.of(user));
-        when(totpService.verifyCode("SECRET123", "000000")).thenReturn(false);
+        when(totpService.matchStep("SECRET123", "000000")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.confirmTwoFactor(1L, "000000")).isInstanceOf(BadRequestException.class);
         assertThat(user.getTotpEnabled()).isNull();
@@ -633,7 +780,7 @@ class AuthServiceTest {
         when(userDao.selectById(1L)).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("password1", "hashed")).thenReturn(true);
 
-        authService.disableTwoFactor(1L, "password1");
+        authService.disableTwoFactor(1L, "password1", null);
 
         assertThat(user.getTotpEnabled()).isFalse();
         assertThat(user.getTotpSecret()).isNull();
@@ -647,7 +794,7 @@ class AuthServiceTest {
         when(userDao.selectById(1L)).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("wrong", "hashed")).thenReturn(false);
 
-        assertThatThrownBy(() -> authService.disableTwoFactor(1L, "wrong")).isInstanceOf(UnauthorizedException.class);
+        assertThatThrownBy(() -> authService.disableTwoFactor(1L, "wrong", null)).isInstanceOf(UnauthorizedException.class);
     }
 
     @Test
@@ -656,13 +803,16 @@ class AuthServiceTest {
         user.setTotpSecret("SECRET123");
         when(twoFactorChallengeStore.consumeChallenge("challenge-token")).thenReturn(Optional.of(1L));
         when(userDao.selectById(1L)).thenReturn(Optional.of(user));
-        when(totpService.verifyCode("SECRET123", "123456")).thenReturn(true);
+        when(totpService.matchStep("SECRET123", "123456")).thenReturn(Optional.of(100L));
         when(jwtUtil.generateToken(any(), any(), anyLong())).thenReturn("access-token");
 
         var response = authService.verifyTwoFactorLogin("challenge-token", "123456", null, null);
 
         assertThat(response.accessToken()).isEqualTo("access-token");
+        assertThat(user.getTotpLastStep()).isEqualTo(100L);
+        verify(userDao).update(user);
         verify(refreshTokenDao).insert(any());
+        verify(loginAttemptStore).reset("a@b.com");
     }
 
     @Test
@@ -671,7 +821,7 @@ class AuthServiceTest {
         user.setTotpSecret("SECRET123");
         when(twoFactorChallengeStore.consumeChallenge("challenge-token")).thenReturn(Optional.of(1L));
         when(userDao.selectById(1L)).thenReturn(Optional.of(user));
-        when(totpService.verifyCode("SECRET123", "recover1")).thenReturn(false);
+        when(totpService.matchStep("SECRET123", "recover1")).thenReturn(Optional.empty());
         TwoFactorRecoveryCode recoveryCode = new TwoFactorRecoveryCode();
         recoveryCode.setId(9L);
         recoveryCode.setUserId(1L);
@@ -693,11 +843,13 @@ class AuthServiceTest {
         user.setTotpSecret("SECRET123");
         when(twoFactorChallengeStore.consumeChallenge("challenge-token")).thenReturn(Optional.of(1L));
         when(userDao.selectById(1L)).thenReturn(Optional.of(user));
-        when(totpService.verifyCode("SECRET123", "000000")).thenReturn(false);
+        when(totpService.matchStep("SECRET123", "000000")).thenReturn(Optional.empty());
         when(twoFactorRecoveryCodeDao.selectUnusedByUserId(1L)).thenReturn(List.of());
 
         assertThatThrownBy(() -> authService.verifyTwoFactorLogin("challenge-token", "000000", null, null))
                 .isInstanceOf(UnauthorizedException.class);
+        verify(loginAttemptStore).recordFailure("a@b.com");
+        verify(loginAttemptStore, never()).reset(any());
     }
 
     @Test
@@ -1079,6 +1231,450 @@ class AuthServiceTest {
         when(familyInviteDao.selectByIdAndFamilyId(1L, 1L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.resendInvite(1L, 1L, 1L)).isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void verifyTwoFactorLogin_throwsTooManyRequests_whenEmailLockedOut() {
+        User user = activeLocalUser();
+        user.setTotpSecret("SECRET123");
+        when(twoFactorChallengeStore.consumeChallenge("challenge-token")).thenReturn(Optional.of(1L));
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(loginAttemptStore.remainingLockMinutes("a@b.com")).thenReturn(3L);
+
+        assertThatThrownBy(() -> authService.verifyTwoFactorLogin("challenge-token", "123456", null, null))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS));
+        verify(totpService, never()).matchStep(any(), any());
+    }
+
+    @Test
+    void verifyTwoFactorLogin_throwsForbidden_whenAccountLocked() {
+        User user = activeLocalUser();
+        user.setTotpSecret("SECRET123");
+        user.setLocked(true);
+        when(twoFactorChallengeStore.consumeChallenge("challenge-token")).thenReturn(Optional.of(1L));
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.verifyTwoFactorLogin("challenge-token", "123456", null, null))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
+        verify(refreshTokenDao, never()).insert(any());
+    }
+
+    @Test
+    void verifyTwoFactorLogin_rejectsReplayedTotpStep() {
+        User user = activeLocalUser();
+        user.setTotpSecret("SECRET123");
+        user.setTotpLastStep(100L);
+        when(twoFactorChallengeStore.consumeChallenge("challenge-token")).thenReturn(Optional.of(1L));
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(totpService.matchStep("SECRET123", "123456")).thenReturn(Optional.of(100L));
+        when(twoFactorRecoveryCodeDao.selectUnusedByUserId(1L)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> authService.verifyTwoFactorLogin("challenge-token", "123456", null, null))
+                .isInstanceOf(UnauthorizedException.class);
+        verify(userDao, never()).update(any());
+        verify(refreshTokenDao, never()).insert(any());
+    }
+
+    @Test
+    void verifyTwoFactorLogin_decryptsStoredSecret_beforeCheckingTheCode() {
+        User user = activeLocalUser();
+        String encrypted = totpSecretCipher.encrypt("SECRET123");
+        user.setTotpSecret(encrypted);
+        user.setTotpLastStep(99L);
+        when(twoFactorChallengeStore.consumeChallenge("challenge-token")).thenReturn(Optional.of(1L));
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(totpService.matchStep("SECRET123", "123456")).thenReturn(Optional.of(100L));
+        when(jwtUtil.generateToken(any(), any(), anyLong())).thenReturn("access-token");
+
+        authService.verifyTwoFactorLogin("challenge-token", "123456", null, null);
+
+        assertThat(user.getTotpSecret()).isEqualTo(encrypted);
+        assertThat(user.getTotpLastStep()).isEqualTo(100L);
+    }
+
+    @Test
+    void verifyTwoFactorLogin_reEncryptsLegacyPlaintextSecret_onSuccess() {
+        User user = activeLocalUser();
+        user.setTotpSecret("SECRET123");
+        when(twoFactorChallengeStore.consumeChallenge("challenge-token")).thenReturn(Optional.of(1L));
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(totpService.matchStep("SECRET123", "123456")).thenReturn(Optional.of(100L));
+        when(jwtUtil.generateToken(any(), any(), anyLong())).thenReturn("access-token");
+
+        authService.verifyTwoFactorLogin("challenge-token", "123456", null, null);
+
+        assertThat(user.getTotpSecret()).startsWith("enc:v1:");
+        assertThat(totpSecretCipher.decrypt(user.getTotpSecret())).isEqualTo("SECRET123");
+    }
+
+    @Test
+    void disableTwoFactor_acceptsTotpCode_whenAccountHasNoPassword() {
+        User user = passwordlessUserWithTwoFactor();
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(totpService.matchStep("SECRET123", "123456")).thenReturn(Optional.of(100L));
+
+        authService.disableTwoFactor(1L, null, "123456");
+
+        assertThat(user.getTotpEnabled()).isFalse();
+        assertThat(user.getTotpSecret()).isNull();
+        assertThat(user.getTotpLastStep()).isNull();
+        verify(twoFactorRecoveryCodeDao).deleteByUserId(1L);
+    }
+
+    @Test
+    void disableTwoFactor_acceptsRecoveryCode_whenAccountHasNoPassword() {
+        User user = passwordlessUserWithTwoFactor();
+        TwoFactorRecoveryCode recoveryCode = new TwoFactorRecoveryCode();
+        recoveryCode.setUserId(1L);
+        recoveryCode.setCodeHash("hashed-recovery");
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(totpService.matchStep("SECRET123", "abcdef123456")).thenReturn(Optional.empty());
+        when(twoFactorRecoveryCodeDao.selectUnusedByUserId(1L)).thenReturn(List.of(recoveryCode));
+        when(passwordEncoder.matches("abcdef123456", "hashed-recovery")).thenReturn(true);
+
+        authService.disableTwoFactor(1L, "  ", "abcdef123456");
+
+        assertThat(user.getTotpEnabled()).isFalse();
+        assertThat(recoveryCode.getUsedAt()).isNotNull();
+    }
+
+    @Test
+    void disableTwoFactor_throwsUnauthorized_whenCodeInvalid_forAccountWithoutPassword() {
+        User user = passwordlessUserWithTwoFactor();
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(totpService.matchStep("SECRET123", "000000")).thenReturn(Optional.empty());
+        when(twoFactorRecoveryCodeDao.selectUnusedByUserId(1L)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> authService.disableTwoFactor(1L, null, "000000"))
+                .isInstanceOf(UnauthorizedException.class);
+        assertThat(user.getTotpEnabled()).isTrue();
+        verify(twoFactorRecoveryCodeDao, never()).deleteByUserId(any());
+    }
+
+    @Test
+    void disableTwoFactor_throwsBadRequest_whenBothOrNeitherPasswordAndCodeGiven() {
+        User user = activeLocalUser();
+        user.setTotpEnabled(true);
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.disableTwoFactor(1L, "password1", "123456"))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> authService.disableTwoFactor(1L, null, null))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> authService.disableTwoFactor(1L, "", ""))
+                .isInstanceOf(BadRequestException.class);
+        assertThat(user.getTotpEnabled()).isTrue();
+    }
+
+    @Test
+    void disableTwoFactor_throwsBadRequest_whenAccountHasPasswordButOnlyCodeGiven() {
+        User user = activeLocalUser();
+        user.setTotpEnabled(true);
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.disableTwoFactor(1L, null, "123456"))
+                .isInstanceOf(BadRequestException.class);
+        verify(totpService, never()).matchStep(any(), any());
+    }
+
+    @Test
+    void requestEmailChange_storesPendingEmail_andPublishesVerificationEventToTheNewAddress() {
+        User user = activeLocalUser();
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password1", "hashed")).thenReturn(true);
+        when(userDao.selectByEmail("new@b.com")).thenReturn(Optional.empty());
+
+        var response = authService.requestEmailChange(1L, new ChangeEmailRequest("new@b.com", "password1", null));
+
+        assertThat(response.message()).contains("new@b.com");
+        assertThat(user.getEmail()).isEqualTo("a@b.com");
+        assertThat(user.getPendingEmail()).isEqualTo("new@b.com");
+        assertThat(user.getPendingEmailToken()).startsWith("ec.");
+        assertThat(user.getPendingEmailExpiresAt()).isAfter(LocalDateTime.now().plusHours(23));
+        verify(userDao).update(user);
+
+        ArgumentCaptor<UserVerificationEvent> captor = ArgumentCaptor.forClass(UserVerificationEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().email()).isEqualTo("new@b.com");
+        assertThat(captor.getValue().verificationToken()).isEqualTo(user.getPendingEmailToken());
+        assertThat(authService.isEmailChangeToken(user.getPendingEmailToken())).isTrue();
+    }
+
+    @Test
+    void requestEmailChange_throwsConflict_whenNewEmailAlreadyUsed() {
+        User user = activeLocalUser();
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password1", "hashed")).thenReturn(true);
+        when(userDao.selectByEmail("taken@b.com")).thenReturn(Optional.of(new User()));
+
+        assertThatThrownBy(() -> authService.requestEmailChange(1L, new ChangeEmailRequest("taken@b.com", "password1", null)))
+                .isInstanceOf(ConflictException.class);
+        verify(userDao, never()).update(any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void requestEmailChange_throwsUnauthorized_whenPasswordWrong() {
+        User user = activeLocalUser();
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("wrong", "hashed")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.requestEmailChange(1L, new ChangeEmailRequest("new@b.com", "wrong", null)))
+                .isInstanceOf(UnauthorizedException.class);
+        verify(userDao, never()).selectByEmail(any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void requestEmailChange_throwsBadRequest_whenSameAsCurrentEmail() {
+        User user = activeLocalUser();
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password1", "hashed")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.requestEmailChange(1L, new ChangeEmailRequest("A@B.com", "password1", null)))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void requestEmailChange_throwsBadRequest_whenProviderOnlyAccountHasNoTwoFactor() {
+        User user = activeLocalUser();
+        user.setPasswordHash(null);
+        user.setProvider("GOOGLE");
+        user.setTotpEnabled(false);
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.requestEmailChange(1L, new ChangeEmailRequest("new@b.com", null, "123456")))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("2FA");
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void requestEmailChange_acceptsTotpCode_forProviderOnlyAccountWithTwoFactor() {
+        User user = passwordlessUserWithTwoFactor();
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(totpService.matchStep("SECRET123", "123456")).thenReturn(Optional.of(100L));
+        when(userDao.selectByEmail("new@b.com")).thenReturn(Optional.empty());
+
+        authService.requestEmailChange(1L, new ChangeEmailRequest("new@b.com", null, "123456"));
+
+        assertThat(user.getPendingEmail()).isEqualTo("new@b.com");
+        assertThat(user.getTotpLastStep()).isEqualTo(100L);
+        verify(eventPublisher).publishEvent(any(UserVerificationEvent.class));
+    }
+
+    @Test
+    void requestEmailChange_throwsUnauthorized_whenTotpStepReplayed() {
+        User user = passwordlessUserWithTwoFactor();
+        user.setTotpLastStep(100L);
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(totpService.matchStep("SECRET123", "123456")).thenReturn(Optional.of(100L));
+
+        assertThatThrownBy(() -> authService.requestEmailChange(1L, new ChangeEmailRequest("new@b.com", null, "123456")))
+                .isInstanceOf(UnauthorizedException.class);
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void verifyEmailChange_swapsEmail_clearsPendingFields_andRevokesEverySession() {
+        User user = userWithPendingEmail(LocalDateTime.now().plusHours(1));
+        when(userDao.selectByPendingEmailToken("ec.tok")).thenReturn(Optional.of(user));
+        when(userDao.selectByEmail("new@b.com")).thenReturn(Optional.empty());
+        when(refreshTokenDao.selectActiveByUserId(1L)).thenReturn(List.of(refreshToken(2L, 1L)));
+
+        authService.verifyEmailChange("ec.tok");
+
+        assertThat(user.getEmail()).isEqualTo("new@b.com");
+        assertThat(user.getPendingEmail()).isNull();
+        assertThat(user.getPendingEmailToken()).isNull();
+        assertThat(user.getPendingEmailExpiresAt()).isNull();
+        verify(userDao).update(user);
+        verify(refreshTokenDao).revokeAllByUserId(1L);
+        verify(revokedSessionStore).markRevoked(2L, 15 * 60 * 1000L);
+    }
+
+    @Test
+    void verifyEmailChange_throwsBadRequest_whenTokenUnknown() {
+        when(userDao.selectByPendingEmailToken("ec.bad")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.verifyEmailChange("ec.bad")).isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void verifyEmailChange_throwsBadRequest_whenExpired() {
+        User user = userWithPendingEmail(LocalDateTime.now().minusMinutes(1));
+        when(userDao.selectByPendingEmailToken("ec.tok")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.verifyEmailChange("ec.tok")).isInstanceOf(BadRequestException.class);
+        assertThat(user.getEmail()).isEqualTo("a@b.com");
+        verify(userDao, never()).update(any());
+    }
+
+    @Test
+    void verifyEmailChange_throwsConflict_whenAddressTakenInTheMeantime() {
+        User user = userWithPendingEmail(LocalDateTime.now().plusHours(1));
+        User other = activeLocalUser();
+        other.setId(9L);
+        when(userDao.selectByPendingEmailToken("ec.tok")).thenReturn(Optional.of(user));
+        when(userDao.selectByEmail("new@b.com")).thenReturn(Optional.of(other));
+
+        assertThatThrownBy(() -> authService.verifyEmailChange("ec.tok")).isInstanceOf(ConflictException.class);
+        assertThat(user.getEmail()).isEqualTo("a@b.com");
+        verify(userDao, never()).update(any());
+    }
+
+    @Test
+    void isEmailChangeToken_distinguishesRegistrationTokens() {
+        assertThat(authService.isEmailChangeToken("ec.abc")).isTrue();
+        assertThat(authService.isEmailChangeToken("abc-DEF_123")).isFalse();
+        assertThat(authService.isEmailChangeToken(null)).isFalse();
+    }
+
+    @Test
+    void exportPersonalData_returnsProfileMembershipsAndSessions_withoutSecrets() {
+        User user = activeLocalUser();
+        user.setTotpSecret("SECRET123");
+        Family family = new Family();
+        family.setId(1L);
+        family.setName("Nhà Nguyễn");
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(familyMembershipDao.selectByUserId(1L)).thenReturn(List.of(membership(1L, 1L, "OWNER")));
+        when(familyDao.selectById(1L)).thenReturn(Optional.of(family));
+        when(refreshTokenDao.selectActiveByUserId(1L)).thenReturn(List.of(refreshToken(2L, 1L), refreshToken(3L, 1L)));
+
+        var result = authService.exportPersonalData(1L, 2L);
+
+        assertThat(result.profile().email()).isEqualTo("a@b.com");
+        assertThat(result.memberships()).hasSize(1);
+        assertThat(result.memberships().get(0).familyName()).isEqualTo("Nhà Nguyễn");
+        assertThat(result.sessions()).hasSize(2);
+        assertThat(result.sessions().get(0).isCurrent()).isTrue();
+        assertThat(result.toString()).doesNotContain("hashed", "SECRET123");
+    }
+
+    @Test
+    void deleteAccount_removesEverythingIncludingAFamilyLeftEmpty() {
+        User user = activeLocalUser();
+        FamilyMembership own = membership(1L, 1L, "OWNER");
+        Family family = new Family();
+        family.setId(1L);
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password1", "hashed")).thenReturn(true);
+        when(familyMembershipDao.selectByUserId(1L)).thenReturn(List.of(own));
+        when(familyMembershipDao.countByFamilyId(1L)).thenReturn(1L, 0L);
+        when(familyDao.selectById(1L)).thenReturn(Optional.of(family));
+
+        authService.deleteAccount(1L, new DeleteAccountRequest("password1", null));
+
+        verify(refreshTokenDao).deleteByUserId(1L);
+        verify(twoFactorRecoveryCodeDao).deleteByUserId(1L);
+        verify(familyInviteDao).deleteByInvitedByUserId(1L);
+        verify(familyMembershipDao).delete(own);
+        verify(userDao).delete(user);
+        verify(familyInviteDao).deleteByFamilyId(1L);
+        verify(familyDao).delete(family);
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void deleteAccount_keepsFamilyThatStillHasMembers_andPublishesMemberLeft() {
+        User user = activeLocalUser();
+        FamilyMembership own = membership(1L, 1L, "MEMBER");
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password1", "hashed")).thenReturn(true);
+        when(familyMembershipDao.selectByUserId(1L)).thenReturn(List.of(own));
+        when(familyMembershipDao.countByFamilyId(1L)).thenReturn(3L);
+
+        authService.deleteAccount(1L, new DeleteAccountRequest("password1", null));
+
+        verify(userDao).delete(user);
+        verify(familyDao, never()).delete(any());
+        verify(familyInviteDao, never()).deleteByFamilyId(any());
+        assertMemberEventPublished(FamilyMemberEvent.MEMBER_LEFT, 1L, 1L, "An");
+    }
+
+    @Test
+    void deleteAccount_throwsBadRequest_whenOwnerOfFamilyThatStillHasOtherMembers() {
+        User user = activeLocalUser();
+        Family family = new Family();
+        family.setId(1L);
+        family.setName("Nhà Nguyễn");
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password1", "hashed")).thenReturn(true);
+        when(familyMembershipDao.selectByUserId(1L)).thenReturn(List.of(membership(1L, 1L, "OWNER")));
+        when(familyMembershipDao.countByFamilyId(1L)).thenReturn(2L);
+        when(familyDao.selectById(1L)).thenReturn(Optional.of(family));
+
+        assertThatThrownBy(() -> authService.deleteAccount(1L, new DeleteAccountRequest("password1", null)))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("chuyển quyền chủ hộ");
+        verify(userDao, never()).delete(any());
+        verify(refreshTokenDao, never()).deleteByUserId(any());
+    }
+
+    @Test
+    void deleteAccount_throwsUnauthorized_whenPasswordWrong() {
+        User user = activeLocalUser();
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("wrong", "hashed")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.deleteAccount(1L, new DeleteAccountRequest("wrong", null)))
+                .isInstanceOf(UnauthorizedException.class);
+        verify(userDao, never()).delete(any());
+    }
+
+    @Test
+    void deleteAccount_throwsBadRequest_whenProviderOnlyAccountHasNoTwoFactor() {
+        User user = activeLocalUser();
+        user.setPasswordHash(null);
+        user.setProvider("GOOGLE");
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.deleteAccount(1L, new DeleteAccountRequest(null, "123456")))
+                .isInstanceOf(BadRequestException.class);
+        verify(userDao, never()).delete(any());
+    }
+
+    @Test
+    void deleteAccount_acceptsTotpCode_forProviderOnlyAccountWithTwoFactor() {
+        User user = passwordlessUserWithTwoFactor();
+        FamilyMembership own = membership(1L, 1L, "MEMBER");
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(totpService.matchStep("SECRET123", "123456")).thenReturn(Optional.of(100L));
+        when(familyMembershipDao.selectByUserId(1L)).thenReturn(List.of(own));
+        when(familyMembershipDao.countByFamilyId(1L)).thenReturn(2L);
+
+        authService.deleteAccount(1L, new DeleteAccountRequest(null, "123456"));
+
+        verify(userDao).delete(user);
+    }
+
+    private static String sha256(String value) {
+        try {
+            return HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static User passwordlessUserWithTwoFactor() {
+        User user = activeLocalUser();
+        user.setPasswordHash(null);
+        user.setProvider("GOOGLE");
+        user.setTotpEnabled(true);
+        user.setTotpSecret("SECRET123");
+        return user;
+    }
+
+    private static User userWithPendingEmail(LocalDateTime expiresAt) {
+        User user = activeLocalUser();
+        user.setPendingEmail("new@b.com");
+        user.setPendingEmailToken("ec.tok");
+        user.setPendingEmailExpiresAt(expiresAt);
+        return user;
     }
 
     private static RefreshToken refreshToken(Long id, Long userId) {

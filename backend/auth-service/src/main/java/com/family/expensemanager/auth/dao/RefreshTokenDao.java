@@ -45,4 +45,8 @@ public interface RefreshTokenDao {
     /** Revokes every other active session, keeping the one the request came from. */
     @Update(sqlFile = true)
     int revokeAllByUserIdExcept(Long userId, Long exceptId);
+
+    /** Revokes every active session of a user (admin lock, e-mail change). */
+    @Update(sqlFile = true)
+    int revokeAllByUserId(Long userId);
 }

@@ -11,11 +11,13 @@ public record UserAdminResponse(
         String familyName,
         Boolean active,
         String provider,
-        Boolean isSystemAdmin) {
+        Boolean isSystemAdmin,
+        Boolean locked) {
 
     public static UserAdminResponse from(User user, String familyName) {
         return new UserAdminResponse(
                 user.getId(), user.getEmail(), user.getDisplayName(), user.getRole(), user.getFamilyId(),
-                familyName, user.getActive(), user.getProvider(), Boolean.TRUE.equals(user.getIsSystemAdmin()));
+                familyName, user.getActive(), user.getProvider(), Boolean.TRUE.equals(user.getIsSystemAdmin()),
+                Boolean.TRUE.equals(user.getLocked()));
     }
 }

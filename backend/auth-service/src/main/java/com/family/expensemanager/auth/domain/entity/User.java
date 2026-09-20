@@ -56,12 +56,31 @@ public class User {
     /** Purely informational family label (Bố, Mẹ, Anh, Chị, Em, ...) — no business logic reads it. */
     private String relationship;
 
-    /** Base32 TOTP secret. Set as soon as 2FA setup starts, but only enforced once totpEnabled is true. */
+    /** Base32 TOTP secret, AES-GCM encrypted at rest (see TotpSecretCipher). Set as soon as 2FA setup starts, but only enforced once totpEnabled is true. */
     @Column(name = "totp_secret")
     private String totpSecret;
 
     @Column(name = "totp_enabled")
     private Boolean totpEnabled;
+
+    /** Last accepted TOTP time step; a code from that step or an older one is rejected (replay protection). */
+    @Column(name = "totp_last_step")
+    private Long totpLastStep;
+
+    /** Set by a system admin; a locked account cannot log in, refresh or switch family. */
+    private Boolean locked;
+
+    @Column(name = "locked_at")
+    private LocalDateTime lockedAt;
+
+    @Column(name = "pending_email")
+    private String pendingEmail;
+
+    @Column(name = "pending_email_token")
+    private String pendingEmailToken;
+
+    @Column(name = "pending_email_expires_at")
+    private LocalDateTime pendingEmailExpiresAt;
 
     public Long getId() {
         return id;
@@ -197,5 +216,53 @@ public class User {
 
     public void setTotpEnabled(Boolean totpEnabled) {
         this.totpEnabled = totpEnabled;
+    }
+
+    public Long getTotpLastStep() {
+        return totpLastStep;
+    }
+
+    public void setTotpLastStep(Long totpLastStep) {
+        this.totpLastStep = totpLastStep;
+    }
+
+    public Boolean getLocked() {
+        return locked;
+    }
+
+    public void setLocked(Boolean locked) {
+        this.locked = locked;
+    }
+
+    public LocalDateTime getLockedAt() {
+        return lockedAt;
+    }
+
+    public void setLockedAt(LocalDateTime lockedAt) {
+        this.lockedAt = lockedAt;
+    }
+
+    public String getPendingEmail() {
+        return pendingEmail;
+    }
+
+    public void setPendingEmail(String pendingEmail) {
+        this.pendingEmail = pendingEmail;
+    }
+
+    public String getPendingEmailToken() {
+        return pendingEmailToken;
+    }
+
+    public void setPendingEmailToken(String pendingEmailToken) {
+        this.pendingEmailToken = pendingEmailToken;
+    }
+
+    public LocalDateTime getPendingEmailExpiresAt() {
+        return pendingEmailExpiresAt;
+    }
+
+    public void setPendingEmailExpiresAt(LocalDateTime pendingEmailExpiresAt) {
+        this.pendingEmailExpiresAt = pendingEmailExpiresAt;
     }
 }
