@@ -27,6 +27,9 @@
   "githubComingSoon": "GitHub đăng nhập sắp ra mắt",
   "noAccount": "Chưa có tài khoản?",
   "registerLink": "Đăng ký gia đình mới",
-
-  "accountLocked": "Tài khoản đã bị khoá bởi quản trị viên"
+  "accountLocked": "Tài khoản đã bị khoá bởi quản trị viên",
+  "resendVerification": "Gửi lại email xác thực",
+  "resendVerificationSending": "Đang gửi...",
+  "resendVerificationSent": "Nếu tài khoản đang chờ xác thực, chúng tôi đã gửi lại email xác thực.",
+  "resendVerificationFailed": "Không gửi lại được email xác thực"
 }

@@ -45,6 +45,10 @@ auth:
   verification-token-ttl-hours: 24
   reset-password-token-ttl-hours: 1
   invite-token-ttl-hours: 72
+  # Accounts that never verified their email are deleted this many days after their token expired.
+  unverified-cleanup:
+    retention-days: 7
+    cron: "0 30 2 * * *"
   # AES-256 key (base64 of 32 bytes) encrypting TOTP secrets at rest. Required, no default: set
   # TOTP_ENCRYPTION_KEY in infra/.env. To rotate, put the old key in TOTP_ENCRYPTION_KEY_PREVIOUS for one
   # startup (secrets are re-encrypted automatically), then remove it.
@@ -65,6 +69,7 @@ kafka:
     password-reset: password-reset
     family-invite: family-invite
     family-member-events: family-member-events
+    user-registered: user-registered
 
 management:
   endpoints:

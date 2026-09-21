@@ -16,12 +16,19 @@ const emptyPage = { content: [], page: 0, size: PAGE_SIZE, totalElements: 0, tot
  * (create/update/delete) — same as calling nothing, since it's the same function
  * `useEffect` already re-runs on `page`/`url` change.
  */
-export function usePagedList(url) {
+export function usePagedList(url, params) {
   const [page, setPage] = useState(0);
   const [pageData, setPageData] = useState(emptyPage);
+  const paramsKey = JSON.stringify(params ?? {});
+  const [lastParamsKey, setLastParamsKey] = useState(paramsKey);
+  if (lastParamsKey !== paramsKey) {
+    // A new search/filter must start from the first page, and React re-renders right away so no fetch runs with the stale page.
+    setLastParamsKey(paramsKey);
+    setPage(0);
+  }
 
   const load = useCallback(() => {
-    client.get(url, { params: { page, size: PAGE_SIZE } }).then((res) => {
+    client.get(url, { params: { ...JSON.parse(paramsKey), page, size: PAGE_SIZE } }).then((res) => {
       const data = res.data.data;
       if (data.content.length === 0 && data.page > 0 && data.totalElements > 0) {
         setPage(data.page - 1);
@@ -29,7 +36,7 @@ export function usePagedList(url) {
         setPageData(data);
       }
     });
-  }, [url, page]);
+  }, [url, page, paramsKey]);
 
   useEffect(load, [load]);
 

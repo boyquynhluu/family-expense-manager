@@ -1,5 +1,6 @@
 package com.family.expensemanager.auth.dao;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,6 +37,12 @@ public interface UserDao {
     List<User> selectAllWithTotpSecret();
 
     @Select
+    List<String> selectSystemAdminEmails();
+
+    @Select
+    List<User> selectStaleUnverified(LocalDateTime cutoff);
+
+    @Select
     Optional<User> selectByVerificationToken(String verificationToken);
 
     @Select
@@ -48,10 +55,10 @@ public interface UserDao {
     Optional<User> selectByProviderAndProviderId(String provider, String providerId);
 
     @Select
-    long countAll();
+    long countBySearch(String pattern);
 
     @Select
-    List<User> selectAllPaged(int limit, int offset);
+    List<User> selectBySearchPaged(String pattern, int limit, int offset);
 
     @Select
     long countByFamilyId(Long familyId);

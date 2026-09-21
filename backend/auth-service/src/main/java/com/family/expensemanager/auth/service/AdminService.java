@@ -3,6 +3,7 @@ package com.family.expensemanager.auth.service;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -42,6 +43,7 @@ public class AdminService {
 
     private static final String ROLE_OWNER = "OWNER";
     private static final int MAX_PAGE_SIZE = 100;
+    private static final int MAX_KEYWORD_LENGTH = 100;
 
     private final FamilyDao familyDao;
     private final UserDao userDao;
@@ -49,23 +51,25 @@ public class AdminService {
     private final AuthService authService;
 
     @PreAuthorize("hasRole('ADMIN')")
-    public PageResponse<FamilyAdminResponse> listFamiliesPaged(int page, int size) {
-        log.info("listFamiliesPaged - start, page={}, size={}", page, size);
+    public PageResponse<FamilyAdminResponse> listFamiliesPaged(int page, int size, String keyword) {
+        log.info("listFamiliesPaged - start, page={}, size={}, keyword={}", page, size, keyword);
         validatePage(page, size);
-        long totalElements = familyDao.countAll();
+        String pattern = likePattern(keyword);
+        long totalElements = familyDao.countBySearch(pattern);
         // Per-row enrichment (memberships + owner lookup) only runs for this page's rows.
-        List<FamilyAdminResponse> content = familyDao.selectAllPaged(size, page * size).stream()
+        List<FamilyAdminResponse> content = familyDao.selectBySearchPaged(pattern, size, page * size).stream()
                 .map(this::toFamilyAdminResponse)
                 .toList();
         return PageResponse.of(content, page, size, totalElements);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
-    public PageResponse<UserAdminResponse> listUsersPaged(int page, int size) {
-        log.info("listUsersPaged - start, page={}, size={}", page, size);
+    public PageResponse<UserAdminResponse> listUsersPaged(int page, int size, String keyword) {
+        log.info("listUsersPaged - start, page={}, size={}, keyword={}", page, size, keyword);
         validatePage(page, size);
-        long totalElements = userDao.countAll();
-        List<User> users = userDao.selectAllPaged(size, page * size);
+        String pattern = likePattern(keyword);
+        long totalElements = userDao.countBySearch(pattern);
+        List<User> users = userDao.selectBySearchPaged(pattern, size, page * size);
         // Resolve family names only for the families referenced by this page's users.
         Map<Long, String> familyNames = new HashMap<>();
         Set<Long> familyIds = users.stream()
@@ -79,6 +83,22 @@ public class AdminService {
                 .map(u -> UserAdminResponse.from(u, familyNames.get(u.getFamilyId())))
                 .toList();
         return PageResponse.of(content, page, size, totalElements);
+    }
+
+    /** Case-insensitive contains-pattern for `LIKE ... ESCAPE '!'`; null when there is nothing to search for. */
+    private static String likePattern(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return null;
+        }
+        String trimmed = keyword.trim();
+        if (trimmed.length() > MAX_KEYWORD_LENGTH) {
+            throw new BadRequestException("Từ khoá tìm kiếm tối đa " + MAX_KEYWORD_LENGTH + " ký tự");
+        }
+        String escaped = trimmed.toLowerCase(Locale.ROOT)
+                .replace("!", "!!")
+                .replace("%", "!%")
+                .replace("_", "!_");
+        return "%" + escaped + "%";
     }
 
     private static void validatePage(int page, int size) {

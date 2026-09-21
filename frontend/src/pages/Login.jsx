@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
-import { oauth2AuthorizationUrl } from "../api/client";
+import client, { oauth2AuthorizationUrl } from "../api/client";
 import { EyeIcon, EyeOffIcon, FacebookIcon, GithubIcon, GoogleIcon, KeyIcon, MailIcon } from "../components/AuthIcons";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuth } from "../hooks/useAuth";
@@ -22,6 +22,7 @@ export default function Login() {
       : ""
   );
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
 
   // Set only when the backend says the account has 2FA enabled (README "9. Không có
   // 2FA") — while set, the form below switches to asking for the 6-digit code instead
@@ -56,6 +57,22 @@ export default function Login() {
       setError(err.response?.data?.message || t("loginFailed"));
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Must match AuthService.NOT_VERIFIED_MESSAGE on the backend.
+  const showResendVerification = error.includes("chưa được xác thực");
+
+  async function handleResendVerification() {
+    if (!email) return;
+    setResending(true);
+    try {
+      const res = await client.post("/auth/resend-verification", { email });
+      toast.success(res.data.data?.message || t("resendVerificationSent"));
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("resendVerificationFailed"));
+    } finally {
+      setResending(false);
     }
   }
 
@@ -126,6 +143,11 @@ export default function Login() {
           <p className="auth-card-subtitle">{t("subtitle")}</p>
 
           {error && <p className="error-text">{error}</p>}
+          {showResendVerification && (
+            <button type="button" className="auth-forgot" onClick={handleResendVerification} disabled={resending}>
+              {resending ? t("resendVerificationSending") : t("resendVerification")}
+            </button>
+          )}
 
           <div className="auth-input-group no-required-mark">
             <span className="auth-input-icon">

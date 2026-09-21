@@ -12,6 +12,9 @@
   "subtitle": "View all families and users, and grant admin privileges",
 
   "familyListTitle": "Families ({{count}})",
+  "searchFamiliesPlaceholder": "Search by family name",
+  "searchUsersPlaceholder": "Search by email or display name",
+  "noSearchResults": "No matching results",
   "noFamilies": "No families yet",
   "familyNameHeader": "Family name",
   "ownerHeader": "Owner",

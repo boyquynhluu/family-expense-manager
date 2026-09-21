@@ -26,8 +26,8 @@ public interface FamilyDao {
     Optional<Family> selectById(Long id);
 
     @Select
-    long countAll();
+    long countBySearch(String pattern);
 
     @Select
-    List<Family> selectAllPaged(int limit, int offset);
+    List<Family> selectBySearchPaged(String pattern, int limit, int offset);
 }

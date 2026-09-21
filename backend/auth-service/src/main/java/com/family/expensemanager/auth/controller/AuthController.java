@@ -16,6 +16,7 @@ import com.family.expensemanager.auth.dto.PendingInviteResponse;
 import com.family.expensemanager.auth.dto.PersonalDataExportResponse;
 import com.family.expensemanager.auth.dto.RefreshRequest;
 import com.family.expensemanager.auth.dto.RegisterRequest;
+import com.family.expensemanager.auth.dto.ResendVerificationRequest;
 import com.family.expensemanager.auth.dto.RenameFamilyRequest;
 import com.family.expensemanager.auth.dto.ResetPasswordRequest;
 import com.family.expensemanager.auth.dto.SessionResponse;
@@ -69,6 +70,12 @@ public class AuthController {
     public ApiResponse<MessageResponse> register(@Valid @RequestBody RegisterRequest request) {
         log.info("register - start, email={}", request.email());
         return ApiResponse.ok(authService.register(request));
+    }
+
+    @PostMapping("/resend-verification")
+    public ApiResponse<MessageResponse> resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
+        log.info("resendVerification - start, email={}", request.email());
+        return ApiResponse.ok(authService.resendVerification(request));
     }
 
     @GetMapping("/verify")

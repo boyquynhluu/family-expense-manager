@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Có người dùng mới đăng ký</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:Arial,Helvetica,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;padding:32px 0;">
+    <tr>
+        <td align="center">
+            <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+                <tr>
+                    <td style="background-color:#2f6feb;padding:24px 32px;">
+                        <span style="color:#ffffff;font-size:20px;font-weight:bold;">Family Expense Manager</span>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding:32px;">
+                        <p style="font-size:16px;color:#1f2933;margin:0 0 16px;">Xin chào quản trị viên,</p>
+                        <p style="font-size:14px;color:#3e4c59;line-height:1.6;margin:0 0 20px;">
+                            Vừa có một người dùng mới đăng ký vào hệ thống:
+                        </p>
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;color:#1f2933;border:1px solid #e4e7eb;border-radius:6px;">
+                            <tr>
+                                <td style="padding:10px 14px;color:#7b8794;width:38%;border-bottom:1px solid #e4e7eb;">Tên hiển thị</td>
+                                <td style="padding:10px 14px;border-bottom:1px solid #e4e7eb;"><strong>{{displayName}}</strong></td>
+                            </tr>
+                            <tr>
+                                <td style="padding:10px 14px;color:#7b8794;border-bottom:1px solid #e4e7eb;">Email</td>
+                                <td style="padding:10px 14px;border-bottom:1px solid #e4e7eb;">{{email}}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding:10px 14px;color:#7b8794;border-bottom:1px solid #e4e7eb;">Gia đình</td>
+                                <td style="padding:10px 14px;border-bottom:1px solid #e4e7eb;">{{familyName}}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding:10px 14px;color:#7b8794;border-bottom:1px solid #e4e7eb;">Đăng ký qua</td>
+                                <td style="padding:10px 14px;border-bottom:1px solid #e4e7eb;">{{sourceLabel}}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding:10px 14px;color:#7b8794;border-bottom:1px solid #e4e7eb;">Trạng thái email</td>
+                                <td style="padding:10px 14px;border-bottom:1px solid #e4e7eb;">{{statusLabel}}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding:10px 14px;color:#7b8794;">Thời điểm</td>
+                                <td style="padding:10px 14px;">{{registeredAt}}</td>
+                            </tr>
+                        </table>
+                        <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:24px;">
+                            <tr>
+                                <td style="border-radius:6px;background-color:#2f6feb;">
+                                    <a href="{{adminLink}}" style="display:inline-block;padding:12px 28px;font-size:14px;color:#ffffff;text-decoration:none;font-weight:bold;">
+                                        Mở trang quản trị
+                                    </a>
+                                </td>
+                            </tr>
+                        </table>
+                        <p style="font-size:13px;color:#7b8794;line-height:1.6;margin:24px 0 0;">
+                            Bạn nhận được email này vì bạn là quản trị viên hệ thống Family Expense Manager.
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

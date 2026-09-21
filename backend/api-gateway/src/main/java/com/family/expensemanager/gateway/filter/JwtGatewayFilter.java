@@ -38,6 +38,7 @@ public class JwtGatewayFilter extends OncePerRequestFilter implements Ordered {
             "/api/auth/login",
             "/api/auth/refresh",
             "/api/auth/verify",
+            "/api/auth/resend-verification",
             "/api/auth/verify-email-change",
             "/api/auth/forgot-password",
             "/api/auth/reset-password",

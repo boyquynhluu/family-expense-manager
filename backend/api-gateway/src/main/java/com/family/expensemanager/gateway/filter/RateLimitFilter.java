@@ -35,6 +35,7 @@ public class RateLimitFilter extends OncePerRequestFilter implements Ordered {
     private static final List<Rule> RULES = List.of(
             new Rule("POST", "/api/auth/login", 10, 60_000),
             new Rule("POST", "/api/auth/register", 5, 60_000),
+            new Rule("POST", "/api/auth/resend-verification", 3, 60_000),
             new Rule("POST", "/api/auth/forgot-password", 5, 60_000),
             new Rule("POST", "/api/auth/reset-password", 10, 60_000),
             new Rule("POST", "/api/auth/refresh", 30, 60_000));

@@ -1,9 +1,11 @@
+import { useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import Pagination from "../components/Pagination";
 import { confirmDialog } from "../utils/confirm";
 import { useAuth } from "../hooks/useAuth";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { usePagedList } from "../hooks/usePagedList";
 
 function formatDate(value) {
@@ -14,8 +16,16 @@ function formatDate(value) {
 export default function AdminPanel() {
   const { t } = useTranslation(["adminPanel", "common"]);
   const { userId } = useAuth();
-  const { pageData: familiesPage, setPage: setFamiliesPage } = usePagedList("/admin/families");
-  const { pageData: usersPage, setPage: setUsersPage, reload: reloadUsers } = usePagedList("/admin/users");
+  const [familyQuery, setFamilyQuery] = useState("");
+  const [userQuery, setUserQuery] = useState("");
+  const familySearch = useDebouncedValue(familyQuery.trim());
+  const userSearch = useDebouncedValue(userQuery.trim());
+  const { pageData: familiesPage, setPage: setFamiliesPage } = usePagedList("/admin/families", {
+    q: familySearch || undefined,
+  });
+  const { pageData: usersPage, setPage: setUsersPage, reload: reloadUsers } = usePagedList("/admin/users", {
+    q: userSearch || undefined,
+  });
   const families = familiesPage.content;
   const users = usersPage.content;
 
@@ -60,9 +70,20 @@ export default function AdminPanel() {
       </div>
 
       <div className="section-card">
-        <h2>{t("familyListTitle", { count: familiesPage.totalElements })}</h2>
+        <div className="table-toolbar">
+          <h2>{t("familyListTitle", { count: familiesPage.totalElements })}</h2>
+          <input
+            type="search"
+            className="table-search"
+            value={familyQuery}
+            onChange={(e) => setFamilyQuery(e.target.value)}
+            placeholder={t("searchFamiliesPlaceholder")}
+            aria-label={t("searchFamiliesPlaceholder")}
+            maxLength={100}
+          />
+        </div>
         {families.length === 0 ? (
-          <p className="empty-state">{t("noFamilies")}</p>
+          <p className="empty-state">{familySearch ? t("noSearchResults") : t("noFamilies")}</p>
         ) : (
           <table>
             <thead>
@@ -91,9 +112,20 @@ export default function AdminPanel() {
       </div>
 
       <div className="section-card">
-        <h2>{t("userListTitle", { count: usersPage.totalElements })}</h2>
+        <div className="table-toolbar">
+          <h2>{t("userListTitle", { count: usersPage.totalElements })}</h2>
+          <input
+            type="search"
+            className="table-search"
+            value={userQuery}
+            onChange={(e) => setUserQuery(e.target.value)}
+            placeholder={t("searchUsersPlaceholder")}
+            aria-label={t("searchUsersPlaceholder")}
+            maxLength={100}
+          />
+        </div>
         {users.length === 0 ? (
-          <p className="empty-state">{t("noUsers")}</p>
+          <p className="empty-state">{userSearch ? t("noSearchResults") : t("noUsers")}</p>
         ) : (
           <table>
             <thead>

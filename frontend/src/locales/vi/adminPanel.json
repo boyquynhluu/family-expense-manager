@@ -12,6 +12,9 @@
   "subtitle": "Xem toàn bộ gia đình và người dùng, cấp quyền admin",
 
   "familyListTitle": "Danh sách gia đình ({{count}})",
+  "searchFamiliesPlaceholder": "Tìm theo tên gia đình",
+  "searchUsersPlaceholder": "Tìm theo email hoặc tên hiển thị",
+  "noSearchResults": "Không tìm thấy kết quả phù hợp",
   "noFamilies": "Chưa có gia đình nào",
   "familyNameHeader": "Tên gia đình",
   "ownerHeader": "Chủ hộ",

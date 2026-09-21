@@ -21,6 +21,7 @@ import com.family.expensemanager.auth.dto.InviteMemberRequest;
 import com.family.expensemanager.auth.dto.LoginRequest;
 import com.family.expensemanager.auth.dto.RefreshRequest;
 import com.family.expensemanager.auth.dto.RegisterRequest;
+import com.family.expensemanager.auth.dto.ResendVerificationRequest;
 import com.family.expensemanager.auth.dto.RenameFamilyRequest;
 import com.family.expensemanager.auth.dto.ResetPasswordRequest;
 import com.family.expensemanager.auth.dto.TransferOwnershipRequest;
@@ -32,6 +33,7 @@ import com.family.expensemanager.auth.security.TotpSecretCipher;
 import com.family.expensemanager.auth.security.TotpService;
 import com.family.expensemanager.auth.security.TwoFactorChallengeStore;
 import com.family.expensemanager.common.event.FamilyInviteEvent;
+import com.family.expensemanager.common.event.NewUserRegisteredEvent;
 import com.family.expensemanager.common.event.FamilyMemberEvent;
 import com.family.expensemanager.common.event.PasswordResetEvent;
 import com.family.expensemanager.common.event.UserVerificationEvent;
@@ -66,6 +68,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -136,6 +139,71 @@ class AuthServiceTest {
         assertThat(inserted.getLocked()).isFalse();
 
         verify(eventPublisher).publishEvent(any(UserVerificationEvent.class));
+    }
+
+    @Test
+    void register_notifiesSystemAdmins_withUnverifiedLocalSignUp() {
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.encode("password1")).thenReturn("hashed");
+        when(userDao.selectSystemAdminEmails()).thenReturn(List.of("admin1@x.com", "admin2@x.com"));
+
+        authService.register(new RegisterRequest("Nhà Nguyễn", "a@b.com", "password1", "An"));
+
+        NewUserRegisteredEvent event = capturedNewUserEvent();
+        assertThat(event).isNotNull();
+        assertThat(event.email()).isEqualTo("a@b.com");
+        assertThat(event.displayName()).isEqualTo("An");
+        assertThat(event.familyName()).isEqualTo("Nhà Nguyễn");
+        assertThat(event.source()).isEqualTo(NewUserRegisteredEvent.SOURCE_LOCAL);
+        assertThat(event.emailVerified()).isFalse();
+        assertThat(event.adminEmails()).containsExactly("admin1@x.com", "admin2@x.com");
+    }
+
+    @Test
+    void register_doesNotPublishAdminEvent_whenThereIsNoSystemAdmin() {
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.encode("password1")).thenReturn("hashed");
+
+        authService.register(new RegisterRequest("F", "a@b.com", "password1", "An"));
+
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, atLeastOnce()).publishEvent(captor.capture());
+        assertThat(captor.getAllValues()).noneMatch(NewUserRegisteredEvent.class::isInstance);
+    }
+
+    @Test
+    void processOAuth2User_notifiesSystemAdmins_whenGoogleCreatesBrandNewAccount() {
+        when(userDao.selectSystemAdminEmails()).thenReturn(List.of("admin@x.com"));
+
+        authService.processOAuth2User("GOOGLE", "g-1", "new@b.com", "Nam");
+
+        NewUserRegisteredEvent event = capturedNewUserEvent();
+        assertThat(event).isNotNull();
+        assertThat(event.email()).isEqualTo("new@b.com");
+        assertThat(event.source()).isEqualTo(NewUserRegisteredEvent.SOURCE_GOOGLE);
+        assertThat(event.emailVerified()).isTrue();
+        assertThat(event.familyName()).isEqualTo("Nam's Family");
+        assertThat(event.adminEmails()).containsExactly("admin@x.com");
+    }
+
+    @Test
+    void acceptInvite_notifiesSystemAdmins_whenInviteCreatesNewAccount() {
+        FamilyInvite invite = validInvite();
+        when(familyInviteDao.selectByToken("tok")).thenReturn(Optional.of(invite));
+        when(userDao.selectByEmail("invitee@b.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.encode("password1")).thenReturn("hashed");
+        Family family = new Family();
+        family.setName("Nhà Lan");
+        when(familyDao.selectById(invite.getFamilyId())).thenReturn(Optional.of(family));
+        when(userDao.selectSystemAdminEmails()).thenReturn(List.of("admin@x.com"));
+
+        authService.acceptInvite("tok", new AcceptInviteRequest("Invitee", "password1"));
+
+        NewUserRegisteredEvent event = capturedNewUserEvent();
+        assertThat(event).isNotNull();
+        assertThat(event.source()).isEqualTo(NewUserRegisteredEvent.SOURCE_INVITE);
+        assertThat(event.familyName()).isEqualTo("Nhà Lan");
+        assertThat(event.emailVerified()).isTrue();
     }
 
     @Test
@@ -1729,5 +1797,180 @@ class AuthServiceTest {
         invite.setExpiresAt(LocalDateTime.now().plusHours(1));
         invite.setCreatedAt(LocalDateTime.now());
         return invite;
+    }
+
+    private NewUserRegisteredEvent capturedNewUserEvent() {
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, atLeastOnce()).publishEvent(captor.capture());
+        return captor.getAllValues().stream()
+                .filter(NewUserRegisteredEvent.class::isInstance)
+                .map(NewUserRegisteredEvent.class::cast)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private User pendingLocalUser() {
+        User user = new User();
+        user.setId(9L);
+        user.setFamilyId(4L);
+        user.setEmail("a@b.com");
+        user.setPasswordHash("old-hash");
+        user.setDisplayName("Old Name");
+        user.setActive(false);
+        user.setLocked(false);
+        user.setProvider("LOCAL");
+        user.setVerificationToken("old-token");
+        user.setVerificationTokenExpiresAt(LocalDateTime.now().minusDays(3));
+        return user;
+    }
+
+    @Test
+    void register_reRegistersOverPendingAccount_withNewTokenAndVerificationEmail() {
+        User pending = pendingLocalUser();
+        Family family = new Family();
+        family.setId(4L);
+        family.setName("Old Family");
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(pending));
+        when(familyDao.selectById(4L)).thenReturn(Optional.of(family));
+        when(passwordEncoder.encode("new-password1")).thenReturn("new-hash");
+
+        var response = authService.register(new RegisterRequest("New Family", "a@b.com", "new-password1", "New Name"));
+
+        assertThat(response.message()).contains("Đăng ký thành công");
+        assertThat(pending.getPasswordHash()).isEqualTo("new-hash");
+        assertThat(pending.getDisplayName()).isEqualTo("New Name");
+        assertThat(pending.getVerificationToken()).isNotBlank().isNotEqualTo("old-token");
+        assertThat(pending.getVerificationTokenExpiresAt()).isAfter(LocalDateTime.now());
+        assertThat(pending.getActive()).isFalse();
+        assertThat(family.getName()).isEqualTo("New Family");
+        verify(familyDao).update(family);
+        verify(userDao).update(pending);
+        verify(userDao, never()).insert(any());
+        verify(familyDao, never()).insert(any());
+
+        ArgumentCaptor<UserVerificationEvent> captor = ArgumentCaptor.forClass(UserVerificationEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().verificationToken()).isEqualTo(pending.getVerificationToken());
+    }
+
+    @Test
+    void register_reRegistering_doesNotRotateTokenOrResend_whenLastEmailIsStillFresh() {
+        User pending = pendingLocalUser();
+        pending.setVerificationTokenExpiresAt(LocalDateTime.now().plusHours(24).minusSeconds(10));
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(pending));
+        when(familyDao.selectById(4L)).thenReturn(Optional.empty());
+        when(passwordEncoder.encode("new-password1")).thenReturn("new-hash");
+
+        authService.register(new RegisterRequest("F", "a@b.com", "new-password1", "New Name"));
+
+        assertThat(pending.getVerificationToken()).isEqualTo("old-token");
+        assertThat(pending.getPasswordHash()).isEqualTo("new-hash");
+        verify(userDao).update(pending);
+        verify(eventPublisher, never()).publishEvent(any(UserVerificationEvent.class));
+    }
+
+    @Test
+    void register_stillConflicts_whenExistingAccountIsVerified() {
+        User verified = pendingLocalUser();
+        verified.setActive(true);
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(verified));
+
+        assertThatThrownBy(() -> authService.register(new RegisterRequest("F", "a@b.com", "password1", "An")))
+                .isInstanceOf(ConflictException.class);
+        verify(userDao, never()).update(any());
+    }
+
+    @Test
+    void register_stillConflicts_whenExistingAccountCameFromAnotherProvider() {
+        User google = pendingLocalUser();
+        google.setProvider("GOOGLE");
+        google.setPasswordHash(null);
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(google));
+
+        assertThatThrownBy(() -> authService.register(new RegisterRequest("F", "a@b.com", "password1", "An")))
+                .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void resendVerification_sendsNewTokenEmail_toPendingAccount() {
+        User pending = pendingLocalUser();
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(pending));
+
+        var response = authService.resendVerification(new ResendVerificationRequest("a@b.com"));
+
+        assertThat(response.message()).contains("Nếu tài khoản đang chờ xác thực");
+        assertThat(pending.getVerificationToken()).isNotEqualTo("old-token");
+        verify(userDao).update(pending);
+        verify(eventPublisher).publishEvent(any(UserVerificationEvent.class));
+    }
+
+    @Test
+    void resendVerification_answersTheSameAndSendsNothing_forUnknownVerifiedOrRecentlySentAccounts() {
+        when(userDao.selectByEmail("nobody@b.com")).thenReturn(Optional.empty());
+        User verified = pendingLocalUser();
+        verified.setActive(true);
+        when(userDao.selectByEmail("verified@b.com")).thenReturn(Optional.of(verified));
+        User fresh = pendingLocalUser();
+        fresh.setVerificationTokenExpiresAt(LocalDateTime.now().plusHours(24).minusSeconds(5));
+        when(userDao.selectByEmail("fresh@b.com")).thenReturn(Optional.of(fresh));
+
+        var unknown = authService.resendVerification(new ResendVerificationRequest("nobody@b.com"));
+        var verifiedResult = authService.resendVerification(new ResendVerificationRequest("verified@b.com"));
+        var freshResult = authService.resendVerification(new ResendVerificationRequest("fresh@b.com"));
+
+        assertThat(verifiedResult.message()).isEqualTo(unknown.message());
+        assertThat(freshResult.message()).isEqualTo(unknown.message());
+        assertThat(fresh.getVerificationToken()).isEqualTo("old-token");
+        verify(eventPublisher, never()).publishEvent(any(UserVerificationEvent.class));
+    }
+
+    @Test
+    void login_unverifiedAccount_isRejectedWithTheNotVerifiedMessage() {
+        User pending = pendingLocalUser();
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(pending));
+        when(passwordEncoder.matches("password1", "old-hash")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest("a@b.com", "password1"), null, null))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage(AuthService.NOT_VERIFIED_MESSAGE);
+    }
+
+    @Test
+    void purgeStaleUnverifiedAccounts_removesAccountAndItsEmptyFamily() {
+        User stale = pendingLocalUser();
+        FamilyMembership membership = new FamilyMembership();
+        membership.setUserId(9L);
+        membership.setFamilyId(4L);
+        membership.setRole("OWNER");
+        Family family = new Family();
+        family.setId(4L);
+        when(userDao.selectStaleUnverified(any(LocalDateTime.class))).thenReturn(List.of(stale));
+        when(familyMembershipDao.selectByUserId(9L)).thenReturn(List.of(membership));
+        when(familyMembershipDao.countByFamilyId(4L)).thenReturn(1L, 0L);
+        when(familyDao.selectById(4L)).thenReturn(Optional.of(family));
+
+        int purged = authService.purgeStaleUnverifiedAccounts(7);
+
+        assertThat(purged).isEqualTo(1);
+        verify(familyMembershipDao).delete(membership);
+        verify(userDao).delete(stale);
+        verify(familyDao).delete(family);
+    }
+
+    @Test
+    void purgeStaleUnverifiedAccounts_skipsOwnerOfFamilyThatStillHasOtherMembers() {
+        User stale = pendingLocalUser();
+        FamilyMembership membership = new FamilyMembership();
+        membership.setUserId(9L);
+        membership.setFamilyId(4L);
+        membership.setRole("OWNER");
+        when(userDao.selectStaleUnverified(any(LocalDateTime.class))).thenReturn(List.of(stale));
+        when(familyMembershipDao.selectByUserId(9L)).thenReturn(List.of(membership));
+        when(familyMembershipDao.countByFamilyId(4L)).thenReturn(3L);
+
+        int purged = authService.purgeStaleUnverifiedAccounts(7);
+
+        assertThat(purged).isZero();
+        verify(userDao, never()).delete(any());
     }
 }
