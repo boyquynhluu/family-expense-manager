@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { EditIcon, TrashIcon } from "../components/AppIcons";
+import AmountInput from "../components/AmountInput";
 import Pagination from "../components/Pagination";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
@@ -207,14 +208,7 @@ export default function RecurringTransactions() {
                 {t("recurringTransactions:amountLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <input
-                type="number"
-                step="0.01"
-                placeholder="0"
-                value={form.amount}
-                onChange={(e) => updateField("amount", e.target.value)}
-                required
-              />
+              <AmountInput placeholder="0" value={form.amount} onChange={(v) => updateField("amount", v)} required />
             </label>
             <label className="field">
               <span>

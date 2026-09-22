@@ -69,6 +69,7 @@ import com.family.expensemanager.auth.security.TotpService;
 import com.family.expensemanager.auth.security.TwoFactorChallengeStore;
 import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.event.FamilyInviteEvent;
+import com.family.expensemanager.common.message.Messages;
 import com.family.expensemanager.common.event.FamilyMemberEvent;
 import com.family.expensemanager.common.event.NewUserRegisteredEvent;
 import com.family.expensemanager.common.event.PasswordResetEvent;
@@ -95,17 +96,10 @@ public class AuthService {
 
     private static final int RECOVERY_CODE_COUNT = 8;
 
-    private static final String BAD_CREDENTIALS_MESSAGE = "Email hoặc mật khẩu không đúng";
-    /** Frontend detects this text on a failed login to offer "resend verification email" — keep in sync with Login.jsx. */
-    public static final String NOT_VERIFIED_MESSAGE = "Tài khoản chưa được xác thực email. Vui lòng kiểm tra hộp thư.";
-    private static final String REGISTER_SUCCESS_MESSAGE = "Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.";
-    private static final String RESEND_VERIFICATION_MESSAGE = "Nếu tài khoản đang chờ xác thực, chúng tôi đã gửi lại email xác thực.";
     /** A verification email is not re-sent (and its token not rotated) while the previous one is younger than this. */
     private static final long VERIFICATION_RESEND_COOLDOWN_SECONDS = 60;
     /** Same idea for the password reset email: no second email (and the live token is reused) within this window. */
     private static final long RESET_EMAIL_COOLDOWN_SECONDS = 60;
-    private static final String ACCOUNT_LOCKED_MESSAGE = "Tài khoản đã bị khoá bởi quản trị viên";
-    private static final String INVALID_TWO_FACTOR_CODE_MESSAGE = "Mã xác thực không đúng hoặc đã được sử dụng";
     /** Lets the shared /verify link (built by notification-service) tell an e-mail change token from a registration token; base64url never contains '.'. */
     private static final String EMAIL_CHANGE_TOKEN_PREFIX = "ec.";
     public static final String OAUTH2_ACCOUNT_LOCKED_ERROR = "account_locked";
@@ -123,6 +117,7 @@ public class AuthService {
     private final TwoFactorChallengeStore twoFactorChallengeStore;
     private final LoginAttemptStore loginAttemptStore;
     private final TotpSecretCipher totpSecretCipher;
+    private final Messages messages;
     private final ApplicationEventPublisher eventPublisher;
     private final long accessTokenTtlMillis;
     private final Duration refreshTokenTtl;
@@ -143,6 +138,7 @@ public class AuthService {
                         TwoFactorChallengeStore twoFactorChallengeStore,
                         LoginAttemptStore loginAttemptStore,
                         TotpSecretCipher totpSecretCipher,
+                        Messages messages,
                         ApplicationEventPublisher eventPublisher,
                         @Value("${jwt.access-token-ttl-minutes}") long accessTokenTtlMinutes,
                         @Value("${jwt.refresh-token-ttl-days}") long refreshTokenTtlDays,
@@ -162,6 +158,7 @@ public class AuthService {
         this.twoFactorChallengeStore = twoFactorChallengeStore;
         this.loginAttemptStore = loginAttemptStore;
         this.totpSecretCipher = totpSecretCipher;
+        this.messages = messages;
         this.eventPublisher = eventPublisher;
         this.accessTokenTtlMillis = Duration.ofMinutes(accessTokenTtlMinutes).toMillis();
         this.refreshTokenTtl = Duration.ofDays(refreshTokenTtlDays);
@@ -207,7 +204,7 @@ public class AuthService {
                 user.getId(), user.getEmail(), user.getDisplayName(), verificationToken, Instant.now()));
         publishNewUserRegistered(user, family.getName(), NewUserRegisteredEvent.SOURCE_LOCAL, false);
 
-        return new MessageResponse(REGISTER_SUCCESS_MESSAGE);
+        return new MessageResponse(messages.get("auth.registerSuccess"));
     }
 
     /**
@@ -223,7 +220,7 @@ public class AuthService {
             familyDao.update(family);
         });
         issueVerificationEmail(pending);
-        return new MessageResponse(REGISTER_SUCCESS_MESSAGE);
+        return new MessageResponse(messages.get("auth.registerSuccess"));
     }
 
     /** Sends a fresh verification email to an account that registered but never verified; the answer never reveals whether the email exists. */
@@ -232,7 +229,7 @@ public class AuthService {
         userDao.selectByEmail(request.email())
                 .filter(this::isPendingLocalRegistration)
                 .ifPresent(this::issueVerificationEmail);
-        return new MessageResponse(RESEND_VERIFICATION_MESSAGE);
+        return new MessageResponse(messages.get("auth.resendVerification"));
     }
 
     private boolean isPendingLocalRegistration(User user) {
@@ -285,7 +282,7 @@ public class AuthService {
         User user = userDao.selectByEmail(email).orElse(null);
         if (user == null) {
             loginAttemptStore.recordFailure(email);
-            throw new UnauthorizedException(BAD_CREDENTIALS_MESSAGE);
+            throw new UnauthorizedException(messages.get("auth.badCredentials"));
         }
 
         if (user.getPasswordHash() == null) {
@@ -295,13 +292,14 @@ public class AuthService {
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             loginAttemptStore.recordFailure(email);
-            throw new UnauthorizedException(BAD_CREDENTIALS_MESSAGE);
+            throw new UnauthorizedException(messages.get("auth.badCredentials"));
         }
 
         requireNotLocked(user);
 
         if (!Boolean.TRUE.equals(user.getActive())) {
-            throw new UnauthorizedException(NOT_VERIFIED_MESSAGE);
+            // Frontend detects this text on a failed login to offer "resend verification email" — keep in sync with Login.jsx and messages/auth-messages.properties.
+            throw new UnauthorizedException(messages.get("auth.notVerified"));
         }
 
         if (Boolean.TRUE.equals(user.getTotpEnabled())) {
@@ -325,9 +323,9 @@ public class AuthService {
         }
     }
 
-    private static void requireNotLocked(User user) {
+    private void requireNotLocked(User user) {
         if (Boolean.TRUE.equals(user.getLocked())) {
-            throw new ApiException(HttpStatus.FORBIDDEN, ACCOUNT_LOCKED_MESSAGE);
+            throw new ApiException(HttpStatus.FORBIDDEN, messages.get("auth.accountLocked"));
         }
     }
 
@@ -521,7 +519,7 @@ public class AuthService {
                     + " và chưa có mật khẩu. Hãy bật xác thực 2 lớp (2FA) để thực hiện thao tác này.");
         }
         if (code == null || code.isBlank() || !acceptTotpCode(user, code)) {
-            throw new UnauthorizedException(INVALID_TWO_FACTOR_CODE_MESSAGE);
+            throw new UnauthorizedException(messages.get("auth.invalidTwoFactorCode"));
         }
         userDao.update(user);
     }
@@ -736,7 +734,7 @@ public class AuthService {
                 throw new BadRequestException("Tài khoản có mật khẩu, vui lòng nhập mật khẩu để tắt 2FA");
             }
             if (!isValidTwoFactorCode(user, code)) {
-                throw new UnauthorizedException(INVALID_TWO_FACTOR_CODE_MESSAGE);
+                throw new UnauthorizedException(messages.get("auth.invalidTwoFactorCode"));
             }
         }
 
@@ -1127,10 +1125,10 @@ public class AuthService {
     }
 
     /** Thrown as an OAuth2 error (not an ApiException) because it surfaces inside the login filter, where only the failure handler's redirect can reach the browser. */
-    private static void requireNotLockedForOAuth2(User user) {
+    private void requireNotLockedForOAuth2(User user) {
         if (Boolean.TRUE.equals(user.getLocked())) {
             throw new OAuth2AuthenticationException(
-                    new OAuth2Error(OAUTH2_ACCOUNT_LOCKED_ERROR, ACCOUNT_LOCKED_MESSAGE, null), ACCOUNT_LOCKED_MESSAGE);
+                    new OAuth2Error(OAUTH2_ACCOUNT_LOCKED_ERROR, messages.get("auth.accountLocked"), null), messages.get("auth.accountLocked"));
         }
     }
 

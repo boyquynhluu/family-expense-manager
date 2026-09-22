@@ -4,6 +4,11 @@ server:
 spring:
   application:
     name: auth-service
+  messages:
+    # One properties file gathering every user-facing message constant that used to live as
+    # class fields in AuthService — see common.message.Messages, which reads from this bundle.
+    basename: messages/auth-messages
+    encoding: UTF-8
   datasource:
     url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/fem_auth?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: ${FEM_AUTH_DB_USER:fem_auth}
