@@ -35,16 +35,18 @@ public class AdminController {
 
     @GetMapping("/families")
     public ApiResponse<PageResponse<FamilyAdminResponse>> families(@RequestParam(defaultValue = "0") int page,
-                                                                   @RequestParam(defaultValue = "5") int size) {
+                                                                   @RequestParam(defaultValue = "5") int size,
+                                                                   @RequestParam(required = false) String q) {
         log.info("families - start, page={}, size={}", page, size);
-        return ApiResponse.ok(adminService.listFamiliesPaged(page, size));
+        return ApiResponse.ok(adminService.listFamiliesPaged(page, size, q));
     }
 
     @GetMapping("/users")
     public ApiResponse<PageResponse<UserAdminResponse>> users(@RequestParam(defaultValue = "0") int page,
-                                                              @RequestParam(defaultValue = "5") int size) {
+                                                              @RequestParam(defaultValue = "5") int size,
+                                                              @RequestParam(required = false) String q) {
         log.info("users - start, page={}, size={}", page, size);
-        return ApiResponse.ok(adminService.listUsersPaged(page, size));
+        return ApiResponse.ok(adminService.listUsersPaged(page, size, q));
     }
 
     @PutMapping("/users/{id}/system-admin")

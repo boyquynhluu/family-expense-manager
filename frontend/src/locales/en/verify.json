@@ -4,8 +4,13 @@
   "verifyFailed": "Email verification failed. The token may have expired.",
   "verifying": "Verifying your email...",
   "backToLogin": "Back to login",
-
   "emailChangeVerifying": "Confirming your new email...",
   "emailChangeSuccess": "Your email was changed. Please log in again with the new email.",
-  "emailChangeFailed": "Email change failed. The link may have expired or the email is already in use."
+  "emailChangeFailed": "Email change failed. The link may have expired or the email is already in use.",
+  "resendHint": "Link expired? Enter the email you registered with to get a new verification link.",
+  "resendEmailPlaceholder": "Registered email",
+  "resendButton": "Resend verification email",
+  "resendSending": "Sending...",
+  "resendSent": "If the account is waiting for verification, we have sent the verification email again.",
+  "resendFailed": "Could not resend the verification email"
 }

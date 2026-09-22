@@ -99,7 +99,7 @@ Topic `expense-events`, key = `familyId`, phân biệt bằng field `eventType`:
 - `BUDGET_EXCEEDED` — chi **vượt 100% lần đầu** (không lặp lại ở các giao dịch vượt tiếp theo). Thông báo trong app và email cho người tạo giao dịch.
 - `RECURRING_EXECUTED`, `RECURRING_FAILED` — scheduler giao dịch định kỳ ghi thành công hoặc gặp lỗi. Chỉ trong app.
 
-Các topic khác (khai báo dưới `kafka.topic.*` trong `application.yml`): `user-verification` và `password-reset` (email xác thực, đặt lại mật khẩu, cả xác nhận đổi email), `family-invite` (email mời thành viên), `family-member-events` (`MEMBER_JOINED`, `MEMBER_LEFT`, `MEMBER_REMOVED`, do auth-service phát).
+Các topic khác (khai báo dưới `kafka.topic.*` trong `application.yml`): `user-verification` và `password-reset` (email xác thực, đặt lại mật khẩu, cả xác nhận đổi email), `family-invite` (email mời thành viên), `family-member-events` (`MEMBER_JOINED`, `MEMBER_LEFT`, `MEMBER_REMOVED`, do auth-service phát), `user-registered` (có tài khoản mới, kèm danh sách email admin nhận, xem mục 25).
 
 **Lưu ý khi sửa `infra/docker-compose.yml`:** container `kafka` (image `apache/kafka`, KRaft mode) bắt buộc phải set `KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092` — mặc định image tự advertise `localhost:9092`, chỉ đúng cho client chạy trong chính container đó. Nếu thiếu, `expense-service`/`notification-service` connect được bước bootstrap ban đầu (metadata) nhưng produce/consume thật sự sẽ fail liên tục với `Connection to node ... (localhost/127.0.0.1:9092) could not be established` — publish Kafka coi như im lặng không hoạt động, không thấy lỗi ở tầng HTTP vì `KafkaTemplate.send()` là async fire-and-forget.
 
@@ -158,7 +158,7 @@ Mỗi mục gồm: mục tiêu, **sơ đồ luồng di chuyển** (Mermaid, GitH
 
 - **Nền tảng (N1–N4):** luồng cốt lõi từ ngày đầu — đăng ký/đăng nhập, quên mật khẩu, Google, ghi chi tiêu.
 - **Mục 1–13:** danh sách task ban đầu, đã hoàn thành (nội dung được cập nhật theo hiện trạng).
-- **Mục 14–24:** các nghiệp vụ bổ sung sau khi rà soát còn thiếu.
+- **Mục 14–25:** các nghiệp vụ bổ sung sau khi rà soát còn thiếu.
 
 ### Bản đồ tổng quan: mục nào nằm ở đâu
 
@@ -166,9 +166,9 @@ Mỗi mục gồm: mục tiêu, **sơ đồ luồng di chuyển** (Mermaid, GitH
 flowchart LR
     U["Trình duyệt<br/>React, i18n vi/en"]
     GW["api-gateway :8080<br/>JWT, rate limit, IP tin cậy"]
-    AU["auth-service :8081<br/>N1-N3, mục 6, 8, 9, 16, 22, 23"]
+    AU["auth-service :8081<br/>N1-N3, mục 6, 8, 9, 16, 22, 23, 25"]
     EX["expense-service :8082<br/>mục 1, 3, 4, 5, 7, 10, 14, 15, 18, 20, 21"]
-    NO["notification-service :8083<br/>mục 2, 19"]
+    NO["notification-service :8083<br/>mục 2, 19, 25"]
     DB[("MySQL<br/>Flyway migrations")]
     RD[("Redis<br/>cache, phiên thu hồi, challenge 2FA, khoá đăng nhập")]
     KF{{"Kafka<br/>expense-events, family-member-events, ..."}}
@@ -194,7 +194,7 @@ flowchart LR
 
 | Mục | Tính năng | Service chính | Trang frontend |
 |---|---|---|---|
-| N1–N4 | Đăng ký/đăng nhập, quên mật khẩu, Google, ghi chi tiêu | auth, expense | Login, Register, Transactions |
+| N1–N4 | Đăng ký/đăng nhập (kể cả email chưa xác thực), quên mật khẩu, Google, ghi chi tiêu | auth, expense | Login, Register, Verify, Transactions |
 | 1 | Phân trang chung 5 dòng/trang | mọi service | mọi danh sách |
 | 2 | Cảnh báo vượt ngân sách (app và email) | expense, notification | Notifications |
 | 3 | Giao dịch định kỳ (tháng, tuần, năm) | expense | RecurringTransactions |
@@ -219,6 +219,7 @@ flowchart LR
 | 22 | Tài khoản: đổi email, xoá, xuất dữ liệu, khoá đăng nhập tạm | auth | Profile, Verify |
 | 23 | Quản trị hệ thống, khoá người dùng | auth | AdminPanel |
 | 24 | IP máy khách đáng tin cậy | gateway | không có |
+| 25 | Email báo admin khi có tài khoản mới | auth, notification | không có |
 
 ---
 
@@ -249,6 +250,34 @@ sequenceDiagram
 ```
 
 Access token là JWT mang `sub` (userId), `familyId`, `role`. Mọi service tự xác thực JWT độc lập, gateway chỉ kiểm tra sớm để trả 401 nhanh.
+
+#### N1b — Email chưa xác thực: đăng ký lại, gửi lại link, tự dọn
+
+Khi đăng ký xong mà chưa bấm link xác thực (hoặc link đã hết hạn), tài khoản ở trạng thái `active = false` và email vẫn nằm trong DB. Người dùng không bị kẹt:
+
+```mermaid
+flowchart TD
+    A["Đăng ký xong, chưa xác thực<br/>active = false, token sống 24 giờ"] --> B{"Người dùng làm gì?"}
+    B -- "Bấm link còn hạn" --> V["GET /auth/verify<br/>active = true, đăng nhập được"]
+    B -- "Bấm link đã hết hạn" --> E1["400 Token xác thực đã hết hạn<br/>trang Verify hiện ô nhập email để gửi lại"]
+    B -- "Đăng nhập" --> E2["401 Tài khoản chưa được xác thực email<br/>trang Login hiện nút Gửi lại email xác thực"]
+    B -- "Đăng ký lại cùng email" --> R["Đè lên tài khoản đang chờ:<br/>đổi mật khẩu, tên, tên gia đình, sinh token mới, gửi email mới"]
+    E1 --> S["POST /auth/resend-verification"]
+    E2 --> S
+    S --> C{"Email chờ xác thực<br/>và token cũ đã phát hơn 60 giây?"}
+    R --> C2{"Token cũ đã phát hơn 60 giây?"}
+    C -- "Có" --> N["Token mới + email mới"]
+    C -- "Không, hoặc email không tồn tại, hoặc đã xác thực" --> Q["Không làm gì, vẫn trả cùng một thông báo"]
+    C2 -- "Có" --> N
+    C2 -- "Không" --> K["Giữ token cũ, không gửi lại"]
+    N --> V
+    A -. "Quá 7 ngày sau khi token hết hạn" .-> D["Job 02:30 mỗi ngày xoá tài khoản và gia đình rỗng"]
+```
+
+- **Đăng ký lại đè lên tài khoản chưa xác thực** (chỉ khi tài khoản thường, chưa kích hoạt, chưa bị khoá và có mật khẩu). Người lạ đăng ký bằng email của bạn cũng không xác thực được vì không có hộp thư, nên đè lên không gây hại. Tài khoản đã xác thực, đăng ký qua Google hoặc bị khoá vẫn nhận 409.
+- **`POST /api/auth/resend-verification`** (công khai, body `{email}`) luôn trả cùng một thông báo dù email có tồn tại hay không, để không lộ email nào đã đăng ký. Gateway giới hạn 3 lần/phút, và mỗi tài khoản chỉ được gửi lại sau 60 giây kể từ email trước.
+- **Tự dọn:** mặc định 02:30 mỗi ngày, xoá tài khoản chưa xác thực đã quá **7 ngày sau khi token hết hạn**, kèm gia đình rỗng của nó (bỏ qua nếu tài khoản đang là chủ hộ của gia đình có thành viên khác). Đổi bằng biến môi trường `AUTH_UNVERIFIED_CLEANUP_CRON` và `AUTH_UNVERIFIED_CLEANUP_RETENTION_DAYS` trong `infra/.env`.
+- Không gửi lại email báo admin (mục 25) khi đăng ký lại đè lên tài khoản đang chờ, để admin không bị báo trùng.
 
 #### N2 — Quên và đặt lại mật khẩu
 
@@ -874,6 +903,46 @@ flowchart TD
 ```
 
 Trước đây hệ thống tin phần tử **đầu** của `X-Forwarded-For` (client giả được). Qua Cloudflare, IP thật là phần tử cuối vì Cloudflare thêm vào sau giá trị client gửi. Giới hạn còn lại: khi gọi thẳng vào cổng 8080 từ máy host trong môi trường Docker Desktop, địa chỉ nguồn là dải riêng nên vẫn giả được bằng header; nên chỉ để cổng 8080 truy cập được qua nginx hoặc Cloudflare khi triển khai thật.
+
+### Mục 25 — Email báo cho admin khi có tài khoản mới
+
+```mermaid
+sequenceDiagram
+    actor U as Người dùng mới
+    participant AU as auth-service (AuthService)
+    participant DB as MySQL fem_auth
+    participant KF as Kafka user-registered
+    participant NO as notification-service (NewUserRegisteredEventListener)
+    participant SMTP as Mail server
+    actor AD as Admin hệ thống
+
+    alt Đăng ký bằng form
+        U->>AU: POST /auth/register
+        AU->>DB: Tạo gia đình và user (chưa xác thực email)
+    else Đăng nhập Google lần đầu
+        U->>AU: OAuth2 thành công, chưa có tài khoản
+        AU->>DB: Tạo gia đình và user (đã xác thực)
+    else Nhận lời mời bằng tài khoản mới
+        U->>AU: POST /auth/invite/token/accept
+        AU->>DB: Tạo user thành viên (đã xác thực)
+    end
+    AU->>DB: SELECT email của admin hệ thống đang hoạt động và chưa bị khoá
+    alt Có ít nhất 1 admin
+        AU->>KF: NewUserRegisteredEvent (sau khi commit), kèm adminEmails
+        KF->>NO: Consume
+        loop Mỗi admin
+            NO->>SMTP: Gửi email riêng: tên, email, gia đình, đăng ký qua đâu, trạng thái, thời điểm
+            SMTP-->>AD: Email "Có người dùng mới đăng ký"
+        end
+    else Chưa có admin nào
+        AU->>AU: Ghi log cảnh báo, không phát sự kiện
+    end
+```
+
+- Người nhận là mọi người dùng có `is_system_admin`, `active` và chưa bị khoá, lấy tại thời điểm tạo tài khoản. Cấp hoặc thu quyền admin ở trang quản trị (mục 23) thì danh sách người nhận đổi theo.
+- Mỗi admin nhận một email riêng (không lộ địa chỉ của nhau). Giá trị người dùng nhập (tên, tên gia đình) được escape HTML trước khi chèn vào email.
+- Sự kiện chỉ được gửi sau khi giao dịch tạo tài khoản commit. Gửi mail lỗi (SMTP chưa cấu hình hoặc một địa chỉ hỏng) chỉ ghi log, không làm Kafka gửi lại sự kiện.
+- Mẫu email: `notification-service/src/main/resources/mail-templates/new-user-registered-email.html`. Link "Mở trang quản trị" trỏ tới `FRONTEND_BASE_URL/admin`.
 
 ---
 

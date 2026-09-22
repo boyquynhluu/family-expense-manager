@@ -23,7 +23,7 @@ export default function ResetPassword() {
       await client.post("/auth/reset-password", { token, newPassword });
       navigate("/login", { replace: true, state: { passwordResetSuccess: true } });
     } catch (err) {
-      setError(err.response?.data?.message || t("resetFailed"));
+      setError(err.response ? err.response.data?.message || t("resetFailed") : t("networkError"));
     } finally {
       setLoading(false);
     }

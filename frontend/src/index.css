@@ -1387,28 +1387,32 @@ select:disabled:focus {
 }
 
 .custom-swal-popup {
-    border-radius: 18px !important;
-    padding: 30px !important;
-    width: 420px !important;
-    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15) !important;
+    border-radius: 14px !important;
+    padding: 20px 22px !important;
+    width: 340px !important;
+    max-width: 92vw !important;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15) !important;
 }
 
 .custom-swal-title {
-    font-size: 24px !important;
+    font-size: 18px !important;
     font-weight: 600 !important;
     color: #1f2937 !important;
-    margin-top: 10px !important;
+    margin-top: 4px !important;
+    padding: 0 !important;
 }
 
 .custom-swal-text {
-    font-size: 15px !important;
+    font-size: 14px !important;
     color: #6b7280 !important;
-    line-height: 1.6 !important;
-    margin-top: 8px !important;
+    line-height: 1.5 !important;
+    margin: 6px 0 0 !important;
+    padding: 0 !important;
 }
 
 .custom-swal-icon {
-    margin: 0 auto 10px !important;
+    font-size: 0.65rem !important;
+    margin: 4px auto 6px !important;
 }
 
 .custom-swal-confirm {
@@ -1416,10 +1420,10 @@ select:disabled:focus {
     color: white !important;
     border: none !important;
     border-radius: 8px !important;
-    padding: 10px 24px !important;
-    font-size: 14px !important;
+    padding: 8px 18px !important;
+    font-size: 13px !important;
     font-weight: 500 !important;
-    margin: 8px 5px 0 !important;
+    margin: 14px 4px 0 !important;
     cursor: pointer !important;
     transition: all 0.2s ease !important;
 }
@@ -1434,10 +1438,10 @@ select:disabled:focus {
     color: #374151 !important;
     border: none !important;
     border-radius: 8px !important;
-    padding: 10px 24px !important;
-    font-size: 14px !important;
+    padding: 8px 18px !important;
+    font-size: 13px !important;
     font-weight: 500 !important;
-    margin: 8px 5px 0 !important;
+    margin: 14px 4px 0 !important;
     cursor: pointer !important;
     transition: all 0.2s ease !important;
 }
@@ -1734,4 +1738,29 @@ select:disabled:focus {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+}
+
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.table-toolbar h2 {
+  margin: 0;
+}
+
+.table-search {
+  width: 280px;
+  max-width: 100%;
+}
+
+.verify-resend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
 }

@@ -27,6 +27,9 @@
   "githubComingSoon": "GitHub login coming soon",
   "noAccount": "Don't have an account?",
   "registerLink": "Register a new family",
-
-  "accountLocked": "Your account has been locked by an administrator"
+  "accountLocked": "Your account has been locked by an administrator",
+  "resendVerification": "Resend verification email",
+  "resendVerificationSending": "Sending...",
+  "resendVerificationSent": "If the account is waiting for verification, we have sent the verification email again.",
+  "resendVerificationFailed": "Could not resend the verification email"
 }

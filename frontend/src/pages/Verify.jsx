@@ -15,6 +15,8 @@ export default function Verify() {
   const handled = useRef(false);
   const [status, setStatus] = useState("verifying");
   const [error, setError] = useState("");
+  const [resendEmail, setResendEmail] = useState("");
+  const [resending, setResending] = useState(false);
   // notification-service links both registration and e-mail change confirmations to /verify?token=...;
   // change tokens are recognisable by their "ec." prefix (see auth-service AuthService).
   const isEmailChange = (searchParams.get("token") ?? "").startsWith("ec.");
@@ -42,6 +44,19 @@ export default function Verify() {
       });
   }, [searchParams, navigate]);
 
+  async function handleResend(e) {
+    e.preventDefault();
+    setResending(true);
+    try {
+      const res = await client.post("/auth/resend-verification", { email: resendEmail });
+      toast.success(res.data.data?.message || t("resendSent"));
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("resendFailed"));
+    } finally {
+      setResending(false);
+    }
+  }
+
   return (
     <div className="auth-page">
       <LanguageSwitcher variant="floating" />
@@ -50,6 +65,24 @@ export default function Verify() {
         {status === "error" && (
           <>
             <p className="verify-message is-error">{error}</p>
+            {!isEmailChange && (
+              <form className="verify-resend" onSubmit={handleResend}>
+                <p className="verify-message">{t("resendHint")}</p>
+                <div className="auth-input-group no-required-mark">
+                  <input
+                    type="email"
+                    value={resendEmail}
+                    onChange={(e) => setResendEmail(e.target.value)}
+                    placeholder={t("resendEmailPlaceholder")}
+                    aria-label={t("resendEmailPlaceholder")}
+                    required
+                  />
+                </div>
+                <button type="submit" className="auth-submit" disabled={resending}>
+                  {resending ? t("resendSending") : t("resendButton")}
+                </button>
+              </form>
+            )}
             <p className="auth-footer-text">
               <Link to="/login">{t("backToLogin")}</Link>
             </p>

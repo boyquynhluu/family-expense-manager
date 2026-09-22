@@ -21,7 +21,7 @@ export default function ForgotPassword() {
       const res = await client.post("/auth/forgot-password", { email });
       setMessage(res.data.data?.message || t("resetLinkSent"));
     } catch (err) {
-      setError(err.response?.data?.message || t("genericError"));
+      setError(err.response ? err.response.data?.message || t("genericError") : t("networkError"));
     } finally {
       setLoading(false);
     }

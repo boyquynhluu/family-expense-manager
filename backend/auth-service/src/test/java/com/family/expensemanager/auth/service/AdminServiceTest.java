@@ -60,13 +60,13 @@ class AdminServiceTest {
     void listFamiliesPaged_includesMemberCountAndOwnerInfo() {
         Family family = family(1L, "Nhà Nguyễn");
         User owner = user(1L, 1L, "OWNER", "owner@b.com", "Chủ hộ");
-        when(familyDao.countAll()).thenReturn(1L);
-        when(familyDao.selectAllPaged(5, 0)).thenReturn(List.of(family));
+        when(familyDao.countBySearch(null)).thenReturn(1L);
+        when(familyDao.selectBySearchPaged(null, 5, 0)).thenReturn(List.of(family));
         when(familyMembershipDao.selectByFamilyId(1L))
                 .thenReturn(List.of(membership(1L, 1L, "OWNER"), membership(2L, 1L, "MEMBER")));
         when(userDao.selectById(1L)).thenReturn(Optional.of(owner));
 
-        var result = adminService.listFamiliesPaged(0, 5);
+        var result = adminService.listFamiliesPaged(0, 5, null);
 
         assertThat(result.content()).hasSize(1);
         assertThat(result.content().get(0).memberCount()).isEqualTo(2);
@@ -77,11 +77,11 @@ class AdminServiceTest {
 
     @Test
     void listFamiliesPaged_returnsPageWithOffset() {
-        when(familyDao.countAll()).thenReturn(12L);
-        when(familyDao.selectAllPaged(5, 10)).thenReturn(List.of(family(11L, "A"), family(12L, "B")));
+        when(familyDao.countBySearch(null)).thenReturn(12L);
+        when(familyDao.selectBySearchPaged(null, 5, 10)).thenReturn(List.of(family(11L, "A"), family(12L, "B")));
         when(familyMembershipDao.selectByFamilyId(anyLong())).thenReturn(List.of());
 
-        var result = adminService.listFamiliesPaged(2, 5);
+        var result = adminService.listFamiliesPaged(2, 5, null);
 
         assertThat(result.content()).hasSize(2);
         assertThat(result.page()).isEqualTo(2);
@@ -92,20 +92,20 @@ class AdminServiceTest {
 
     @Test
     void listFamiliesPaged_rejectsInvalidPageOrSize() {
-        assertThatThrownBy(() -> adminService.listFamiliesPaged(-1, 5)).isInstanceOf(BadRequestException.class);
-        assertThatThrownBy(() -> adminService.listFamiliesPaged(0, 0)).isInstanceOf(BadRequestException.class);
-        assertThatThrownBy(() -> adminService.listFamiliesPaged(0, 101)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> adminService.listFamiliesPaged(-1, 5, null)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> adminService.listFamiliesPaged(0, 0, null)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> adminService.listFamiliesPaged(0, 101, null)).isInstanceOf(BadRequestException.class);
     }
 
     @Test
     void listUsersPaged_resolvesFamilyNameForEachUser() {
         Family family = family(1L, "Nhà Nguyễn");
         User user = user(1L, 1L, "OWNER", "owner@b.com", "Chủ hộ");
-        when(userDao.countAll()).thenReturn(1L);
-        when(userDao.selectAllPaged(5, 0)).thenReturn(List.of(user));
+        when(userDao.countBySearch(null)).thenReturn(1L);
+        when(userDao.selectBySearchPaged(null, 5, 0)).thenReturn(List.of(user));
         when(familyDao.selectById(1L)).thenReturn(Optional.of(family));
 
-        var result = adminService.listUsersPaged(0, 5);
+        var result = adminService.listUsersPaged(0, 5, null);
 
         assertThat(result.content()).hasSize(1);
         assertThat(result.content().get(0).familyName()).isEqualTo("Nhà Nguyễn");
@@ -116,12 +116,12 @@ class AdminServiceTest {
 
     @Test
     void listUsersPaged_returnsPageWithOffset() {
-        when(userDao.countAll()).thenReturn(12L);
-        when(userDao.selectAllPaged(5, 10)).thenReturn(List.of(
+        when(userDao.countBySearch(null)).thenReturn(12L);
+        when(userDao.selectBySearchPaged(null, 5, 10)).thenReturn(List.of(
                 user(11L, 1L, "MEMBER", "a@b.com", "A"), user(12L, 1L, "MEMBER", "b@b.com", "B")));
         when(familyDao.selectById(1L)).thenReturn(Optional.of(family(1L, "Nhà Nguyễn")));
 
-        var result = adminService.listUsersPaged(2, 5);
+        var result = adminService.listUsersPaged(2, 5, null);
 
         assertThat(result.content()).hasSize(2);
         assertThat(result.page()).isEqualTo(2);
@@ -132,10 +132,65 @@ class AdminServiceTest {
     }
 
     @Test
+    void listUsersPaged_searchesByEmailOrDisplayName_withCaseInsensitiveContainsPattern() {
+        User user = user(3L, 1L, "MEMBER", "lan@b.com", "Lan");
+        when(userDao.countBySearch("%lan%")).thenReturn(1L);
+        when(userDao.selectBySearchPaged("%lan%", 5, 0)).thenReturn(List.of(user));
+        when(familyDao.selectById(1L)).thenReturn(Optional.of(family(1L, "Nhà Lan")));
+
+        var result = adminService.listUsersPaged(0, 5, "  LAN ");
+
+        assertThat(result.content()).hasSize(1);
+        assertThat(result.content().get(0).email()).isEqualTo("lan@b.com");
+        assertThat(result.totalElements()).isEqualTo(1L);
+    }
+
+    @Test
+    void listUsersPaged_escapesLikeWildcardsInKeyword() {
+        when(userDao.countBySearch("%100!%!_x!!%")).thenReturn(0L);
+        when(userDao.selectBySearchPaged("%100!%!_x!!%", 5, 0)).thenReturn(List.of());
+
+        var result = adminService.listUsersPaged(0, 5, "100%_x!");
+
+        assertThat(result.content()).isEmpty();
+        assertThat(result.totalElements()).isZero();
+    }
+
+    @Test
+    void listUsersPaged_treatsBlankKeywordAsNoFilter() {
+        when(userDao.countBySearch(null)).thenReturn(0L);
+        when(userDao.selectBySearchPaged(null, 5, 0)).thenReturn(List.of());
+
+        adminService.listUsersPaged(0, 5, "   ");
+
+        verify(userDao).countBySearch(null);
+    }
+
+    @Test
+    void listUsersPaged_rejectsTooLongKeyword() {
+        String tooLong = "a".repeat(101);
+
+        assertThatThrownBy(() -> adminService.listUsersPaged(0, 5, tooLong)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> adminService.listFamiliesPaged(0, 5, tooLong)).isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void listFamiliesPaged_searchesByFamilyName() {
+        when(familyDao.countBySearch("%nguyễn%")).thenReturn(1L);
+        when(familyDao.selectBySearchPaged("%nguyễn%", 5, 0)).thenReturn(List.of(family(1L, "Nhà Nguyễn")));
+        when(familyMembershipDao.selectByFamilyId(1L)).thenReturn(List.of());
+
+        var result = adminService.listFamiliesPaged(0, 5, "Nguyễn");
+
+        assertThat(result.content()).hasSize(1);
+        assertThat(result.content().get(0).name()).isEqualTo("Nhà Nguyễn");
+    }
+
+    @Test
     void listUsersPaged_rejectsInvalidPageOrSize() {
-        assertThatThrownBy(() -> adminService.listUsersPaged(-1, 5)).isInstanceOf(BadRequestException.class);
-        assertThatThrownBy(() -> adminService.listUsersPaged(0, 0)).isInstanceOf(BadRequestException.class);
-        assertThatThrownBy(() -> adminService.listUsersPaged(0, 101)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> adminService.listUsersPaged(-1, 5, null)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> adminService.listUsersPaged(0, 0, null)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> adminService.listUsersPaged(0, 101, null)).isInstanceOf(BadRequestException.class);
     }
 
     @Test

@@ -4,8 +4,13 @@
   "verifyFailed": "Xác thực email thất bại. Token có thể đã hết hạn.",
   "verifying": "Đang xác thực email...",
   "backToLogin": "Quay lại đăng nhập",
-
   "emailChangeVerifying": "Đang xác nhận email mới...",
   "emailChangeSuccess": "Đổi email thành công. Vui lòng đăng nhập lại bằng email mới.",
-  "emailChangeFailed": "Đổi email thất bại. Link có thể đã hết hạn hoặc email đã được sử dụng."
+  "emailChangeFailed": "Đổi email thất bại. Link có thể đã hết hạn hoặc email đã được sử dụng.",
+  "resendHint": "Link đã hết hạn? Nhập email đã đăng ký để nhận link xác thực mới.",
+  "resendEmailPlaceholder": "Email đã đăng ký",
+  "resendButton": "Gửi lại email xác thực",
+  "resendSending": "Đang gửi...",
+  "resendSent": "Nếu tài khoản đang chờ xác thực, chúng tôi đã gửi lại email xác thực.",
+  "resendFailed": "Không gửi lại được email xác thực"
 }

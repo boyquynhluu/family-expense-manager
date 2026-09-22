@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Trans, useTranslation } from "react-i18next";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import client from "../api/client";
 import { EyeIcon, EyeOffIcon, KeyIcon, UserIcon } from "../components/AuthIcons";
 import LanguageSwitcher from "../components/LanguageSwitcher";
@@ -104,7 +104,6 @@ export default function AcceptInvite() {
                       placeholder={t("passwordPlaceholder")}
                       aria-label={t("passwordLabel")}
                       minLength={8}
-                      required
                     />
                     <button
                       type="button"

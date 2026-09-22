@@ -55,6 +55,7 @@ import com.family.expensemanager.auth.dto.PersonalDataExportResponse;
 import com.family.expensemanager.auth.dto.RefreshRequest;
 import com.family.expensemanager.auth.dto.RegisterRequest;
 import com.family.expensemanager.auth.dto.RenameFamilyRequest;
+import com.family.expensemanager.auth.dto.ResendVerificationRequest;
 import com.family.expensemanager.auth.dto.ResetPasswordRequest;
 import com.family.expensemanager.auth.dto.SessionResponse;
 import com.family.expensemanager.auth.dto.TransferOwnershipRequest;
@@ -69,6 +70,7 @@ import com.family.expensemanager.auth.security.TwoFactorChallengeStore;
 import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.event.FamilyInviteEvent;
 import com.family.expensemanager.common.event.FamilyMemberEvent;
+import com.family.expensemanager.common.event.NewUserRegisteredEvent;
 import com.family.expensemanager.common.event.PasswordResetEvent;
 import com.family.expensemanager.common.event.UserVerificationEvent;
 import com.family.expensemanager.common.exception.ApiException;
@@ -94,6 +96,14 @@ public class AuthService {
     private static final int RECOVERY_CODE_COUNT = 8;
 
     private static final String BAD_CREDENTIALS_MESSAGE = "Email hoặc mật khẩu không đúng";
+    /** Frontend detects this text on a failed login to offer "resend verification email" — keep in sync with Login.jsx. */
+    public static final String NOT_VERIFIED_MESSAGE = "Tài khoản chưa được xác thực email. Vui lòng kiểm tra hộp thư.";
+    private static final String REGISTER_SUCCESS_MESSAGE = "Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.";
+    private static final String RESEND_VERIFICATION_MESSAGE = "Nếu tài khoản đang chờ xác thực, chúng tôi đã gửi lại email xác thực.";
+    /** A verification email is not re-sent (and its token not rotated) while the previous one is younger than this. */
+    private static final long VERIFICATION_RESEND_COOLDOWN_SECONDS = 60;
+    /** Same idea for the password reset email: no second email (and the live token is reused) within this window. */
+    private static final long RESET_EMAIL_COOLDOWN_SECONDS = 60;
     private static final String ACCOUNT_LOCKED_MESSAGE = "Tài khoản đã bị khoá bởi quản trị viên";
     private static final String INVALID_TWO_FACTOR_CODE_MESSAGE = "Mã xác thực không đúng hoặc đã được sử dụng";
     /** Lets the shared /verify link (built by notification-service) tell an e-mail change token from a registration token; base64url never contains '.'. */
@@ -162,9 +172,13 @@ public class AuthService {
 
     public MessageResponse register(RegisterRequest request) {
         log.info("register - start, email={}", request.email());
-        userDao.selectByEmail(request.email()).ifPresent(u -> {
-            throw new ConflictException("Email đã được đăng ký: " + request.email());
-        });
+        User existing = userDao.selectByEmail(request.email()).orElse(null);
+        if (existing != null) {
+            if (!isPendingLocalRegistration(existing)) {
+                throw new ConflictException("Email đã được đăng ký: " + request.email());
+            }
+            return reRegisterPending(existing, request);
+        }
 
         Family family = new Family();
         family.setName(request.familyName());
@@ -191,8 +205,59 @@ public class AuthService {
 
         eventPublisher.publishEvent(new UserVerificationEvent(
                 user.getId(), user.getEmail(), user.getDisplayName(), verificationToken, Instant.now()));
+        publishNewUserRegistered(user, family.getName(), NewUserRegisteredEvent.SOURCE_LOCAL, false);
 
-        return new MessageResponse("Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.");
+        return new MessageResponse(REGISTER_SUCCESS_MESSAGE);
+    }
+
+    /**
+     * Registering again with an email whose account was never verified takes over that pending account:
+     * nobody but the mailbox owner can verify it, so the new password/name simply replace the old ones.
+     */
+    private MessageResponse reRegisterPending(User pending, RegisterRequest request) {
+        log.info("register - re-registering over pending account, userId={}", pending.getId());
+        pending.setPasswordHash(passwordEncoder.encode(request.password()));
+        pending.setDisplayName(request.displayName());
+        familyDao.selectById(pending.getFamilyId()).ifPresent(family -> {
+            family.setName(request.familyName());
+            familyDao.update(family);
+        });
+        issueVerificationEmail(pending);
+        return new MessageResponse(REGISTER_SUCCESS_MESSAGE);
+    }
+
+    /** Sends a fresh verification email to an account that registered but never verified; the answer never reveals whether the email exists. */
+    public MessageResponse resendVerification(ResendVerificationRequest request) {
+        log.info("resendVerification - start, email={}", request.email());
+        userDao.selectByEmail(request.email())
+                .filter(this::isPendingLocalRegistration)
+                .ifPresent(this::issueVerificationEmail);
+        return new MessageResponse(RESEND_VERIFICATION_MESSAGE);
+    }
+
+    private boolean isPendingLocalRegistration(User user) {
+        return !Boolean.TRUE.equals(user.getActive())
+                && !Boolean.TRUE.equals(user.getLocked())
+                && PROVIDER_LOCAL.equals(user.getProvider())
+                && user.getPasswordHash() != null;
+    }
+
+    /** Persists any changes on the user and, unless the last email is still fresh, rotates the token and publishes a new verification email. */
+    private void issueVerificationEmail(User user) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime expiresAt = user.getVerificationTokenExpiresAt();
+        boolean issuedRecently = user.getVerificationToken() != null && expiresAt != null
+                && expiresAt.isAfter(now.plus(verificationTokenTtl).minusSeconds(VERIFICATION_RESEND_COOLDOWN_SECONDS));
+        if (issuedRecently) {
+            userDao.update(user);
+            return;
+        }
+        String verificationToken = generateOpaqueToken();
+        user.setVerificationToken(verificationToken);
+        user.setVerificationTokenExpiresAt(now.plus(verificationTokenTtl));
+        userDao.update(user);
+        eventPublisher.publishEvent(new UserVerificationEvent(
+                user.getId(), user.getEmail(), user.getDisplayName(), verificationToken, Instant.now()));
     }
 
     public void verifyEmail(String token) {
@@ -236,7 +301,7 @@ public class AuthService {
         requireNotLocked(user);
 
         if (!Boolean.TRUE.equals(user.getActive())) {
-            throw new UnauthorizedException("Tài khoản chưa được xác thực email. Vui lòng kiểm tra hộp thư.");
+            throw new UnauthorizedException(NOT_VERIFIED_MESSAGE);
         }
 
         if (Boolean.TRUE.equals(user.getTotpEnabled())) {
@@ -361,10 +426,26 @@ public class AuthService {
     public MessageResponse forgotPassword(ForgotPasswordRequest request) {
         log.info("forgotPassword - start, email={}", request.email());
         userDao.selectByEmail(request.email()).ifPresent(user -> {
-            String resetToken = generateOpaqueToken();
-            user.setResetPasswordToken(resetToken);
-            user.setResetPasswordTokenExpiresAt(LocalDateTime.now().plus(resetPasswordTokenTtl));
-            userDao.update(user);
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime expiresAt = user.getResetPasswordTokenExpiresAt();
+            boolean hasLiveToken = user.getResetPasswordToken() != null && expiresAt != null && expiresAt.isAfter(now);
+
+            String resetToken;
+            if (hasLiveToken) {
+                // Keep the token that was already emailed valid instead of overwriting it, and don't
+                // send another email while the previous one is still fresh.
+                boolean sentRecently = expiresAt.isAfter(
+                        now.plus(resetPasswordTokenTtl).minusSeconds(RESET_EMAIL_COOLDOWN_SECONDS));
+                if (sentRecently) {
+                    return;
+                }
+                resetToken = user.getResetPasswordToken();
+            } else {
+                resetToken = generateOpaqueToken();
+                user.setResetPasswordToken(resetToken);
+                user.setResetPasswordTokenExpiresAt(now.plus(resetPasswordTokenTtl));
+                userDao.update(user);
+            }
 
             eventPublisher.publishEvent(new PasswordResetEvent(
                     user.getId(), user.getEmail(), user.getDisplayName(), resetToken, Instant.now()));
@@ -533,6 +614,11 @@ public class AuthService {
             }
         }
 
+        removeUserAndOwnedData(user, memberships);
+    }
+
+    private void removeUserAndOwnedData(User user, List<FamilyMembership> memberships) {
+        Long userId = user.getId();
         revokeAllSessions(userId);
         refreshTokenDao.deleteByUserId(userId);
         twoFactorRecoveryCodeDao.deleteByUserId(userId);
@@ -549,6 +635,29 @@ public class AuthService {
                 publishMemberEvent(FamilyMemberEvent.MEMBER_LEFT, familyId, userId, user.getDisplayName());
             }
         }
+    }
+
+    /**
+     * Housekeeping for accounts that registered but never verified their email: once the verification
+     * token has been expired for {@code retentionDays}, the account and its (empty) family are removed so
+     * the email can be registered again and stale rows don't pile up. Returns how many accounts were removed.
+     */
+    public int purgeStaleUnverifiedAccounts(int retentionDays) {
+        LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
+        int purged = 0;
+        for (User user : userDao.selectStaleUnverified(cutoff)) {
+            List<FamilyMembership> memberships = familyMembershipDao.selectByUserId(user.getId());
+            boolean ownsFamilyWithOthers = memberships.stream().anyMatch(m ->
+                    ROLE_OWNER.equals(m.getRole()) && familyMembershipDao.countByFamilyId(m.getFamilyId()) > 1);
+            if (ownsFamilyWithOthers) {
+                log.warn("purgeStaleUnverifiedAccounts - bỏ qua userId={} vì đang là chủ hộ của gia đình có thành viên khác",
+                        user.getId());
+                continue;
+            }
+            removeUserAndOwnedData(user, memberships);
+            purged++;
+        }
+        return purged;
     }
 
     /**
@@ -934,6 +1043,7 @@ public class AuthService {
         invite.setAcceptedAt(LocalDateTime.now());
         familyInviteDao.update(invite);
         publishMemberEvent(FamilyMemberEvent.MEMBER_JOINED, invite.getFamilyId(), user.getId(), user.getDisplayName());
+        publishNewUserRegistered(user, familyNameOf(invite.getFamilyId()), NewUserRegisteredEvent.SOURCE_INVITE, true);
     }
 
     private FamilyInvite requireValidInvite(String token) {
@@ -997,7 +1107,23 @@ public class AuthService {
         user.setLocked(Boolean.FALSE);
         userDao.insert(user);
         addMembership(user.getId(), family.getId(), ROLE_OWNER);
+        publishNewUserRegistered(user, family.getName(), NewUserRegisteredEvent.SOURCE_GOOGLE, true);
         return user;
+    }
+
+    private void publishNewUserRegistered(User user, String familyName, String source, boolean emailVerified) {
+        List<String> adminEmails = userDao.selectSystemAdminEmails();
+        if (adminEmails == null || adminEmails.isEmpty()) {
+            log.warn("Có tài khoản mới userId={} nhưng chưa có admin hệ thống nào nhận được email thông báo", user.getId());
+            return;
+        }
+        eventPublisher.publishEvent(new NewUserRegisteredEvent(
+                user.getId(), user.getEmail(), user.getDisplayName(), familyName, source, emailVerified,
+                adminEmails, Instant.now()));
+    }
+
+    private String familyNameOf(Long familyId) {
+        return familyDao.selectById(familyId).map(Family::getName).orElse("");
     }
 
     /** Thrown as an OAuth2 error (not an ApiException) because it surfaces inside the login filter, where only the failure handler's redirect can reach the browser. */
