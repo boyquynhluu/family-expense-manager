@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { CloseIcon, EditIcon, ImageIcon, TrashIcon } from "../components/AppIcons";
+import AmountInput from "../components/AmountInput";
 import Pagination from "../components/Pagination";
 import SeedDefaultsButton from "../components/SeedDefaultsButton";
 import { useAuth } from "../hooks/useAuth";
@@ -455,14 +456,7 @@ export default function Transactions() {
                 {t("transactions:amountLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <input
-                type="number"
-                step="0.01"
-                placeholder="0"
-                value={form.amount}
-                onChange={(e) => updateField("amount", e.target.value)}
-                required
-              />
+              <AmountInput placeholder="0" value={form.amount} onChange={(v) => updateField("amount", v)} required />
             </label>
             <label className="field">
               <span>
@@ -608,25 +602,11 @@ export default function Transactions() {
           </label>
           <label className="field">
             {t("transactions:minAmountLabel")}
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="0"
-              value={filter.minAmount}
-              onChange={(e) => updateFilter("minAmount", e.target.value)}
-            />
+            <AmountInput placeholder="0" value={filter.minAmount} onChange={(v) => updateFilter("minAmount", v)} />
           </label>
           <label className="field">
             {t("transactions:maxAmountLabel")}
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="0"
-              value={filter.maxAmount}
-              onChange={(e) => updateFilter("maxAmount", e.target.value)}
-            />
+            <AmountInput placeholder="0" value={filter.maxAmount} onChange={(v) => updateFilter("maxAmount", v)} />
           </label>
           <label className="field">
             {t("transactions:fromDateLabel")}

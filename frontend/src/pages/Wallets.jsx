@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { EditIcon, TrashIcon, WalletIcon } from "../components/AppIcons";
+import AmountInput from "../components/AmountInput";
 import Pagination from "../components/Pagination";
 import SeedDefaultsButton from "../components/SeedDefaultsButton";
 import { confirmDialog } from "../utils/confirm";
@@ -216,14 +217,7 @@ export default function Wallets() {
                 {t("wallets:initialBalanceLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <input
-                type="number"
-                step="0.01"
-                placeholder="0"
-                value={initialBalance}
-                onChange={(e) => setInitialBalance(e.target.value)}
-                required
-              />
+              <AmountInput placeholder="0" value={initialBalance} onChange={setInitialBalance} required />
             </label>
             <button type="submit">{editingId ? t("wallets:submitUpdate") : t("wallets:submitAdd")}</button>
             {editingId && (
@@ -351,15 +345,7 @@ export default function Wallets() {
                 {t("wallets:transferAmountLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                placeholder="0"
-                value={transferForm.amount}
-                onChange={(e) => updateTransferField("amount", e.target.value)}
-                required
-              />
+              <AmountInput placeholder="0" value={transferForm.amount} onChange={(v) => updateTransferField("amount", v)} required />
             </label>
             <label className="field">
               <span>

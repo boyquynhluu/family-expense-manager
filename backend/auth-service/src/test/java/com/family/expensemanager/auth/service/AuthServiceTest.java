@@ -32,6 +32,7 @@ import com.family.expensemanager.auth.security.LoginAttemptStore;
 import com.family.expensemanager.auth.security.TotpSecretCipher;
 import com.family.expensemanager.auth.security.TotpService;
 import com.family.expensemanager.auth.security.TwoFactorChallengeStore;
+import com.family.expensemanager.common.message.Messages;
 import com.family.expensemanager.common.event.FamilyInviteEvent;
 import com.family.expensemanager.common.event.NewUserRegisteredEvent;
 import com.family.expensemanager.common.event.FamilyMemberEvent;
@@ -107,6 +108,17 @@ class AuthServiceTest {
 
     private final TotpSecretCipher totpSecretCipher =
             new TotpSecretCipher("ZGV2LW9ubHktdG90cC1lbmNyeXB0aW9uLWtleS0zMmI=");
+    // Real bundle (not mocked) so every message assertion below reads the exact production text,
+    // the same way common.message.Messages does when Spring wires it from application.yml's
+    // spring.messages.basename.
+    private final Messages messages = new Messages(authMessageSource());
+
+    private static org.springframework.context.support.ResourceBundleMessageSource authMessageSource() {
+        var source = new org.springframework.context.support.ResourceBundleMessageSource();
+        source.setBasename("messages/auth-messages");
+        source.setDefaultEncoding("UTF-8");
+        return source;
+    }
 
     private AuthService authService;
 
@@ -115,7 +127,7 @@ class AuthServiceTest {
         authService = new AuthService(
                 familyDao, userDao, refreshTokenDao, familyInviteDao, familyMembershipDao, twoFactorRecoveryCodeDao,
                 passwordEncoder, jwtUtil, revokedSessionStore, totpService, twoFactorChallengeStore, loginAttemptStore,
-                totpSecretCipher, eventPublisher, 15, 7, 24, 1, 72);
+                totpSecretCipher, messages, eventPublisher, 15, 7, 24, 1, 72);
     }
 
     @Test
@@ -1932,7 +1944,7 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.login(new LoginRequest("a@b.com", "password1"), null, null))
                 .isInstanceOf(UnauthorizedException.class)
-                .hasMessage(AuthService.NOT_VERIFIED_MESSAGE);
+                .hasMessage(messages.get("auth.notVerified"));
     }
 
     @Test

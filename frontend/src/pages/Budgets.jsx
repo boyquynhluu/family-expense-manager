@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { AlertIcon, EditIcon, TrashIcon } from "../components/AppIcons";
+import AmountInput from "../components/AmountInput";
 import Pagination from "../components/Pagination";
 import { confirmDialog } from "../utils/confirm";
 import { formatCurrency } from "../utils/format";
@@ -188,14 +189,7 @@ export default function Budgets() {
                   {t("budgets:limitLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="0"
-                  value={limitAmount}
-                  onChange={(e) => setLimitAmount(e.target.value)}
-                  required
-                />
+                <AmountInput placeholder="0" value={limitAmount} onChange={setLimitAmount} required />
               </label>
               <button type="submit">{editingId ? t("budgets:updateButton") : t("budgets:createButton")}</button>
               {editingId && (
