@@ -1973,4 +1973,54 @@ class AuthServiceTest {
         assertThat(purged).isZero();
         verify(userDao, never()).delete(any());
     }
+
+    private User userWithResetToken(String token, LocalDateTime expiresAt) {
+        User user = new User();
+        user.setId(5L);
+        user.setEmail("a@b.com");
+        user.setDisplayName("An");
+        user.setResetPasswordToken(token);
+        user.setResetPasswordTokenExpiresAt(expiresAt);
+        return user;
+    }
+
+    @Test
+    void forgotPassword_reusesLiveToken_soTheLinkAlreadyEmailedKeepsWorking() {
+        User user = userWithResetToken("live-token", LocalDateTime.now().plusMinutes(30));
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(user));
+
+        authService.forgotPassword(new ForgotPasswordRequest("a@b.com"));
+
+        assertThat(user.getResetPasswordToken()).isEqualTo("live-token");
+        verify(userDao, never()).update(any());
+        ArgumentCaptor<PasswordResetEvent> captor = ArgumentCaptor.forClass(PasswordResetEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().resetToken()).isEqualTo("live-token");
+    }
+
+    @Test
+    void forgotPassword_sendsNothing_whenPreviousEmailWasSentLessThanAMinuteAgo() {
+        User user = userWithResetToken("fresh-token", LocalDateTime.now().plusHours(1).minusSeconds(5));
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(user));
+
+        var response = authService.forgotPassword(new ForgotPasswordRequest("a@b.com"));
+
+        assertThat(response.message()).contains("Nếu email tồn tại");
+        assertThat(user.getResetPasswordToken()).isEqualTo("fresh-token");
+        verify(userDao, never()).update(any());
+        verify(eventPublisher, never()).publishEvent(any(PasswordResetEvent.class));
+    }
+
+    @Test
+    void forgotPassword_issuesNewToken_whenPreviousOneExpired() {
+        User user = userWithResetToken("old-token", LocalDateTime.now().minusMinutes(5));
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(user));
+
+        authService.forgotPassword(new ForgotPasswordRequest("a@b.com"));
+
+        assertThat(user.getResetPasswordToken()).isNotBlank().isNotEqualTo("old-token");
+        assertThat(user.getResetPasswordTokenExpiresAt()).isAfter(LocalDateTime.now());
+        verify(userDao).update(user);
+        verify(eventPublisher).publishEvent(any(PasswordResetEvent.class));
+    }
 }

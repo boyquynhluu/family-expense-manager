@@ -102,6 +102,8 @@ public class AuthService {
     private static final String RESEND_VERIFICATION_MESSAGE = "Nếu tài khoản đang chờ xác thực, chúng tôi đã gửi lại email xác thực.";
     /** A verification email is not re-sent (and its token not rotated) while the previous one is younger than this. */
     private static final long VERIFICATION_RESEND_COOLDOWN_SECONDS = 60;
+    /** Same idea for the password reset email: no second email (and the live token is reused) within this window. */
+    private static final long RESET_EMAIL_COOLDOWN_SECONDS = 60;
     private static final String ACCOUNT_LOCKED_MESSAGE = "Tài khoản đã bị khoá bởi quản trị viên";
     private static final String INVALID_TWO_FACTOR_CODE_MESSAGE = "Mã xác thực không đúng hoặc đã được sử dụng";
     /** Lets the shared /verify link (built by notification-service) tell an e-mail change token from a registration token; base64url never contains '.'. */
@@ -424,10 +426,26 @@ public class AuthService {
     public MessageResponse forgotPassword(ForgotPasswordRequest request) {
         log.info("forgotPassword - start, email={}", request.email());
         userDao.selectByEmail(request.email()).ifPresent(user -> {
-            String resetToken = generateOpaqueToken();
-            user.setResetPasswordToken(resetToken);
-            user.setResetPasswordTokenExpiresAt(LocalDateTime.now().plus(resetPasswordTokenTtl));
-            userDao.update(user);
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime expiresAt = user.getResetPasswordTokenExpiresAt();
+            boolean hasLiveToken = user.getResetPasswordToken() != null && expiresAt != null && expiresAt.isAfter(now);
+
+            String resetToken;
+            if (hasLiveToken) {
+                // Keep the token that was already emailed valid instead of overwriting it, and don't
+                // send another email while the previous one is still fresh.
+                boolean sentRecently = expiresAt.isAfter(
+                        now.plus(resetPasswordTokenTtl).minusSeconds(RESET_EMAIL_COOLDOWN_SECONDS));
+                if (sentRecently) {
+                    return;
+                }
+                resetToken = user.getResetPasswordToken();
+            } else {
+                resetToken = generateOpaqueToken();
+                user.setResetPasswordToken(resetToken);
+                user.setResetPasswordTokenExpiresAt(now.plus(resetPasswordTokenTtl));
+                userDao.update(user);
+            }
 
             eventPublisher.publishEvent(new PasswordResetEvent(
                     user.getId(), user.getEmail(), user.getDisplayName(), resetToken, Instant.now()));

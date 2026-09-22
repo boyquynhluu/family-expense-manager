@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
@@ -30,7 +30,15 @@ export default function Login() {
   const [twoFactorToken, setTwoFactorToken] = useState(location.state?.twoFactorToken ?? null);
   const [totpCode, setTotpCode] = useState("");
 
+  // Guards against StrictMode's dev-only double-invoke of effects (mount → cleanup →
+  // mount again), which would otherwise show the success toast twice — see
+  // OAuth2Callback.jsx/Verify.jsx for the same pattern.
+  const handledLocationState = useRef(false);
+
   useEffect(() => {
+    if (handledLocationState.current) return;
+    handledLocationState.current = true;
+
     if (location.state?.passwordResetSuccess) {
       toast.success(t("passwordResetSuccess"));
       navigate(location.pathname, { replace: true, state: {} });
