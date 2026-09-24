@@ -154,4 +154,14 @@ public class CategoryService {
         }
         return category;
     }
+
+    /** Same as above, and additionally requires the category to be of {@code expectedType} (INCOME/EXPENSE). */
+    Category requireOwnedByFamily(Long categoryId, Long familyId, String expectedType) {
+        Category category = requireOwnedByFamily(categoryId, familyId);
+        if (!category.getType().equals(expectedType)) {
+            throw logged(log, new BadRequestException("Danh mục \"" + category.getName() + "\" thuộc loại "
+                    + category.getType() + ", không khớp loại " + expectedType));
+        }
+        return category;
+    }
 }

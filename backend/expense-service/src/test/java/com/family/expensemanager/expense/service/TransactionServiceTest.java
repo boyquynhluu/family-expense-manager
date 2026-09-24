@@ -34,6 +34,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
@@ -388,7 +389,7 @@ class TransactionServiceTest {
         category.setId(7L);
         when(transactionDao.selectById(1L)).thenReturn(Optional.of(target));
         when(walletService.requireOwnedByFamily(5L, 1L)).thenReturn(wallet);
-        when(categoryService.requireOwnedByFamily(7L, 1L)).thenReturn(category);
+        when(categoryService.requireOwnedByFamily(eq(7L), eq(1L), anyString())).thenReturn(category);
     }
 
     private static TransactionRequest updateRequest() {
@@ -514,7 +515,7 @@ class TransactionServiceTest {
         category.setId(7L);
         category.setName("Ăn uống");
         when(walletService.requireOwnedByFamily(5L, 1L)).thenReturn(wallet);
-        when(categoryService.requireOwnedByFamily(7L, 1L)).thenReturn(category);
+        when(categoryService.requireOwnedByFamily(eq(7L), eq(1L), anyString())).thenReturn(category);
         when(transactionDao.sumAmountByCategoryPeriodAndType(1L, 7L, "2026-01", "EXPENSE"))
                 .thenReturn(new BigDecimal(categoryTotalBefore));
         when(budgetDao.selectByCategoryAndPeriod(7L, "2026-01")).thenReturn(Optional.ofNullable(categoryBudget));
@@ -567,7 +568,7 @@ class TransactionServiceTest {
         Category category = new Category();
         category.setId(7L);
         when(walletService.requireOwnedByFamily(5L, 1L)).thenReturn(wallet);
-        when(categoryService.requireOwnedByFamily(7L, 1L)).thenReturn(category);
+        when(categoryService.requireOwnedByFamily(eq(7L), eq(1L), anyString())).thenReturn(category);
 
         TransactionResponse response = transactionService.create(1L, CREATOR_ID, "user@b.com", userDisplayName,
                 new TransactionRequest(5L, 7L, "INCOME", BigDecimal.TEN, LocalDateTime.of(2026, 1, 15, 10, 0), null));

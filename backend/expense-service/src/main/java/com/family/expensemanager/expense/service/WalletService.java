@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,11 +49,12 @@ public class WalletService {
     public WalletResponse create(Long familyId, CreateWalletRequest request) {
         try {
             log.info("create - start, familyId={}, name={}", familyId, request.name());
-            requireConsistentCurrency(familyId, request.currency(), null);
+            String currency = normalizeCurrency(request.currency());
+            requireConsistentCurrency(familyId, currency, null);
             Wallet wallet = new Wallet();
             wallet.setFamilyId(familyId);
             wallet.setName(request.name());
-            wallet.setCurrency(request.currency());
+            wallet.setCurrency(currency);
             wallet.setInitialBalance(request.initialBalance());
             walletDao.insert(wallet);
             return WalletResponse.from(wallet);
@@ -81,9 +83,10 @@ public class WalletService {
         try {
             log.info("update - start, walletId={}, familyId={}", walletId, familyId);
             Wallet wallet = requireOwnedByFamily(walletId, familyId);
-            requireConsistentCurrency(familyId, request.currency(), walletId);
+            String currency = normalizeCurrency(request.currency());
+            requireConsistentCurrency(familyId, currency, walletId);
             wallet.setName(request.name());
-            wallet.setCurrency(request.currency());
+            wallet.setCurrency(currency);
             wallet.setInitialBalance(request.initialBalance());
             walletDao.update(wallet);
             return WalletResponse.from(wallet, currentBalanceOf(wallet));
@@ -151,6 +154,11 @@ public class WalletService {
         } catch (Exception e) {
             throw ServiceException.unexpected("WalletService.restore", e);
         }
+    }
+
+    /** "vnd" and "VND " are the same currency — store and compare the ISO code in upper case. */
+    private static String normalizeCurrency(String currency) {
+        return currency.trim().toUpperCase(Locale.ROOT);
     }
 
     /**

@@ -1,5 +1,8 @@
 package com.family.expensemanager.auth.service;
 
+import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
+
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -12,6 +15,7 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -19,7 +23,9 @@ import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
@@ -82,13 +88,8 @@ import com.family.expensemanager.common.exception.UnauthorizedException;
 import com.family.expensemanager.common.message.Messages;
 import com.family.expensemanager.common.security.JwtUtil;
 import com.family.expensemanager.common.security.RevokedSessionStore;
-import java.io.UncheckedIOException;
-import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.access.AccessDeniedException;
 
 import lombok.extern.slf4j.Slf4j;
-
-import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
 
 @Service
 @Transactional
@@ -189,32 +190,19 @@ public class AuthService {
                 return reRegisterPending(existing, request);
             }
 
-            Family family = new Family();
-            family.setName(request.familyName());
-            family.setCreatedAt(LocalDateTime.now());
-            familyDao.insert(family);
+            Family family = registerFamily(request);
 
             String verificationToken = generateOpaqueToken();
 
-            User user = new User();
-            user.setFamilyId(family.getId());
-            user.setEmail(request.email());
-            user.setPasswordHash(passwordEncoder.encode(request.password()));
-            user.setDisplayName(request.displayName());
-            user.setRole(ROLE_OWNER);
-            user.setActive(false);
-            user.setProvider(PROVIDER_LOCAL);
-            user.setIsSystemAdmin(Boolean.FALSE);
-            user.setTotpEnabled(Boolean.FALSE);
-            user.setLocked(Boolean.FALSE);
-            user.setVerificationToken(verificationToken);
-            user.setVerificationTokenExpiresAt(LocalDateTime.now().plus(verificationTokenTtl));
-            userDao.insert(user);
+            User user = registerUser(family, request, verificationToken);
+
             addMembership(user.getId(), family.getId(), ROLE_OWNER);
 
+            // Register event for kafka
             eventPublisher.publishEvent(new UserVerificationEvent(
                     user.getId(), user.getEmail(), user.getDisplayName(), verificationToken, Instant.now()));
-            publishNewUserRegistered(user, family.getName(), NewUserRegisteredEvent.SOURCE_LOCAL, false);
+
+                    publishNewUserRegistered(user, family.getName(), NewUserRegisteredEvent.SOURCE_LOCAL, false);
             return new MessageResponse(messages.get("auth.registerSuccess"));
         } catch (ApiException e) {
             // Business errors (e.g. 409 email already registered) keep their own status and message.
@@ -1272,6 +1260,7 @@ public class AuthService {
                 throw logged(log, new BadRequestException(
                         "Không lấy được email từ " + provider + ". Vui lòng cấp quyền chia sẻ email."));
             }
+            email = email.trim().toLowerCase(Locale.ROOT);
 
             User existingByProvider = userDao.selectByProviderAndProviderId(provider, providerId).orElse(null);
             if (existingByProvider != null) {
@@ -1554,5 +1543,45 @@ public class AuthService {
             log.error("Không tạo được SHA-256 MessageDigest", e);
             throw new IllegalStateException(e);
         }
+    }
+
+    /**
+     * Register User
+     *
+     * @param family
+     * @param request
+     * @param verificationToken
+     * @return user
+     */
+    private User registerUser(Family family, RegisterRequest request, String verificationToken) {
+        User user = new User();
+        user.setFamilyId(family.getId());
+        user.setEmail(request.email());
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setDisplayName(request.displayName());
+        user.setRole(ROLE_OWNER);
+        user.setActive(false);
+        user.setProvider(PROVIDER_LOCAL);
+        user.setIsSystemAdmin(Boolean.FALSE);
+        user.setTotpEnabled(Boolean.FALSE);
+        user.setLocked(Boolean.FALSE);
+        user.setVerificationToken(verificationToken);
+        user.setVerificationTokenExpiresAt(LocalDateTime.now().plus(verificationTokenTtl));
+        userDao.insert(user);
+        return user;
+    }
+
+    /**
+     * Register Family
+     *
+     * @param request
+     * @return family
+     */
+    private Family registerFamily(RegisterRequest request) {
+        Family family = new Family();
+        family.setName(request.familyName());
+        family.setCreatedAt(LocalDateTime.now());
+        familyDao.insert(family);
+        return family;
     }
 }

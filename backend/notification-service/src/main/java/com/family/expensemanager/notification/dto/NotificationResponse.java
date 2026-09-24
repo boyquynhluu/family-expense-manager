@@ -2,6 +2,10 @@ package com.family.expensemanager.notification.dto;
 
 import com.family.expensemanager.notification.domain.entity.Notification;
 
+/**
+ * What the client sees of a notification. The stored payload JSON is deliberately left out: it is the raw event,
+ * including the actor's email address, and every member of the family can list these notifications.
+ */
 public record NotificationResponse(
         Long id,
         Long familyId,
@@ -9,7 +13,6 @@ public record NotificationResponse(
         String type,
         String title,
         String message,
-        String payloadJson,
         Boolean isRead) {
 
     public static NotificationResponse from(Notification notification) {
@@ -20,7 +23,6 @@ public record NotificationResponse(
                 notification.getType(),
                 notification.getTitle(),
                 notification.getMessage(),
-                notification.getPayloadJson(),
                 notification.getIsRead());
     }
 }

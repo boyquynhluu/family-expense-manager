@@ -113,7 +113,12 @@ public class ExpenseEventListener {
                 log.info("Bỏ qua gửi email chuyển tiền vì người dùng đã tắt, familyId={}, userId={}",
                         event.familyId(), event.userId());
             } else if (event.userEmail() != null) {
-                sendWalletTransferEmail(event);
+                try {
+                    sendWalletTransferEmail(event);
+                } catch (MessagingException | MailException e) {
+                    // Not rethrown: Kafka would redeliver the event and insert the in-app notification again.
+                    log.error("Không gửi được email chuyển tiền familyId={}, userId={}", event.familyId(), event.userId(), e);
+                }
             } else {
                 log.warn("Bỏ qua gửi email chuyển tiền vì thiếu userEmail, familyId={}, userId={}",
                         event.familyId(), event.userId());
@@ -131,7 +136,12 @@ public class ExpenseEventListener {
             log.info("Bỏ qua gửi email vượt ngân sách vì người dùng đã tắt, familyId={}, userId={}",
                     event.familyId(), event.userId());
         } else if (event.userEmail() != null) {
-            sendBudgetExceededEmail(event);
+            try {
+                sendBudgetExceededEmail(event);
+            } catch (MessagingException | MailException e) {
+                // Not rethrown: Kafka would redeliver the event and insert the in-app notification again.
+                log.error("Không gửi được email vượt ngân sách familyId={}, userId={}", event.familyId(), event.userId(), e);
+            }
         } else {
             log.warn("Bỏ qua gửi email vượt ngân sách vì thiếu userEmail, familyId={}, userId={}",
                     event.familyId(), event.userId());

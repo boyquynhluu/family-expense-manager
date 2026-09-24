@@ -68,7 +68,7 @@ public class TransactionService {
         try {
             log.info("create - start, familyId={}, userId={}", familyId, userId);
             Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
-            Category category = categoryService.requireOwnedByFamily(request.categoryId(), familyId);
+            Category category = categoryService.requireOwnedByFamily(request.categoryId(), familyId, request.type());
 
             Transaction transaction = new Transaction();
             transaction.setWalletId(wallet.getId());
@@ -156,7 +156,7 @@ public class TransactionService {
             Transaction transaction = requireOwnedByFamily(transactionId, familyId);
             requireCanModify(transaction, callerUserId, callerIsOwner);
             Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
-            Category category = categoryService.requireOwnedByFamily(request.categoryId(), familyId);
+            Category category = categoryService.requireOwnedByFamily(request.categoryId(), familyId, request.type());
 
             String oldPeriodMonth = periodMonthOf(transaction.getOccurredAt());
 

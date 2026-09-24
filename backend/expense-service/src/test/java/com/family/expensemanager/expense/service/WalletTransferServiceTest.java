@@ -266,6 +266,51 @@ class WalletTransferServiceTest {
         assertThat(response.toWalletId()).isEqualTo(4L);
     }
 
+    // The edited transfer's own 10 is already deducted from the source wallet's balance (0 left), so editing
+    // it must not be judged against that already-reduced balance.
+    @Test
+    void update_allowsSameAmount_whenSourceBalanceOnlyCoversTheTransferBeingEdited() {
+        WalletTransfer existing = transfer(5L, 7L, 42L);
+        Wallet from = wallet(1L, 7L, "VND");
+        when(walletTransferDao.selectById(5L)).thenReturn(Optional.of(existing));
+        when(walletService.requireOwnedByFamily(1L, 7L)).thenReturn(from);
+        when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "VND"));
+        when(walletService.currentBalanceOf(from)).thenReturn(BigDecimal.ZERO);
+
+        service.update(7L, 42L, "MEMBER", 5L, request(1L, 2L, "10"));
+
+        verify(walletTransferDao).update(existing);
+    }
+
+    @Test
+    void update_rejectsAmountAboveSourceBalancePlusTheTransferBeingEdited() {
+        WalletTransfer existing = transfer(5L, 7L, 42L);
+        Wallet from = wallet(1L, 7L, "VND");
+        when(walletTransferDao.selectById(5L)).thenReturn(Optional.of(existing));
+        when(walletService.requireOwnedByFamily(1L, 7L)).thenReturn(from);
+        when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "VND"));
+        when(walletService.currentBalanceOf(from)).thenReturn(BigDecimal.ZERO);
+
+        assertThatThrownBy(() -> service.update(7L, 42L, "MEMBER", 5L, request(1L, 2L, "11")))
+                .isInstanceOf(BadRequestException.class);
+        verify(walletTransferDao, never()).update(any());
+    }
+
+    // Edited transfer 1 -> 2 (10) becomes 2 -> 3: wallet 2 currently holds that incoming 10, which disappears
+    // with the edit, so only the balance without it (0) counts.
+    @Test
+    void update_excludesTheEditedTransfersIncomingAmount_whenItsDestinationBecomesTheNewSource() {
+        WalletTransfer existing = transfer(5L, 7L, 42L);
+        Wallet newSource = wallet(2L, 7L, "VND");
+        when(walletTransferDao.selectById(5L)).thenReturn(Optional.of(existing));
+        when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(newSource);
+        when(walletService.requireOwnedByFamily(3L, 7L)).thenReturn(wallet(3L, 7L, "VND"));
+        when(walletService.currentBalanceOf(newSource)).thenReturn(new BigDecimal("10"));
+
+        assertThatThrownBy(() -> service.update(7L, 42L, "MEMBER", 5L, request(2L, 3L, "5")))
+                .isInstanceOf(BadRequestException.class);
+    }
+
     @Test
     void update_succeeds_forOwnerWhoIsNotTheCreator() {
         WalletTransfer existing = transfer(5L, 7L, 42L);

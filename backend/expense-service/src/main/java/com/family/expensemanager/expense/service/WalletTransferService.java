@@ -52,7 +52,7 @@ public class WalletTransferService {
             Long familyId, Long userId, String userEmail, String userDisplayName, CreateWalletTransferRequest request) {
         try {
             log.info("create - start, familyId={}, from={}, to={}", familyId, request.fromWalletId(), request.toWalletId());
-            Wallet[] wallets = requireValidWallets(familyId, request);
+            Wallet[] wallets = requireValidWallets(familyId, request, null);
 
             WalletTransfer transfer = new WalletTransfer();
             transfer.setFamilyId(familyId);
@@ -84,7 +84,7 @@ public class WalletTransferService {
             log.info("update - start, familyId={}, userId={}, transferId={}", familyId, userId, transferId);
             WalletTransfer transfer = requireOwnedByFamily(transferId, familyId);
             requireCreatorOrOwner(transfer, userId, role, "sửa");
-            Wallet[] wallets = requireValidWallets(familyId, request);
+            Wallet[] wallets = requireValidWallets(familyId, request, transfer);
 
             transfer.setFromWalletId(wallets[0].getId());
             transfer.setToWalletId(wallets[1].getId());
@@ -100,7 +100,11 @@ public class WalletTransferService {
         }
     }
 
-    private Wallet[] requireValidWallets(Long familyId, CreateWalletTransferRequest request) {
+    /**
+     * @param existing the transfer being edited, or null when creating — its own amount is already part of
+     *                 the wallets' current balances, so it must be taken out before checking the new amount.
+     */
+    private Wallet[] requireValidWallets(Long familyId, CreateWalletTransferRequest request, WalletTransfer existing) {
         if (request.fromWalletId().equals(request.toWalletId())) {
             throw logged(log, new BadRequestException("Ví nguồn và ví đích phải khác nhau"));
         }
@@ -115,6 +119,14 @@ public class WalletTransferService {
         // Balance is checked against the SOURCE wallet (you can't send more than it holds), not the
         // destination — and must include the wallet's initialBalance, not just its transaction history.
         BigDecimal fromBalance = walletService.currentBalanceOf(from);
+        if (existing != null) {
+            if (existing.getFromWalletId().equals(from.getId())) {
+                fromBalance = fromBalance.add(existing.getAmount());
+            }
+            if (existing.getToWalletId().equals(from.getId())) {
+                fromBalance = fromBalance.subtract(existing.getAmount());
+            }
+        }
         if (request.amount().compareTo(fromBalance) > 0) {
             throw logged(log, new BadRequestException("Số tiền chuyển phải <= số dư hiện tại của ví nguồn: " + fromBalance));
         }

@@ -286,6 +286,36 @@ class ExpenseEventListenerTest {
         verify(mailSender, org.mockito.Mockito.times(3)).createMimeMessage();
     }
 
+    @Test
+    void onExpenseEvent_doesNotThrow_andStillEmailsReceivers_whenCreatorEmailFails() throws Exception {
+        MimeMessage creatorMail = new MimeMessage(Session.getInstance(new Properties()));
+        MimeMessage receiverMail = new MimeMessage(Session.getInstance(new Properties()));
+        when(mailSender.createMimeMessage()).thenReturn(creatorMail, receiverMail);
+        when(memberDirectory.listMembers(1L)).thenReturn(List.of(
+                new FamilyMemberDirectory.Member(11L, "wife@b.com", "Hồng Huế")));
+        org.mockito.Mockito.lenient().doThrow(new org.springframework.mail.MailSendException("smtp down"))
+                .when(mailSender).send(creatorMail);
+
+        org.assertj.core.api.Assertions.assertThatCode(
+                () -> listener.onExpenseEvent(walletTransferEvent("user@b.com", null))).doesNotThrowAnyException();
+
+        verify(notificationDao).insert(any());
+        verify(mailSender).send(receiverMail);
+    }
+
+    @Test
+    void onExpenseEvent_doesNotThrow_whenBudgetExceededEmailFails() throws Exception {
+        MimeMessage mimeMessage = new MimeMessage(Session.getInstance(new Properties()));
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+        org.mockito.Mockito.doThrow(new org.springframework.mail.MailSendException("smtp down"))
+                .when(mailSender).send(mimeMessage);
+
+        org.assertj.core.api.Assertions.assertThatCode(
+                () -> listener.onExpenseEvent(budgetExceededEvent("user@b.com"))).doesNotThrowAnyException();
+
+        verify(notificationDao).insert(any());
+    }
+
     private static ExpenseEvent walletTransferEvent(String userEmail, String note) {
         return new ExpenseEvent(
                 ExpenseEvent.WALLET_TRANSFERRED, 1L, 10L, null, null, BigDecimal.valueOf(200000),

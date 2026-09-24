@@ -151,7 +151,7 @@ public class BudgetService {
         if (request.categoryId() == null) {
             duplicate = budgetDao.selectOverallByPeriod(familyId, request.periodMonth());
         } else {
-            categoryService.requireOwnedByFamily(request.categoryId(), familyId);
+            categoryService.requireOwnedByFamily(request.categoryId(), familyId, "EXPENSE");
             duplicate = budgetDao.selectByCategoryAndPeriod(request.categoryId(), request.periodMonth());
         }
         if (duplicate.isPresent() && !Objects.equals(duplicate.get().getId(), selfId)) {

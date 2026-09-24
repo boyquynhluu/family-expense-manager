@@ -76,7 +76,7 @@ class RecurringTransactionServiceTest {
 
         assertThat(response.nextRunDate()).isEqualTo(LocalDate.of(2026, 2, 1));
         verify(walletService).requireOwnedByFamily(5L, 1L);
-        verify(categoryService).requireOwnedByFamily(7L, 1L);
+        verify(categoryService).requireOwnedByFamily(7L, 1L, "EXPENSE");
     }
 
     @Test

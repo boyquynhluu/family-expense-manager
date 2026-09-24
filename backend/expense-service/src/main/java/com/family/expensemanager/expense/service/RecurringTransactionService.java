@@ -76,7 +76,7 @@ public class RecurringTransactionService {
             log.info("create - start, familyId={}, walletId={}, categoryId={}",
                     familyId, request.walletId(), request.categoryId());
             walletService.requireOwnedByFamily(request.walletId(), familyId);
-            categoryService.requireOwnedByFamily(request.categoryId(), familyId);
+            categoryService.requireOwnedByFamily(request.categoryId(), familyId, request.type());
 
             RecurringTransaction r = new RecurringTransaction();
             r.setFamilyId(familyId);
@@ -131,7 +131,7 @@ public class RecurringTransactionService {
             RecurringTransaction r = requireOwnedByFamily(id, familyId);
             requireCanModify(r, callerUserId, callerIsOwner);
             walletService.requireOwnedByFamily(request.walletId(), familyId);
-            categoryService.requireOwnedByFamily(request.categoryId(), familyId);
+            categoryService.requireOwnedByFamily(request.categoryId(), familyId, request.type());
 
             r.setWalletId(request.walletId());
             r.setCategoryId(request.categoryId());
