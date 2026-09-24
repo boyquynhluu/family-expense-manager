@@ -1,6 +1,17 @@
 package com.family.expensemanager.expense.service;
 
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.List;
+
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.family.expensemanager.common.dto.PageResponse;
+import com.family.expensemanager.common.event.ExpenseEvent;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.expense.dao.WalletTransferDao;
@@ -8,13 +19,6 @@ import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.domain.entity.WalletTransfer;
 import com.family.expensemanager.expense.dto.CreateWalletTransferRequest;
 import com.family.expensemanager.expense.dto.WalletTransferResponse;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.List;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +29,7 @@ import lombok.extern.slf4j.Slf4j;
  * transaction lists, reports or budgets.
  */
 @Service
+@Transactional
 @RequiredArgsConstructor
 @Slf4j(topic = "WalletTransferService")
 public class WalletTransferService {
@@ -35,9 +40,10 @@ public class WalletTransferService {
 
     private final WalletTransferDao walletTransferDao;
     private final WalletService walletService;
+    private final ApplicationEventPublisher eventPublisher;
 
-    @Transactional
-    public WalletTransferResponse create(Long familyId, Long userId, CreateWalletTransferRequest request) {
+    public WalletTransferResponse create(
+            Long familyId, Long userId, String userEmail, String userDisplayName, CreateWalletTransferRequest request) {
         log.info("create - start, familyId={}, from={}, to={}", familyId, request.fromWalletId(), request.toWalletId());
         Wallet[] wallets = requireValidWallets(familyId, request);
 
@@ -51,10 +57,15 @@ public class WalletTransferService {
         transfer.setCreatedByUserId(userId);
         transfer.setCreatedAt(LocalDateTime.now());
         walletTransferDao.insert(transfer);
+
+        eventPublisher.publishEvent(new ExpenseEvent(
+                ExpenseEvent.WALLET_TRANSFERRED, familyId, userId, null, null, request.amount(), null, null, null,
+                null, userEmail, userDisplayName, Instant.now(), request.occurredAt().toLocalDate(), request.note(),
+                wallets[0].getName(), wallets[1].getName()));
+
         return WalletTransferResponse.from(transfer);
     }
 
-    @Transactional
     public WalletTransferResponse update(
             Long familyId, Long userId, String role, Long transferId, CreateWalletTransferRequest request) {
         log.info("update - start, familyId={}, userId={}, transferId={}", familyId, userId, transferId);
@@ -82,6 +93,12 @@ public class WalletTransferService {
         Wallet to = walletService.requireOwnedByFamily(request.toWalletId(), familyId);
         if (!from.getCurrency().equals(to.getCurrency())) {
             throw new BadRequestException("Hai ví phải cùng loại tiền tệ");
+        }
+        // Balance is checked against the SOURCE wallet (you can't send more than it holds), not the
+        // destination — and must include the wallet's initialBalance, not just its transaction history.
+        BigDecimal fromBalance = walletService.currentBalanceOf(from);
+        if (request.amount().compareTo(fromBalance) > 0) {
+            throw new BadRequestException("Số tiền chuyển phải <= số dư hiện tại của ví nguồn: " + fromBalance);
         }
         return new Wallet[] {from, to};
     }
@@ -115,7 +132,6 @@ public class WalletTransferService {
         return PageResponse.of(content, page, size, totalElements);
     }
 
-    @Transactional
     public void delete(Long familyId, Long userId, String role, Long transferId) {
         log.info("delete - start, familyId={}, userId={}, transferId={}", familyId, userId, transferId);
         WalletTransfer transfer = requireOwnedByFamily(transferId, familyId);

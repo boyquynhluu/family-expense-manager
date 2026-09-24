@@ -90,6 +90,46 @@ Mỗi service backend đi theo layout chuẩn của Doma:
 
 **FEM_NOTIFY** — `NOTIFICATIONS(id, family_id, user_id, type, title, message, payload_json, is_read)` · `NOTIFICATION_PREFERENCES(user_id, type, in_app_enabled, email_enabled)`
 
+### Sơ đồ quan hệ giữa các bảng (ERD)
+
+Gộp cả 3 database vào một sơ đồ để thấy toàn cảnh. Mỗi service sở hữu database riêng (`FEM_AUTH`/`FEM_EXPENSE`/`FEM_NOTIFY`), nên chỉ những đường **nét liền** là khoá ngoại SQL thật (cùng database). Những đường **nét đứt** là `family_id`/`user_id`/`created_by_user_id` trỏ sang bảng ở database khác — MySQL không cho tạo khoá ngoại giữa 2 database, nên các quan hệ này chỉ được đảm bảo ở tầng ứng dụng (qua `familyId`/`userId` trong JWT, xem mục "Bảo mật"), không có ràng buộc `FOREIGN KEY` nào ở DB.
+
+```mermaid
+erDiagram
+    %% ===== FEM_AUTH — khoá ngoại thật trong cùng database =====
+    FAMILIES ||--o{ USERS : family_id
+    FAMILIES ||--o{ FAMILY_MEMBERSHIPS : family_id
+    FAMILIES ||--o{ FAMILY_INVITES : family_id
+    USERS ||--o{ FAMILY_MEMBERSHIPS : user_id
+    USERS ||--o{ FAMILY_INVITES : invited_by_user_id
+    USERS ||--o{ REFRESH_TOKENS : user_id
+    USERS ||--o{ TWO_FACTOR_RECOVERY_CODES : user_id
+
+    %% ===== FEM_EXPENSE — khoá ngoại thật trong cùng database =====
+    WALLETS ||--o{ TRANSACTIONS : wallet_id
+    CATEGORIES ||--o{ TRANSACTIONS : category_id
+    WALLETS ||--o{ RECURRING_TRANSACTIONS : wallet_id
+    CATEGORIES ||--o{ RECURRING_TRANSACTIONS : category_id
+    CATEGORIES ||--o{ BUDGETS : "category_id (NULL = ngân sách tổng)"
+    WALLETS ||--o{ WALLET_TRANSFERS : from_wallet_id
+    WALLETS ||--o{ WALLET_TRANSFERS : to_wallet_id
+
+    %% ===== Khác database — chỉ ràng buộc ở tầng ứng dụng =====
+    FAMILIES ..o{ WALLETS : family_id
+    FAMILIES ..o{ CATEGORIES : family_id
+    FAMILIES ..o{ TRANSACTIONS : family_id
+    FAMILIES ..o{ BUDGETS : family_id
+    FAMILIES ..o{ RECURRING_TRANSACTIONS : family_id
+    FAMILIES ..o{ WALLET_TRANSFERS : family_id
+    FAMILIES ..o{ NOTIFICATIONS : family_id
+    USERS ..o{ TRANSACTIONS : "user_id (người tạo)"
+    USERS ..o{ RECURRING_TRANSACTIONS : created_by_user_id
+    USERS ..o{ WALLET_TRANSFERS : created_by_user_id
+    USERS ..o{ NOTIFICATIONS : user_id
+    USERS ..o{ NOTIFICATION_PREFERENCES : user_id
+```
+
+
 ## Hợp đồng Kafka
 
 Topic `expense-events`, key = `familyId`, phân biệt bằng field `eventType`:

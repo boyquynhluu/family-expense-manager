@@ -140,41 +140,47 @@ export default function Notifications() {
 
       {error && <p className="error-text">{error}</p>}
 
-      {notifications.length === 0 ? (
-        <div className="section-card">
-          <p className="empty-state">{t("noNotifications")}</p>
+      <div className="notification-layout">
+        <div className="section-card notification-panel">
+          <div className="notification-panel-header">
+            <h2>{t("listTitle")}</h2>
+            {hasUnread && <span className="badge">{t("unreadBadge", { count: unreadCount })}</span>}
+          </div>
+
+          {notifications.length === 0 ? (
+            <p className="empty-state">{t("noNotifications")}</p>
+          ) : (
+            <ul className="notification-list notification-scroll">
+              {notifications.map((n) => (
+                <li
+                  key={n.id}
+                  className={n.isRead ? "read" : "unread"}
+                  onClick={() => !n.isRead && markAsRead(n.id)}
+                >
+                  <span className="notification-icon">
+                    <BellIcon />
+                  </span>
+                  <div className="notification-body">
+                    <div className="notification-title-row">
+                      <strong>{n.title}</strong>
+                      {!n.isRead && <span className="notification-dot" />}
+                    </div>
+                    <p title={n.message}>{n.message}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn-danger"
+                    onClick={(event) => handleDelete(event, n.id)}
+                    aria-label={t("common:delete")}
+                  >
+                    <TrashIcon />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <Pagination pageData={pageData} onPageChange={setPage} />
         </div>
-      ) : (
-        <ul className="notification-list">
-          {notifications.map((n) => (
-            <li
-              key={n.id}
-              className={n.isRead ? "read" : "unread"}
-              onClick={() => !n.isRead && markAsRead(n.id)}
-            >
-              <span className="notification-icon">
-                <BellIcon />
-              </span>
-              <div className="notification-body">
-                <div className="notification-title-row">
-                  <strong>{n.title}</strong>
-                  {!n.isRead && <span className="notification-dot" />}
-                </div>
-                <p>{n.message}</p>
-              </div>
-              <button
-                type="button"
-                className="icon-btn icon-btn-danger"
-                onClick={(event) => handleDelete(event, n.id)}
-                aria-label={t("common:delete")}
-              >
-                <TrashIcon />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <Pagination pageData={pageData} onPageChange={setPage} />
 
       {preferences.length > 0 && (
         <div className="section-card notification-preferences">
@@ -210,6 +216,7 @@ export default function Notifications() {
           </button>
         </div>
       )}
+      </div>
     </div>
   );
 }

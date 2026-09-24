@@ -31,7 +31,8 @@ public class WalletTransferController {
     @PostMapping
     public ApiResponse<WalletTransferResponse> create(@Valid @RequestBody CreateWalletTransferRequest request) {
         log.info("create - start");
-        return ApiResponse.ok(walletTransferService.create(CurrentUser.familyId(), CurrentUser.userId(), request));
+        return ApiResponse.ok(walletTransferService.create(
+                CurrentUser.familyId(), CurrentUser.userId(), CurrentUser.email(), CurrentUser.displayName(), request));
     }
 
     @GetMapping

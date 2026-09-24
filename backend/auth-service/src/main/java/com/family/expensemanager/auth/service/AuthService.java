@@ -69,7 +69,6 @@ import com.family.expensemanager.auth.security.TotpService;
 import com.family.expensemanager.auth.security.TwoFactorChallengeStore;
 import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.event.FamilyInviteEvent;
-import com.family.expensemanager.common.message.Messages;
 import com.family.expensemanager.common.event.FamilyMemberEvent;
 import com.family.expensemanager.common.event.NewUserRegisteredEvent;
 import com.family.expensemanager.common.event.PasswordResetEvent;
@@ -79,6 +78,7 @@ import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.common.exception.UnauthorizedException;
+import com.family.expensemanager.common.message.Messages;
 import com.family.expensemanager.common.security.JwtUtil;
 import com.family.expensemanager.common.security.RevokedSessionStore;
 
@@ -167,44 +167,56 @@ public class AuthService {
         this.inviteTokenTtl = Duration.ofHours(inviteTokenTtlHours);
     }
 
+    /**
+     * Register User
+     *
+     * @param request
+     */
     public MessageResponse register(RegisterRequest request) {
         log.info("register - start, email={}", request.email());
-        User existing = userDao.selectByEmail(request.email()).orElse(null);
-        if (existing != null) {
-            if (!isPendingLocalRegistration(existing)) {
-                throw new ConflictException("Email đã được đăng ký: " + request.email());
+        try {
+            User existing = userDao.selectByEmail(request.email()).orElse(null);
+            if (existing != null) {
+                if (!isPendingLocalRegistration(existing)) {
+                    throw new ConflictException("Email đã được đăng ký: " + request.email());
+                }
+                return reRegisterPending(existing, request);
             }
-            return reRegisterPending(existing, request);
+
+            Family family = new Family();
+            family.setName(request.familyName());
+            family.setCreatedAt(LocalDateTime.now());
+            familyDao.insert(family);
+
+            String verificationToken = generateOpaqueToken();
+
+            User user = new User();
+            user.setFamilyId(family.getId());
+            user.setEmail(request.email());
+            user.setPasswordHash(passwordEncoder.encode(request.password()));
+            user.setDisplayName(request.displayName());
+            user.setRole(ROLE_OWNER);
+            user.setActive(false);
+            user.setProvider(PROVIDER_LOCAL);
+            user.setIsSystemAdmin(Boolean.FALSE);
+            user.setTotpEnabled(Boolean.FALSE);
+            user.setLocked(Boolean.FALSE);
+            user.setVerificationToken(verificationToken);
+            user.setVerificationTokenExpiresAt(LocalDateTime.now().plus(verificationTokenTtl));
+            userDao.insert(user);
+            addMembership(user.getId(), family.getId(), ROLE_OWNER);
+
+            eventPublisher.publishEvent(new UserVerificationEvent(
+                    user.getId(), user.getEmail(), user.getDisplayName(), verificationToken, Instant.now()));
+            publishNewUserRegistered(user, family.getName(), NewUserRegisteredEvent.SOURCE_LOCAL, false);
+            return new MessageResponse(messages.get("auth.registerSuccess"));
+        } catch (ApiException e) {
+            // Business errors (e.g. 409 email already registered) keep their own status and message.
+            throw e;
+        } catch (Exception e) {
+            log.error("register - failed, email={}", request.email(), e);
+            throw new IllegalArgumentException(messages.get("auth.registerFailed"), e);
         }
-
-        Family family = new Family();
-        family.setName(request.familyName());
-        family.setCreatedAt(LocalDateTime.now());
-        familyDao.insert(family);
-
-        String verificationToken = generateOpaqueToken();
-
-        User user = new User();
-        user.setFamilyId(family.getId());
-        user.setEmail(request.email());
-        user.setPasswordHash(passwordEncoder.encode(request.password()));
-        user.setDisplayName(request.displayName());
-        user.setRole(ROLE_OWNER);
-        user.setActive(false);
-        user.setProvider(PROVIDER_LOCAL);
-        user.setIsSystemAdmin(Boolean.FALSE);
-        user.setTotpEnabled(Boolean.FALSE);
-        user.setLocked(Boolean.FALSE);
-        user.setVerificationToken(verificationToken);
-        user.setVerificationTokenExpiresAt(LocalDateTime.now().plus(verificationTokenTtl));
-        userDao.insert(user);
-        addMembership(user.getId(), family.getId(), ROLE_OWNER);
-
-        eventPublisher.publishEvent(new UserVerificationEvent(
-                user.getId(), user.getEmail(), user.getDisplayName(), verificationToken, Instant.now()));
-        publishNewUserRegistered(user, family.getName(), NewUserRegisteredEvent.SOURCE_LOCAL, false);
-
-        return new MessageResponse(messages.get("auth.registerSuccess"));
     }
 
     /**

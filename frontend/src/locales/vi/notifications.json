@@ -1,6 +1,8 @@
 {
   "title": "Thông báo",
   "subtitle": "Cảnh báo ngân sách và các cập nhật khác",
+  "listTitle": "Danh sách thông báo",
+  "unreadBadge": "{{count}} chưa đọc",
   "markAllReadButton": "Đánh dấu tất cả đã đọc",
   "noNotifications": "Chưa có thông báo nào",
   "loadFailed": "Không tải được thông báo",
@@ -27,6 +29,7 @@
     "RECURRING_FAILED": "Giao dịch định kỳ thất bại",
     "MEMBER_JOINED": "Thành viên mới tham gia",
     "MEMBER_LEFT": "Thành viên rời gia đình",
-    "MEMBER_REMOVED": "Thành viên bị xoá khỏi gia đình"
+    "MEMBER_REMOVED": "Thành viên bị xoá khỏi gia đình",
+    "WALLET_TRANSFERRED": "Chuyển tiền giữa các ví"
   }
 }

@@ -127,7 +127,9 @@ public class WalletService {
         }
     }
 
-    private BigDecimal currentBalanceOf(Wallet wallet) {
+    /** Package-visible so {@link WalletTransferService} can reuse the exact same calculation (initial
+     *  balance + income - expense + transfers in - transfers out) instead of a separate, drifting copy. */
+    BigDecimal currentBalanceOf(Wallet wallet) {
         BigDecimal income = transactionDao.sumAmountByWalletAndType(wallet.getId(), TYPE_INCOME);
         BigDecimal expense = transactionDao.sumAmountByWalletAndType(wallet.getId(), TYPE_EXPENSE);
         BigDecimal transferIn = walletTransferDao.sumAmountIntoWallet(wallet.getId());

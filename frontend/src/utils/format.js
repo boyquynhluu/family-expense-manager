@@ -9,3 +9,10 @@ export function formatServerDateTime(value, locale = "vi-VN") {
 export function formatCurrency(value, currency = "VND") {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency }).format(value ?? 0);
 }
+
+// Long unbreakable text (a User-Agent string, a URL) can stretch a table cell past its
+// column instead of wrapping — cut it and let the caller show the full text via `title`.
+export function truncate(text, maxLength = 50) {
+  if (!text || text.length <= maxLength) return text;
+  return text.slice(0, maxLength) + "...";
+}

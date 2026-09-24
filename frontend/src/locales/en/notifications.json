@@ -1,6 +1,8 @@
 {
   "title": "Notifications",
   "subtitle": "Budget alerts and other updates",
+  "listTitle": "Notification list",
+  "unreadBadge": "{{count}} unread",
   "markAllReadButton": "Mark all as read",
   "noNotifications": "No notifications yet",
   "loadFailed": "Failed to load notifications",
@@ -27,6 +29,7 @@
     "RECURRING_FAILED": "Recurring transaction failed",
     "MEMBER_JOINED": "New member joined",
     "MEMBER_LEFT": "Member left the family",
-    "MEMBER_REMOVED": "Member removed from the family"
+    "MEMBER_REMOVED": "Member removed from the family",
+    "WALLET_TRANSFERRED": "Wallet transfer"
   }
 }

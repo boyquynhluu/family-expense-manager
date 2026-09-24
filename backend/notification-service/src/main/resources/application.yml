@@ -53,6 +53,8 @@ kafka:
 app:
   base-url: ${APP_BASE_URL:http://localhost:8080}
   frontend-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+  # Direct (non-gateway) URL of auth-service, for /internal/** calls that must never go through the public gateway.
+  auth-service-url: ${AUTH_SERVICE_URL:http://auth-service:8081}
   mail:
     from: ${MAIL_FROM:no-reply@family-expense-manager.local}
     # Display-only, for the "expires in N hours" line in the email — keep in sync with
