@@ -12,16 +12,22 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.event.ExpenseEvent;
+import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
+import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.expense.dao.WalletTransferDao;
 import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.domain.entity.WalletTransfer;
 import com.family.expensemanager.expense.dto.CreateWalletTransferRequest;
 import com.family.expensemanager.expense.dto.WalletTransferResponse;
+import java.io.UncheckedIOException;
+import org.springframework.security.core.AuthenticationException;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
 
 /**
  * Moves money between two wallets of the same family. A transfer is neither income nor expense, so it
@@ -44,61 +50,73 @@ public class WalletTransferService {
 
     public WalletTransferResponse create(
             Long familyId, Long userId, String userEmail, String userDisplayName, CreateWalletTransferRequest request) {
-        log.info("create - start, familyId={}, from={}, to={}", familyId, request.fromWalletId(), request.toWalletId());
-        Wallet[] wallets = requireValidWallets(familyId, request);
+        try {
+            log.info("create - start, familyId={}, from={}, to={}", familyId, request.fromWalletId(), request.toWalletId());
+            Wallet[] wallets = requireValidWallets(familyId, request);
 
-        WalletTransfer transfer = new WalletTransfer();
-        transfer.setFamilyId(familyId);
-        transfer.setFromWalletId(wallets[0].getId());
-        transfer.setToWalletId(wallets[1].getId());
-        transfer.setAmount(request.amount());
-        transfer.setNote(request.note());
-        transfer.setOccurredAt(request.occurredAt());
-        transfer.setCreatedByUserId(userId);
-        transfer.setCreatedAt(LocalDateTime.now());
-        walletTransferDao.insert(transfer);
+            WalletTransfer transfer = new WalletTransfer();
+            transfer.setFamilyId(familyId);
+            transfer.setFromWalletId(wallets[0].getId());
+            transfer.setToWalletId(wallets[1].getId());
+            transfer.setAmount(request.amount());
+            transfer.setNote(request.note());
+            transfer.setOccurredAt(request.occurredAt());
+            transfer.setCreatedByUserId(userId);
+            transfer.setCreatedAt(LocalDateTime.now());
+            walletTransferDao.insert(transfer);
 
-        eventPublisher.publishEvent(new ExpenseEvent(
-                ExpenseEvent.WALLET_TRANSFERRED, familyId, userId, null, null, request.amount(), null, null, null,
-                null, userEmail, userDisplayName, Instant.now(), request.occurredAt().toLocalDate(), request.note(),
-                wallets[0].getName(), wallets[1].getName()));
+            eventPublisher.publishEvent(new ExpenseEvent(
+                    ExpenseEvent.WALLET_TRANSFERRED, familyId, userId, null, null, request.amount(), null, null, null,
+                    null, userEmail, userDisplayName, Instant.now(), request.occurredAt().toLocalDate(), request.note(),
+                    wallets[0].getName(), wallets[1].getName()));
 
-        return WalletTransferResponse.from(transfer);
+            return WalletTransferResponse.from(transfer);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("WalletTransferService.create", e);
+        }
     }
 
     public WalletTransferResponse update(
             Long familyId, Long userId, String role, Long transferId, CreateWalletTransferRequest request) {
-        log.info("update - start, familyId={}, userId={}, transferId={}", familyId, userId, transferId);
-        WalletTransfer transfer = requireOwnedByFamily(transferId, familyId);
-        requireCreatorOrOwner(transfer, userId, role, "sửa");
-        Wallet[] wallets = requireValidWallets(familyId, request);
+        try {
+            log.info("update - start, familyId={}, userId={}, transferId={}", familyId, userId, transferId);
+            WalletTransfer transfer = requireOwnedByFamily(transferId, familyId);
+            requireCreatorOrOwner(transfer, userId, role, "sửa");
+            Wallet[] wallets = requireValidWallets(familyId, request);
 
-        transfer.setFromWalletId(wallets[0].getId());
-        transfer.setToWalletId(wallets[1].getId());
-        transfer.setAmount(request.amount());
-        transfer.setNote(request.note());
-        transfer.setOccurredAt(request.occurredAt());
-        walletTransferDao.update(transfer);
-        return WalletTransferResponse.from(transfer);
+            transfer.setFromWalletId(wallets[0].getId());
+            transfer.setToWalletId(wallets[1].getId());
+            transfer.setAmount(request.amount());
+            transfer.setNote(request.note());
+            transfer.setOccurredAt(request.occurredAt());
+            walletTransferDao.update(transfer);
+            return WalletTransferResponse.from(transfer);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("WalletTransferService.update", e);
+        }
     }
 
     private Wallet[] requireValidWallets(Long familyId, CreateWalletTransferRequest request) {
         if (request.fromWalletId().equals(request.toWalletId())) {
-            throw new BadRequestException("Ví nguồn và ví đích phải khác nhau");
+            throw logged(log, new BadRequestException("Ví nguồn và ví đích phải khác nhau"));
         }
         if (request.amount().compareTo(MIN_AMOUNT) < 0) {
-            throw new BadRequestException("Số tiền chuyển phải >= 0.01");
+            throw logged(log, new BadRequestException("Số tiền chuyển phải >= 0.01"));
         }
         Wallet from = walletService.requireOwnedByFamily(request.fromWalletId(), familyId);
         Wallet to = walletService.requireOwnedByFamily(request.toWalletId(), familyId);
         if (!from.getCurrency().equals(to.getCurrency())) {
-            throw new BadRequestException("Hai ví phải cùng loại tiền tệ");
+            throw logged(log, new BadRequestException("Hai ví phải cùng loại tiền tệ"));
         }
         // Balance is checked against the SOURCE wallet (you can't send more than it holds), not the
         // destination — and must include the wallet's initialBalance, not just its transaction history.
         BigDecimal fromBalance = walletService.currentBalanceOf(from);
         if (request.amount().compareTo(fromBalance) > 0) {
-            throw new BadRequestException("Số tiền chuyển phải <= số dư hiện tại của ví nguồn: " + fromBalance);
+            throw logged(log, new BadRequestException("Số tiền chuyển phải <= số dư hiện tại của ví nguồn: " + fromBalance));
         }
         return new Wallet[] {from, to};
     }
@@ -106,36 +124,48 @@ public class WalletTransferService {
     private WalletTransfer requireOwnedByFamily(Long transferId, Long familyId) {
         return walletTransferDao.selectById(transferId)
                 .filter(t -> t.getFamilyId().equals(familyId))
-                .orElseThrow(() -> new NotFoundException("Giao dịch chuyển tiền không tồn tại: " + transferId));
+                .orElseThrow(() -> logged(log, new NotFoundException("Giao dịch chuyển tiền không tồn tại: " + transferId)));
     }
 
     private void requireCreatorOrOwner(WalletTransfer transfer, Long userId, String role, String action) {
         if (!ROLE_OWNER.equals(role) && !transfer.getCreatedByUserId().equals(userId)) {
-            throw new AccessDeniedException(
-                    "Chỉ người tạo hoặc chủ gia đình mới được " + action + " giao dịch chuyển tiền");
+            throw logged(log, new AccessDeniedException(
+                    "Chỉ người tạo hoặc chủ gia đình mới được " + action + " giao dịch chuyển tiền"));
         }
     }
 
     public PageResponse<WalletTransferResponse> listByFamilyPaged(Long familyId, int page, int size) {
-        log.info("listByFamilyPaged - start, familyId={}, page={}, size={}", familyId, page, size);
-        if (page < 0) {
-            throw new BadRequestException("page phải >= 0");
+        try {
+            log.info("listByFamilyPaged - start, familyId={}, page={}, size={}", familyId, page, size);
+            if (page < 0) {
+                throw logged(log, new BadRequestException("page phải >= 0"));
+            }
+            if (size < 1 || size > MAX_PAGE_SIZE) {
+                throw logged(log, new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE));
+            }
+            long totalElements = walletTransferDao.countByFamilyId(familyId);
+            List<WalletTransferResponse> content = walletTransferDao.selectByFamilyIdPaged(familyId, size, page * size)
+                    .stream()
+                    .map(WalletTransferResponse::from)
+                    .toList();
+            return PageResponse.of(content, page, size, totalElements);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("WalletTransferService.listByFamilyPaged", e);
         }
-        if (size < 1 || size > MAX_PAGE_SIZE) {
-            throw new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE);
-        }
-        long totalElements = walletTransferDao.countByFamilyId(familyId);
-        List<WalletTransferResponse> content = walletTransferDao.selectByFamilyIdPaged(familyId, size, page * size)
-                .stream()
-                .map(WalletTransferResponse::from)
-                .toList();
-        return PageResponse.of(content, page, size, totalElements);
     }
 
     public void delete(Long familyId, Long userId, String role, Long transferId) {
-        log.info("delete - start, familyId={}, userId={}, transferId={}", familyId, userId, transferId);
-        WalletTransfer transfer = requireOwnedByFamily(transferId, familyId);
-        requireCreatorOrOwner(transfer, userId, role, "xoá");
-        walletTransferDao.delete(transfer);
+        try {
+            log.info("delete - start, familyId={}, userId={}, transferId={}", familyId, userId, transferId);
+            WalletTransfer transfer = requireOwnedByFamily(transferId, familyId);
+            requireCreatorOrOwner(transfer, userId, role, "xoá");
+            walletTransferDao.delete(transfer);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("WalletTransferService.delete", e);
+        }
     }
 }

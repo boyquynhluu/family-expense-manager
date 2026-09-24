@@ -1,6 +1,8 @@
 package com.family.expensemanager.expense.service;
 
+import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
+import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.expense.dao.ReportDao;
 import com.family.expensemanager.expense.dto.CompareReportResponse;
 import com.family.expensemanager.expense.dto.CompareReportResponse.CategoryCompareItem;
@@ -11,7 +13,11 @@ import com.family.expensemanager.expense.dto.RangeReportResponse.BucketTotal;
 import com.family.expensemanager.expense.dto.RangeReportResponse.CategoryTotal;
 import com.family.expensemanager.expense.dto.YearReportResponse;
 import com.family.expensemanager.expense.dto.YearReportResponse.MonthTotal;
+import java.io.UncheckedIOException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -31,7 +37,10 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
+
 @Service
+@Transactional(readOnly = true)
 @RequiredArgsConstructor
 @Slf4j(topic = "ReportService")
 public class ReportService {
@@ -48,125 +57,149 @@ public class ReportService {
     private final ReportDao reportDao;
 
     public RangeReportResponse range(Long familyId, String from, String to) {
-        log.info("range - start, familyId={}, from={}, to={}", familyId, from, to);
-        LocalDate fromDate = parseDate(from, "Ngày bắt đầu");
-        LocalDate toDate = parseDate(to, "Ngày kết thúc");
-        long days = validateRange(fromDate, toDate);
-        LocalDate toExclusive = toDate.plusDays(1);
+        try {
+            log.info("range - start, familyId={}, from={}, to={}", familyId, from, to);
+            LocalDate fromDate = parseDate(from, "Ngày bắt đầu");
+            LocalDate toDate = parseDate(to, "Ngày kết thúc");
+            long days = validateRange(fromDate, toDate);
+            LocalDate toExclusive = toDate.plusDays(1);
 
-        Totals grand = new Totals();
-        List<CategoryTotal> byCategory = new ArrayList<>();
-        for (Map<String, Object> row : reportDao.sumByCategoryAndType(familyId, fromDate, toExclusive)) {
-            String type = str(row.get("type"));
-            BigDecimal total = decimal(row.get("total"));
-            grand.add(type, total);
-            byCategory.add(new CategoryTotal(longValue(row.get("categoryId")), type, total));
-        }
-        byCategory.sort(Comparator.comparing(CategoryTotal::total).reversed());
-
-        boolean daily = days <= MAX_DAILY_BUCKET_DAYS;
-        Map<String, Totals> buckets = new LinkedHashMap<>();
-        List<Map<String, Object>> bucketRows;
-        if (daily) {
-            for (LocalDate d = fromDate; !d.isAfter(toDate); d = d.plusDays(1)) {
-                buckets.put(d.toString(), new Totals());
+            Totals grand = new Totals();
+            List<CategoryTotal> byCategory = new ArrayList<>();
+            for (Map<String, Object> row : reportDao.sumByCategoryAndType(familyId, fromDate, toExclusive)) {
+                String type = str(row.get("type"));
+                BigDecimal total = decimal(row.get("total"));
+                grand.add(type, total);
+                byCategory.add(new CategoryTotal(longValue(row.get("categoryId")), type, total));
             }
-            bucketRows = reportDao.sumByDayAndType(familyId, fromDate, toExclusive);
-        } else {
-            YearMonth last = YearMonth.from(toDate);
-            for (YearMonth m = YearMonth.from(fromDate); !m.isAfter(last); m = m.plusMonths(1)) {
-                buckets.put(m.toString(), new Totals());
-            }
-            bucketRows = reportDao.sumByMonthAndType(familyId, fromDate, toExclusive);
-        }
-        for (Map<String, Object> row : bucketRows) {
-            buckets.computeIfAbsent(str(row.get("bucket")), k -> new Totals())
-                    .add(str(row.get("type")), decimal(row.get("total")));
-        }
-        List<BucketTotal> bucketList = buckets.entrySet().stream()
-                .map(e -> new BucketTotal(e.getKey(), e.getValue().income, e.getValue().expense))
-                .toList();
+            byCategory.sort(Comparator.comparing(CategoryTotal::total).reversed());
 
-        return new RangeReportResponse(fromDate.toString(), toDate.toString(), daily ? BUCKET_DAY : BUCKET_MONTH,
-                grand.income, grand.expense, grand.income.subtract(grand.expense), byCategory, bucketList);
+            boolean daily = days <= MAX_DAILY_BUCKET_DAYS;
+            Map<String, Totals> buckets = new LinkedHashMap<>();
+            List<Map<String, Object>> bucketRows;
+            if (daily) {
+                for (LocalDate d = fromDate; !d.isAfter(toDate); d = d.plusDays(1)) {
+                    buckets.put(d.toString(), new Totals());
+                }
+                bucketRows = reportDao.sumByDayAndType(familyId, fromDate, toExclusive);
+            } else {
+                YearMonth last = YearMonth.from(toDate);
+                for (YearMonth m = YearMonth.from(fromDate); !m.isAfter(last); m = m.plusMonths(1)) {
+                    buckets.put(m.toString(), new Totals());
+                }
+                bucketRows = reportDao.sumByMonthAndType(familyId, fromDate, toExclusive);
+            }
+            for (Map<String, Object> row : bucketRows) {
+                buckets.computeIfAbsent(str(row.get("bucket")), k -> new Totals())
+                        .add(str(row.get("type")), decimal(row.get("total")));
+            }
+            List<BucketTotal> bucketList = buckets.entrySet().stream()
+                    .map(e -> new BucketTotal(e.getKey(), e.getValue().income, e.getValue().expense))
+                    .toList();
+
+            return new RangeReportResponse(fromDate.toString(), toDate.toString(), daily ? BUCKET_DAY : BUCKET_MONTH,
+                    grand.income, grand.expense, grand.income.subtract(grand.expense), byCategory, bucketList);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("ReportService.range", e);
+        }
     }
 
     public YearReportResponse year(Long familyId, String year) {
-        log.info("year - start, familyId={}, year={}", familyId, year);
-        int y = parseYear(year);
-        Map<String, Totals> months = new LinkedHashMap<>();
-        for (int m = 1; m <= 12; m++) {
-            months.put(YearMonth.of(y, m).toString(), new Totals());
-        }
-        Totals grand = new Totals();
-        List<Map<String, Object>> rows =
-                reportDao.sumByMonthAndType(familyId, LocalDate.of(y, 1, 1), LocalDate.of(y + 1, 1, 1));
-        for (Map<String, Object> row : rows) {
-            Totals bucket = months.get(str(row.get("bucket")));
-            if (bucket == null) {
-                continue;
+        try {
+            log.info("year - start, familyId={}, year={}", familyId, year);
+            int y = parseYear(year);
+            Map<String, Totals> months = new LinkedHashMap<>();
+            for (int m = 1; m <= 12; m++) {
+                months.put(YearMonth.of(y, m).toString(), new Totals());
             }
-            String type = str(row.get("type"));
-            BigDecimal total = decimal(row.get("total"));
-            bucket.add(type, total);
-            grand.add(type, total);
+            Totals grand = new Totals();
+            List<Map<String, Object>> rows =
+                    reportDao.sumByMonthAndType(familyId, LocalDate.of(y, 1, 1), LocalDate.of(y + 1, 1, 1));
+            for (Map<String, Object> row : rows) {
+                Totals bucket = months.get(str(row.get("bucket")));
+                if (bucket == null) {
+                    continue;
+                }
+                String type = str(row.get("type"));
+                BigDecimal total = decimal(row.get("total"));
+                bucket.add(type, total);
+                grand.add(type, total);
+            }
+            List<MonthTotal> list = months.entrySet().stream()
+                    .map(e -> new MonthTotal(e.getKey(), e.getValue().income, e.getValue().expense))
+                    .toList();
+            return new YearReportResponse(y, grand.income, grand.expense, grand.income.subtract(grand.expense), list);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("ReportService.year", e);
         }
-        List<MonthTotal> list = months.entrySet().stream()
-                .map(e -> new MonthTotal(e.getKey(), e.getValue().income, e.getValue().expense))
-                .toList();
-        return new YearReportResponse(y, grand.income, grand.expense, grand.income.subtract(grand.expense), list);
     }
 
     public List<MemberReportItem> byMember(Long familyId, String from, String to) {
-        log.info("byMember - start, familyId={}, from={}, to={}", familyId, from, to);
-        LocalDate fromDate = parseDate(from, "Ngày bắt đầu");
-        LocalDate toDate = parseDate(to, "Ngày kết thúc");
-        validateRange(fromDate, toDate);
-        LocalDate toExclusive = toDate.plusDays(1);
+        try {
+            log.info("byMember - start, familyId={}, from={}, to={}", familyId, from, to);
+            LocalDate fromDate = parseDate(from, "Ngày bắt đầu");
+            LocalDate toDate = parseDate(to, "Ngày kết thúc");
+            validateRange(fromDate, toDate);
+            LocalDate toExclusive = toDate.plusDays(1);
 
-        Map<Long, Totals> byUser = new LinkedHashMap<>();
-        for (Map<String, Object> row : reportDao.sumByUserAndType(familyId, fromDate, toExclusive)) {
-            byUser.computeIfAbsent(longValue(row.get("userId")), k -> new Totals())
-                    .add(str(row.get("type")), decimal(row.get("total")));
+            Map<Long, Totals> byUser = new LinkedHashMap<>();
+            for (Map<String, Object> row : reportDao.sumByUserAndType(familyId, fromDate, toExclusive)) {
+                byUser.computeIfAbsent(longValue(row.get("userId")), k -> new Totals())
+                        .add(str(row.get("type")), decimal(row.get("total")));
+            }
+            Map<Long, String> names = new HashMap<>();
+            for (Map<String, Object> row : reportDao.selectLatestMemberNames(familyId, fromDate, toExclusive)) {
+                names.put(longValue(row.get("userId")), str(row.get("displayName")));
+            }
+            return byUser.entrySet().stream()
+                    .map(e -> new MemberReportItem(
+                            e.getKey(), names.get(e.getKey()), e.getValue().income, e.getValue().expense))
+                    .sorted(Comparator.comparing(MemberReportItem::expense).reversed())
+                    .toList();
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("ReportService.byMember", e);
         }
-        Map<Long, String> names = new HashMap<>();
-        for (Map<String, Object> row : reportDao.selectLatestMemberNames(familyId, fromDate, toExclusive)) {
-            names.put(longValue(row.get("userId")), str(row.get("displayName")));
-        }
-        return byUser.entrySet().stream()
-                .map(e -> new MemberReportItem(
-                        e.getKey(), names.get(e.getKey()), e.getValue().income, e.getValue().expense))
-                .sorted(Comparator.comparing(MemberReportItem::expense).reversed())
-                .toList();
     }
 
     public CompareReportResponse compare(Long familyId, String month, String withMonth) {
-        log.info("compare - start, familyId={}, month={}, withMonth={}", familyId, month, withMonth);
-        YearMonth current = parseMonth(month, "Tháng");
-        YearMonth previous = parseMonth(withMonth, "Tháng so sánh");
+        try {
+            log.info("compare - start, familyId={}, month={}, withMonth={}", familyId, month, withMonth);
+            YearMonth current = parseMonth(month, "Tháng");
+            YearMonth previous = parseMonth(withMonth, "Tháng so sánh");
 
-        Totals currentTotals = new Totals();
-        Totals previousTotals = new Totals();
-        Map<Long, BigDecimal> currentByCategory = expenseByCategory(familyId, current, currentTotals);
-        Map<Long, BigDecimal> previousByCategory = expenseByCategory(familyId, previous, previousTotals);
+            Totals currentTotals = new Totals();
+            Totals previousTotals = new Totals();
+            Map<Long, BigDecimal> currentByCategory = expenseByCategory(familyId, current, currentTotals);
+            Map<Long, BigDecimal> previousByCategory = expenseByCategory(familyId, previous, previousTotals);
 
-        Set<Long> categoryIds = new LinkedHashSet<>(currentByCategory.keySet());
-        categoryIds.addAll(previousByCategory.keySet());
-        List<CategoryCompareItem> categories = new ArrayList<>();
-        for (Long categoryId : categoryIds) {
-            BigDecimal cur = currentByCategory.getOrDefault(categoryId, BigDecimal.ZERO);
-            BigDecimal prev = previousByCategory.getOrDefault(categoryId, BigDecimal.ZERO);
-            categories.add(new CategoryCompareItem(categoryId, cur, prev, cur.subtract(prev)));
+            Set<Long> categoryIds = new LinkedHashSet<>(currentByCategory.keySet());
+            categoryIds.addAll(previousByCategory.keySet());
+            List<CategoryCompareItem> categories = new ArrayList<>();
+            for (Long categoryId : categoryIds) {
+                BigDecimal cur = currentByCategory.getOrDefault(categoryId, BigDecimal.ZERO);
+                BigDecimal prev = previousByCategory.getOrDefault(categoryId, BigDecimal.ZERO);
+                categories.add(new CategoryCompareItem(categoryId, cur, prev, cur.subtract(prev)));
+            }
+            categories.sort(Comparator.comparing(CategoryCompareItem::current).reversed()
+                    .thenComparing(Comparator.comparing(CategoryCompareItem::previous).reversed()));
+
+            return new CompareReportResponse(
+                    new MonthSummary(current.toString(), currentTotals.income, currentTotals.expense),
+                    new MonthSummary(previous.toString(), previousTotals.income, previousTotals.expense),
+                    currentTotals.income.subtract(previousTotals.income),
+                    currentTotals.expense.subtract(previousTotals.expense),
+                    categories);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("ReportService.compare", e);
         }
-        categories.sort(Comparator.comparing(CategoryCompareItem::current).reversed()
-                .thenComparing(Comparator.comparing(CategoryCompareItem::previous).reversed()));
-
-        return new CompareReportResponse(
-                new MonthSummary(current.toString(), currentTotals.income, currentTotals.expense),
-                new MonthSummary(previous.toString(), previousTotals.income, previousTotals.expense),
-                currentTotals.income.subtract(previousTotals.income),
-                currentTotals.expense.subtract(previousTotals.expense),
-                categories);
     }
 
     private Map<Long, BigDecimal> expenseByCategory(Long familyId, YearMonth month, Totals totals) {
@@ -186,11 +219,11 @@ public class ReportService {
 
     private static long validateRange(LocalDate from, LocalDate to) {
         if (from.isAfter(to)) {
-            throw new BadRequestException("Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc");
+            throw logged(log, new BadRequestException("Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc"));
         }
         long days = ChronoUnit.DAYS.between(from, to) + 1;
         if (days > MAX_RANGE_DAYS) {
-            throw new BadRequestException("Khoảng thời gian tối đa là " + MAX_RANGE_DAYS + " ngày");
+            throw logged(log, new BadRequestException("Khoảng thời gian tối đa là " + MAX_RANGE_DAYS + " ngày"));
         }
         return days;
     }
@@ -199,7 +232,7 @@ public class ReportService {
         try {
             return LocalDate.parse(value);
         } catch (DateTimeParseException | NullPointerException e) {
-            throw new BadRequestException(label + " không hợp lệ (định dạng yyyy-MM-dd)");
+            throw logged(log, new BadRequestException(label + " không hợp lệ (định dạng yyyy-MM-dd)"));
         }
     }
 
@@ -207,7 +240,7 @@ public class ReportService {
         try {
             return YearMonth.parse(value);
         } catch (DateTimeParseException | NullPointerException e) {
-            throw new BadRequestException(label + " không hợp lệ (định dạng yyyy-MM)");
+            throw logged(log, new BadRequestException(label + " không hợp lệ (định dạng yyyy-MM)"));
         }
     }
 
@@ -216,10 +249,10 @@ public class ReportService {
         try {
             year = Integer.parseInt(value.trim());
         } catch (NumberFormatException | NullPointerException e) {
-            throw new BadRequestException("Năm không hợp lệ");
+            throw logged(log, new BadRequestException("Năm không hợp lệ"));
         }
         if (year < MIN_YEAR || year > MAX_YEAR) {
-            throw new BadRequestException("Năm phải trong khoảng " + MIN_YEAR + "-" + MAX_YEAR);
+            throw logged(log, new BadRequestException("Năm phải trong khoảng " + MIN_YEAR + "-" + MAX_YEAR));
         }
         return year;
     }

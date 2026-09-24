@@ -1,9 +1,11 @@
 package com.family.expensemanager.expense.service;
 
 import com.family.expensemanager.common.dto.PageResponse;
+import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
+import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.expense.dao.RecurringTransactionDao;
 import com.family.expensemanager.expense.dao.TransactionDao;
 import com.family.expensemanager.expense.dao.WalletDao;
@@ -11,6 +13,9 @@ import com.family.expensemanager.expense.dao.WalletTransferDao;
 import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.dto.CreateWalletRequest;
 import com.family.expensemanager.expense.dto.WalletResponse;
+import java.io.UncheckedIOException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,7 +27,10 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
+
 @Service
+@Transactional
 @RequiredArgsConstructor
 @Slf4j(topic = "WalletService")
 public class WalletService {
@@ -36,80 +44,112 @@ public class WalletService {
     private final RecurringTransactionDao recurringTransactionDao;
     private final WalletTransferDao walletTransferDao;
 
-    @Transactional
     @PreAuthorize("hasRole('OWNER')")
     public WalletResponse create(Long familyId, CreateWalletRequest request) {
-        log.info("create - start, familyId={}, name={}", familyId, request.name());
-        requireConsistentCurrency(familyId, request.currency(), null);
-        Wallet wallet = new Wallet();
-        wallet.setFamilyId(familyId);
-        wallet.setName(request.name());
-        wallet.setCurrency(request.currency());
-        wallet.setInitialBalance(request.initialBalance());
-        walletDao.insert(wallet);
-        return WalletResponse.from(wallet);
+        try {
+            log.info("create - start, familyId={}, name={}", familyId, request.name());
+            requireConsistentCurrency(familyId, request.currency(), null);
+            Wallet wallet = new Wallet();
+            wallet.setFamilyId(familyId);
+            wallet.setName(request.name());
+            wallet.setCurrency(request.currency());
+            wallet.setInitialBalance(request.initialBalance());
+            walletDao.insert(wallet);
+            return WalletResponse.from(wallet);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("WalletService.create", e);
+        }
     }
 
     public List<WalletResponse> listByFamily(Long familyId) {
-        log.info("listByFamily - start, familyId={}", familyId);
-        return walletDao.selectByFamilyId(familyId).stream()
-                .map(wallet -> WalletResponse.from(wallet, currentBalanceOf(wallet)))
-                .toList();
+        try {
+            log.info("listByFamily - start, familyId={}", familyId);
+            return walletDao.selectByFamilyId(familyId).stream()
+                    .map(wallet -> WalletResponse.from(wallet, currentBalanceOf(wallet)))
+                    .toList();
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("WalletService.listByFamily", e);
+        }
     }
 
-    @Transactional
     @PreAuthorize("hasRole('OWNER')")
     public WalletResponse update(Long walletId, Long familyId, CreateWalletRequest request) {
-        log.info("update - start, walletId={}, familyId={}", walletId, familyId);
-        Wallet wallet = requireOwnedByFamily(walletId, familyId);
-        requireConsistentCurrency(familyId, request.currency(), walletId);
-        wallet.setName(request.name());
-        wallet.setCurrency(request.currency());
-        wallet.setInitialBalance(request.initialBalance());
-        walletDao.update(wallet);
-        return WalletResponse.from(wallet, currentBalanceOf(wallet));
+        try {
+            log.info("update - start, walletId={}, familyId={}", walletId, familyId);
+            Wallet wallet = requireOwnedByFamily(walletId, familyId);
+            requireConsistentCurrency(familyId, request.currency(), walletId);
+            wallet.setName(request.name());
+            wallet.setCurrency(request.currency());
+            wallet.setInitialBalance(request.initialBalance());
+            walletDao.update(wallet);
+            return WalletResponse.from(wallet, currentBalanceOf(wallet));
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("WalletService.update", e);
+        }
     }
 
     /** Soft-delete (README "10. Xoá là mất vĩnh viễn") — the row stays, just hidden, so {@link #restore} can undo it. */
-    @Transactional
     @PreAuthorize("hasRole('OWNER')")
     public void delete(Long walletId, Long familyId) {
-        log.info("delete - start, walletId={}, familyId={}", walletId, familyId);
-        Wallet wallet = requireOwnedByFamily(walletId, familyId);
-        if (transactionDao.countByWalletId(walletId) > 0) {
-            throw new ConflictException("Không thể xoá ví đã có giao dịch");
+        try {
+            log.info("delete - start, walletId={}, familyId={}", walletId, familyId);
+            Wallet wallet = requireOwnedByFamily(walletId, familyId);
+            if (transactionDao.countByWalletId(walletId) > 0) {
+                throw logged(log, new ConflictException("Không thể xoá ví đã có giao dịch"));
+            }
+            if (recurringTransactionDao.countByWalletId(walletId) > 0) {
+                throw logged(log, new ConflictException("Không thể xoá ví đang có giao dịch định kỳ"));
+            }
+            if (walletTransferDao.countByWalletId(walletId) > 0) {
+                throw logged(log, new ConflictException("Không thể xoá ví đã có giao dịch chuyển tiền"));
+            }
+            wallet.setDeletedAt(LocalDateTime.now());
+            walletDao.update(wallet);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("WalletService.delete", e);
         }
-        if (recurringTransactionDao.countByWalletId(walletId) > 0) {
-            throw new ConflictException("Không thể xoá ví đang có giao dịch định kỳ");
-        }
-        if (walletTransferDao.countByWalletId(walletId) > 0) {
-            throw new ConflictException("Không thể xoá ví đã có giao dịch chuyển tiền");
-        }
-        wallet.setDeletedAt(LocalDateTime.now());
-        walletDao.update(wallet);
     }
 
     public PageResponse<WalletResponse> listDeletedPaged(Long familyId, int page, int size) {
-        log.info("listDeletedPaged - start, familyId={}, page={}, size={}", familyId, page, size);
-        if (page < 0) {
-            throw new BadRequestException("page phải >= 0");
+        try {
+            log.info("listDeletedPaged - start, familyId={}, page={}, size={}", familyId, page, size);
+            if (page < 0) {
+                throw logged(log, new BadRequestException("page phải >= 0"));
+            }
+            if (size < 1 || size > MAX_PAGE_SIZE) {
+                throw logged(log, new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE));
+            }
+            long totalElements = walletDao.countDeletedByFamilyId(familyId);
+            List<WalletResponse> content = walletDao.selectDeletedByFamilyIdPaged(familyId, size, page * size).stream()
+                    .map(WalletResponse::from)
+                    .toList();
+            return PageResponse.of(content, page, size, totalElements);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("WalletService.listDeletedPaged", e);
         }
-        if (size < 1 || size > MAX_PAGE_SIZE) {
-            throw new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE);
-        }
-        long totalElements = walletDao.countDeletedByFamilyId(familyId);
-        List<WalletResponse> content = walletDao.selectDeletedByFamilyIdPaged(familyId, size, page * size).stream()
-                .map(WalletResponse::from)
-                .toList();
-        return PageResponse.of(content, page, size, totalElements);
     }
 
-    @Transactional
     @PreAuthorize("hasRole('OWNER')")
     public void restore(Long walletId, Long familyId) {
-        log.info("restore - start, walletId={}, familyId={}", walletId, familyId);
-        if (walletDao.restore(walletId, familyId) == 0) {
-            throw new NotFoundException("Ví đã xoá không tồn tại: " + walletId);
+        try {
+            log.info("restore - start, walletId={}, familyId={}", walletId, familyId);
+            if (walletDao.restore(walletId, familyId) == 0) {
+                throw logged(log, new NotFoundException("Ví đã xoá không tồn tại: " + walletId));
+            }
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("WalletService.restore", e);
         }
     }
 
@@ -123,7 +163,7 @@ public class WalletService {
                 .filter(w -> excludeWalletId == null || !w.getId().equals(excludeWalletId))
                 .anyMatch(w -> !w.getCurrency().equals(currency));
         if (mismatch) {
-            throw new ConflictException("Tất cả ví trong gia đình phải dùng chung 1 loại tiền tệ");
+            throw logged(log, new ConflictException("Tất cả ví trong gia đình phải dùng chung 1 loại tiền tệ"));
         }
     }
 
@@ -140,9 +180,9 @@ public class WalletService {
     Wallet requireOwnedByFamily(Long walletId, Long familyId) {
         log.info("requireOwnedByFamily - start, walletId={}, familyId={}", walletId, familyId);
         Wallet wallet = walletDao.selectById(walletId)
-                .orElseThrow(() -> new NotFoundException("Wallet không tồn tại: " + walletId));
+                .orElseThrow(() -> logged(log, new NotFoundException("Wallet không tồn tại: " + walletId)));
         if (!wallet.getFamilyId().equals(familyId)) {
-            throw new NotFoundException("Wallet không tồn tại: " + walletId);
+            throw logged(log, new NotFoundException("Wallet không tồn tại: " + walletId));
         }
         return wallet;
     }

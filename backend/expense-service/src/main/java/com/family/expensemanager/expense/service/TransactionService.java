@@ -5,6 +5,7 @@ import com.family.expensemanager.common.event.ExpenseEvent;
 import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
+import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.expense.dao.BudgetDao;
 import com.family.expensemanager.expense.dao.TransactionDao;
 import com.family.expensemanager.expense.domain.entity.Budget;
@@ -16,6 +17,8 @@ import com.family.expensemanager.expense.dto.ReceiptFile;
 import com.family.expensemanager.expense.dto.TransactionReportFilter;
 import com.family.expensemanager.expense.dto.TransactionRequest;
 import com.family.expensemanager.expense.dto.TransactionResponse;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.ApplicationEventPublisher;
@@ -38,7 +41,10 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
+
 @Service
+@Transactional
 @RequiredArgsConstructor
 @Slf4j(topic = "TransactionService")
 public class TransactionService {
@@ -57,42 +63,47 @@ public class TransactionService {
     private final CacheManager cacheManager;
     private final ReceiptStorageService receiptStorageService;
 
-    @Transactional
     public TransactionResponse create(
             Long familyId, Long userId, String userEmail, String userDisplayName, TransactionRequest request) {
-        log.info("create - start, familyId={}, userId={}", familyId, userId);
-        Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
-        Category category = categoryService.requireOwnedByFamily(request.categoryId(), familyId);
+        try {
+            log.info("create - start, familyId={}, userId={}", familyId, userId);
+            Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
+            Category category = categoryService.requireOwnedByFamily(request.categoryId(), familyId);
 
-        Transaction transaction = new Transaction();
-        transaction.setWalletId(wallet.getId());
-        transaction.setCategoryId(category.getId());
-        transaction.setFamilyId(familyId);
-        transaction.setUserId(userId);
-        transaction.setCreatedByName(truncateName(userDisplayName));
-        transaction.setType(request.type());
-        transaction.setAmount(request.amount());
-        transaction.setOccurredAt(request.occurredAt());
-        transaction.setNote(request.note());
+            Transaction transaction = new Transaction();
+            transaction.setWalletId(wallet.getId());
+            transaction.setCategoryId(category.getId());
+            transaction.setFamilyId(familyId);
+            transaction.setUserId(userId);
+            transaction.setCreatedByName(truncateName(userDisplayName));
+            transaction.setType(request.type());
+            transaction.setAmount(request.amount());
+            transaction.setOccurredAt(request.occurredAt());
+            transaction.setNote(request.note());
 
-        String periodMonth = periodMonthOf(request.occurredAt());
-        BigDecimal totalBefore = TYPE_EXPENSE.equals(request.type())
-                ? transactionDao.sumAmountByCategoryPeriodAndType(familyId, category.getId(), periodMonth, TYPE_EXPENSE)
-                : BigDecimal.ZERO;
+            String periodMonth = periodMonthOf(request.occurredAt());
+            BigDecimal totalBefore = TYPE_EXPENSE.equals(request.type())
+                    ? transactionDao.sumAmountByCategoryPeriodAndType(familyId, category.getId(), periodMonth, TYPE_EXPENSE)
+                    : BigDecimal.ZERO;
 
-        transactionDao.insert(transaction);
-        evictCaches(familyId, periodMonth);
+            transactionDao.insert(transaction);
+            evictCaches(familyId, periodMonth);
 
-        eventPublisher.publishEvent(new ExpenseEvent(
-                ExpenseEvent.EXPENSE_CREATED, familyId, userId, transaction.getId(), category.getId(),
-                transaction.getAmount(), null, null, null, null, null, null, Instant.now()));
+            eventPublisher.publishEvent(new ExpenseEvent(
+                    ExpenseEvent.EXPENSE_CREATED, familyId, userId, transaction.getId(), category.getId(),
+                    transaction.getAmount(), null, null, null, null, null, null, Instant.now()));
 
-        if (TYPE_EXPENSE.equals(request.type())) {
-            checkBudgetCrossing(familyId, userId, userEmail, userDisplayName, transaction, category, periodMonth,
-                    totalBefore);
+            if (TYPE_EXPENSE.equals(request.type())) {
+                checkBudgetCrossing(familyId, userId, userEmail, userDisplayName, transaction, category, periodMonth,
+                        totalBefore);
+            }
+
+            return TransactionResponse.from(transaction);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("TransactionService.create", e);
         }
-
-        return TransactionResponse.from(transaction);
     }
 
     /**
@@ -102,56 +113,73 @@ public class TransactionService {
      */
     public PageResponse<TransactionResponse> listByFamilyPaged(
             Long familyId, TransactionReportFilter filter, int page, int size) {
-        log.info("listByFamilyPaged - start, familyId={}, page={}, size={}", familyId, page, size);
-        if (page < 0) {
-            throw new BadRequestException("page phải >= 0");
+        try {
+            log.info("listByFamilyPaged - start, familyId={}, page={}, size={}", familyId, page, size);
+            if (page < 0) {
+                throw logged(log, new BadRequestException("page phải >= 0"));
+            }
+            if (size < 1 || size > MAX_PAGE_SIZE) {
+                throw logged(log, new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE));
+            }
+            filter.validate();
+            String notePattern = filter.noteLikePattern();
+            long totalElements = transactionDao.countByFamilyIdFiltered(
+                    familyId, filter.walletId(), filter.categoryId(), filter.type(), filter.fromDate(), filter.toDate(),
+                    notePattern, filter.minAmount(), filter.maxAmount());
+            List<TransactionResponse> content = transactionDao.selectByFamilyIdFiltered(
+                            familyId, filter.walletId(), filter.categoryId(), filter.type(), filter.fromDate(),
+                            filter.toDate(), notePattern, filter.minAmount(), filter.maxAmount(), size, page * size)
+                    .stream().map(TransactionResponse::from).toList();
+            return PageResponse.of(content, page, size, totalElements);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("TransactionService.listByFamilyPaged", e);
         }
-        if (size < 1 || size > MAX_PAGE_SIZE) {
-            throw new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE);
-        }
-        filter.validate();
-        String notePattern = filter.noteLikePattern();
-        long totalElements = transactionDao.countByFamilyIdFiltered(
-                familyId, filter.walletId(), filter.categoryId(), filter.type(), filter.fromDate(), filter.toDate(),
-                notePattern, filter.minAmount(), filter.maxAmount());
-        List<TransactionResponse> content = transactionDao.selectByFamilyIdFiltered(
-                        familyId, filter.walletId(), filter.categoryId(), filter.type(), filter.fromDate(),
-                        filter.toDate(), notePattern, filter.minAmount(), filter.maxAmount(), size, page * size)
-                .stream().map(TransactionResponse::from).toList();
-        return PageResponse.of(content, page, size, totalElements);
     }
 
     public TransactionResponse get(Long familyId, Long transactionId) {
-        log.info("get - start, familyId={}, transactionId={}", familyId, transactionId);
-        return TransactionResponse.from(requireOwnedByFamily(transactionId, familyId));
+        try {
+            log.info("get - start, familyId={}, transactionId={}", familyId, transactionId);
+            return TransactionResponse.from(requireOwnedByFamily(transactionId, familyId));
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("TransactionService.get", e);
+        }
     }
 
-    @Transactional
     public TransactionResponse update(
             Long familyId, Long transactionId, Long callerUserId, boolean callerIsOwner, TransactionRequest request) {
-        log.info("update - start, familyId={}, transactionId={}", familyId, transactionId);
-        Transaction transaction = requireOwnedByFamily(transactionId, familyId);
-        requireCanModify(transaction, callerUserId, callerIsOwner);
-        Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
-        Category category = categoryService.requireOwnedByFamily(request.categoryId(), familyId);
+        try {
+            log.info("update - start, familyId={}, transactionId={}", familyId, transactionId);
+            Transaction transaction = requireOwnedByFamily(transactionId, familyId);
+            requireCanModify(transaction, callerUserId, callerIsOwner);
+            Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
+            Category category = categoryService.requireOwnedByFamily(request.categoryId(), familyId);
 
-        String oldPeriodMonth = periodMonthOf(transaction.getOccurredAt());
+            String oldPeriodMonth = periodMonthOf(transaction.getOccurredAt());
 
-        transaction.setWalletId(wallet.getId());
-        transaction.setCategoryId(category.getId());
-        transaction.setType(request.type());
-        transaction.setAmount(request.amount());
-        transaction.setOccurredAt(request.occurredAt());
-        transaction.setNote(request.note());
-        transactionDao.update(transaction);
+            transaction.setWalletId(wallet.getId());
+            transaction.setCategoryId(category.getId());
+            transaction.setType(request.type());
+            transaction.setAmount(request.amount());
+            transaction.setOccurredAt(request.occurredAt());
+            transaction.setNote(request.note());
+            transactionDao.update(transaction);
 
-        String newPeriodMonth = periodMonthOf(request.occurredAt());
-        evictCaches(familyId, oldPeriodMonth);
-        if (!oldPeriodMonth.equals(newPeriodMonth)) {
-            evictCaches(familyId, newPeriodMonth);
+            String newPeriodMonth = periodMonthOf(request.occurredAt());
+            evictCaches(familyId, oldPeriodMonth);
+            if (!oldPeriodMonth.equals(newPeriodMonth)) {
+                evictCaches(familyId, newPeriodMonth);
+            }
+
+            return TransactionResponse.from(transaction);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("TransactionService.update", e);
         }
-
-        return TransactionResponse.from(transaction);
     }
 
     /**
@@ -159,128 +187,165 @@ public class TransactionService {
      * both stay in place, just hidden from normal queries, so {@link #restore} can bring
      * a mistaken delete back exactly as it was.
      */
-    @Transactional
     public void delete(Long familyId, Long transactionId, Long callerUserId, boolean callerIsOwner) {
-        log.info("delete - start, familyId={}, transactionId={}", familyId, transactionId);
-        Transaction transaction = requireOwnedByFamily(transactionId, familyId);
-        requireCanModify(transaction, callerUserId, callerIsOwner);
-        transaction.setDeletedAt(LocalDateTime.now());
-        transactionDao.update(transaction);
-        evictCaches(familyId, periodMonthOf(transaction.getOccurredAt()));
+        try {
+            log.info("delete - start, familyId={}, transactionId={}", familyId, transactionId);
+            Transaction transaction = requireOwnedByFamily(transactionId, familyId);
+            requireCanModify(transaction, callerUserId, callerIsOwner);
+            transaction.setDeletedAt(LocalDateTime.now());
+            transactionDao.update(transaction);
+            evictCaches(familyId, periodMonthOf(transaction.getOccurredAt()));
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("TransactionService.delete", e);
+        }
     }
 
-    @Transactional
     public BulkDeleteResult bulkDelete(Long familyId, List<Long> ids, Long callerUserId, boolean callerIsOwner) {
-        log.info("bulkDelete - start, familyId={}, count={}", familyId, ids.size());
-        if (ids.size() > MAX_BULK_DELETE) {
-            throw new BadRequestException("Chỉ được xoá tối đa " + MAX_BULK_DELETE + " giao dịch mỗi lần");
-        }
-        int deleted = 0;
-        int skipped = 0;
-        int forbidden = 0;
-        for (Long id : new LinkedHashSet<>(ids)) {
-            try {
-                delete(familyId, id, callerUserId, callerIsOwner);
-                deleted++;
-            } catch (NotFoundException e) {
-                skipped++;
-            } catch (ApiException e) {
-                if (e.getStatus() != HttpStatus.FORBIDDEN) {
-                    throw e;
-                }
-                forbidden++;
+        try {
+            log.info("bulkDelete - start, familyId={}, count={}", familyId, ids.size());
+            if (ids.size() > MAX_BULK_DELETE) {
+                throw logged(log, new BadRequestException("Chỉ được xoá tối đa " + MAX_BULK_DELETE + " giao dịch mỗi lần"));
             }
+            int deleted = 0;
+            int skipped = 0;
+            int forbidden = 0;
+            for (Long id : new LinkedHashSet<>(ids)) {
+                try {
+                    delete(familyId, id, callerUserId, callerIsOwner);
+                    deleted++;
+                } catch (NotFoundException e) {
+                    skipped++;
+                } catch (ApiException e) {
+                    if (e.getStatus() != HttpStatus.FORBIDDEN) {
+                        throw e;
+                    }
+                    forbidden++;
+                }
+            }
+            return new BulkDeleteResult(deleted, skipped, forbidden);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("TransactionService.bulkDelete", e);
         }
-        return new BulkDeleteResult(deleted, skipped, forbidden);
     }
 
     public PageResponse<TransactionResponse> listDeletedPaged(Long familyId, int page, int size) {
-        log.info("listDeletedPaged - start, familyId={}, page={}, size={}", familyId, page, size);
-        if (page < 0) {
-            throw new BadRequestException("page phải >= 0");
+        try {
+            log.info("listDeletedPaged - start, familyId={}, page={}, size={}", familyId, page, size);
+            if (page < 0) {
+                throw logged(log, new BadRequestException("page phải >= 0"));
+            }
+            if (size < 1 || size > MAX_PAGE_SIZE) {
+                throw logged(log, new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE));
+            }
+            long totalElements = transactionDao.countDeletedByFamilyId(familyId);
+            List<TransactionResponse> content = transactionDao.selectDeletedByFamilyIdPaged(familyId, size, page * size)
+                    .stream().map(TransactionResponse::from).toList();
+            return PageResponse.of(content, page, size, totalElements);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("TransactionService.listDeletedPaged", e);
         }
-        if (size < 1 || size > MAX_PAGE_SIZE) {
-            throw new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE);
-        }
-        long totalElements = transactionDao.countDeletedByFamilyId(familyId);
-        List<TransactionResponse> content = transactionDao.selectDeletedByFamilyIdPaged(familyId, size, page * size)
-                .stream().map(TransactionResponse::from).toList();
-        return PageResponse.of(content, page, size, totalElements);
     }
 
-    @Transactional
     public void restore(Long familyId, Long transactionId, Long callerUserId, boolean callerIsOwner) {
-        log.info("restore - start, familyId={}, transactionId={}", familyId, transactionId);
-        Transaction deleted = transactionDao.selectDeletedById(transactionId)
-                .filter(t -> t.getFamilyId().equals(familyId))
-                .orElseThrow(() -> new NotFoundException("Giao dịch đã xoá không tồn tại: " + transactionId));
-        requireCanModify(deleted, callerUserId, callerIsOwner);
-        if (transactionDao.restore(transactionId, familyId) == 0) {
-            throw new NotFoundException("Giao dịch đã xoá không tồn tại: " + transactionId);
+        try {
+            log.info("restore - start, familyId={}, transactionId={}", familyId, transactionId);
+            Transaction deleted = transactionDao.selectDeletedById(transactionId)
+                    .filter(t -> t.getFamilyId().equals(familyId))
+                    .orElseThrow(() -> logged(log, new NotFoundException("Giao dịch đã xoá không tồn tại: " + transactionId)));
+            requireCanModify(deleted, callerUserId, callerIsOwner);
+            if (transactionDao.restore(transactionId, familyId) == 0) {
+                throw logged(log, new NotFoundException("Giao dịch đã xoá không tồn tại: " + transactionId));
+            }
+            evictCaches(familyId, periodMonthOf(deleted.getOccurredAt()));
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("TransactionService.restore", e);
         }
-        evictCaches(familyId, periodMonthOf(deleted.getOccurredAt()));
     }
 
-    @Transactional
     public TransactionResponse uploadReceipt(
             Long familyId, Long transactionId, Long callerUserId, boolean callerIsOwner, MultipartFile file) {
-        log.info("uploadReceipt - start, familyId={}, transactionId={}", familyId, transactionId);
-        if (file.isEmpty()) {
-            throw new BadRequestException("File ảnh trống");
-        }
-        if (!ALLOWED_RECEIPT_CONTENT_TYPES.contains(file.getContentType())) {
-            throw new BadRequestException("Chỉ chấp nhận ảnh JPEG, PNG hoặc WEBP");
-        }
-        Transaction transaction = requireOwnedByFamily(transactionId, familyId);
-        requireCanModify(transaction, callerUserId, callerIsOwner);
-        String oldPath = transaction.getReceiptPath();
-
-        String newPath;
         try {
-            newPath = receiptStorageService.save(familyId, transactionId, file);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Không lưu được ảnh hoá đơn", e);
-        }
-        transaction.setReceiptPath(newPath);
-        transaction.setReceiptContentType(file.getContentType());
-        transactionDao.update(transaction);
+            log.info("uploadReceipt - start, familyId={}, transactionId={}", familyId, transactionId);
+            if (file.isEmpty()) {
+                throw logged(log, new BadRequestException("File ảnh trống"));
+            }
+            if (!ALLOWED_RECEIPT_CONTENT_TYPES.contains(file.getContentType())) {
+                throw logged(log, new BadRequestException("Chỉ chấp nhận ảnh JPEG, PNG hoặc WEBP"));
+            }
+            Transaction transaction = requireOwnedByFamily(transactionId, familyId);
+            requireCanModify(transaction, callerUserId, callerIsOwner);
+            String oldPath = transaction.getReceiptPath();
 
-        // Only remove the old file once the new one — and the DB row pointing to it —
-        // are both committed, so a mid-upload failure never leaves a transaction with
-        // no receipt at all.
-        if (oldPath != null) {
-            receiptStorageService.delete(oldPath);
+            String newPath;
+            try {
+                newPath = receiptStorageService.save(familyId, transactionId, file);
+            } catch (IOException e) {
+                throw new UncheckedIOException("Không lưu được ảnh hoá đơn", e);
+            }
+            transaction.setReceiptPath(newPath);
+            transaction.setReceiptContentType(file.getContentType());
+            transactionDao.update(transaction);
+
+            // Only remove the old file once the new one — and the DB row pointing to it —
+            // are both committed, so a mid-upload failure never leaves a transaction with
+            // no receipt at all.
+            if (oldPath != null) {
+                receiptStorageService.delete(oldPath);
+            }
+            return TransactionResponse.from(transaction);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("TransactionService.uploadReceipt", e);
         }
-        return TransactionResponse.from(transaction);
     }
 
     public ReceiptFile getReceipt(Long familyId, Long transactionId) {
-        log.info("getReceipt - start, familyId={}, transactionId={}", familyId, transactionId);
-        Transaction transaction = requireOwnedByFamily(transactionId, familyId);
-        if (transaction.getReceiptPath() == null) {
-            throw new NotFoundException("Giao dịch chưa có ảnh hoá đơn");
-        }
         try {
-            byte[] content = receiptStorageService.read(transaction.getReceiptPath());
-            return new ReceiptFile(content, transaction.getReceiptContentType());
-        } catch (IOException e) {
-            throw new UncheckedIOException("Không đọc được ảnh hoá đơn", e);
+            log.info("getReceipt - start, familyId={}, transactionId={}", familyId, transactionId);
+            Transaction transaction = requireOwnedByFamily(transactionId, familyId);
+            if (transaction.getReceiptPath() == null) {
+                throw logged(log, new NotFoundException("Giao dịch chưa có ảnh hoá đơn"));
+            }
+            try {
+                byte[] content = receiptStorageService.read(transaction.getReceiptPath());
+                return new ReceiptFile(content, transaction.getReceiptContentType());
+            } catch (IOException e) {
+                throw new UncheckedIOException("Không đọc được ảnh hoá đơn", e);
+            }
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("TransactionService.getReceipt", e);
         }
     }
 
-    @Transactional
     public void deleteReceipt(Long familyId, Long transactionId, Long callerUserId, boolean callerIsOwner) {
-        log.info("deleteReceipt - start, familyId={}, transactionId={}", familyId, transactionId);
-        Transaction transaction = requireOwnedByFamily(transactionId, familyId);
-        requireCanModify(transaction, callerUserId, callerIsOwner);
-        if (transaction.getReceiptPath() == null) {
-            return;
+        try {
+            log.info("deleteReceipt - start, familyId={}, transactionId={}", familyId, transactionId);
+            Transaction transaction = requireOwnedByFamily(transactionId, familyId);
+            requireCanModify(transaction, callerUserId, callerIsOwner);
+            if (transaction.getReceiptPath() == null) {
+                return;
+            }
+            String path = transaction.getReceiptPath();
+            transaction.setReceiptPath(null);
+            transaction.setReceiptContentType(null);
+            transactionDao.update(transaction);
+            receiptStorageService.delete(path);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("TransactionService.deleteReceipt", e);
         }
-        String path = transaction.getReceiptPath();
-        transaction.setReceiptPath(null);
-        transaction.setReceiptContentType(null);
-        transactionDao.update(transaction);
-        receiptStorageService.delete(path);
     }
 
     private void checkBudgetCrossing(Long familyId, Long userId, String userEmail, String userDisplayName,
@@ -330,17 +395,17 @@ public class TransactionService {
 
     private void requireCanModify(Transaction transaction, Long callerUserId, boolean callerIsOwner) {
         if (!callerIsOwner && !Objects.equals(transaction.getUserId(), callerUserId)) {
-            throw new ApiException(HttpStatus.FORBIDDEN,
-                    "Chỉ chủ hộ hoặc người tạo giao dịch mới có quyền thực hiện thao tác này");
+            throw logged(log, new ApiException(HttpStatus.FORBIDDEN,
+                    "Chỉ chủ hộ hoặc người tạo giao dịch mới có quyền thực hiện thao tác này"));
         }
     }
 
     private Transaction requireOwnedByFamily(Long transactionId, Long familyId) {
         log.info("requireOwnedByFamily - start, transactionId={}, familyId={}", transactionId, familyId);
         Transaction transaction = transactionDao.selectById(transactionId)
-                .orElseThrow(() -> new NotFoundException("Giao dịch không tồn tại: " + transactionId));
+                .orElseThrow(() -> logged(log, new NotFoundException("Giao dịch không tồn tại: " + transactionId)));
         if (!transaction.getFamilyId().equals(familyId)) {
-            throw new NotFoundException("Giao dịch không tồn tại: " + transactionId);
+            throw logged(log, new NotFoundException("Giao dịch không tồn tại: " + transactionId));
         }
         return transaction;
     }

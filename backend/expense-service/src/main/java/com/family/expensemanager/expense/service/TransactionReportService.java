@@ -1,5 +1,7 @@
 package com.family.expensemanager.expense.service;
 
+import com.family.expensemanager.common.exception.ApiException;
+import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.common.report.CsvReportGenerator;
 import com.family.expensemanager.common.report.ExcelReportGenerator;
 import com.family.expensemanager.common.report.ReportColumn;
@@ -8,8 +10,11 @@ import com.family.expensemanager.expense.dao.TransactionDao;
 import com.family.expensemanager.expense.domain.entity.Transaction;
 import com.family.expensemanager.expense.dto.TransactionReportFilter;
 import com.family.expensemanager.expense.dto.TransactionReportRow;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -28,6 +33,7 @@ import lombok.extern.slf4j.Slf4j;
  * matches the requested {@link ReportFormat} — the same data feeds both CSV and Excel exports.
  */
 @Service
+@Transactional(readOnly = true)
 @RequiredArgsConstructor
 @Slf4j(topic = "TransactionReportService")
 public class TransactionReportService {
@@ -43,12 +49,18 @@ public class TransactionReportService {
     private final ExcelReportGenerator excelReportGenerator;
 
     public byte[] export(Long familyId, TransactionReportFilter filter, ReportFormat format) {
-        log.info("export - start, familyId={}, format={}", familyId, format);
-        List<TransactionReportRow> rows = buildRows(familyId, filter);
-        List<ReportColumn<TransactionReportRow>> columns = columns();
-        return format == ReportFormat.EXCEL
-                ? excelReportGenerator.generate(openTemplate(), EXCEL_DATA_START_ROW, columns, rows)
-                : csvReportGenerator.generate(columns, rows);
+        try {
+            log.info("export - start, familyId={}, format={}", familyId, format);
+            List<TransactionReportRow> rows = buildRows(familyId, filter);
+            List<ReportColumn<TransactionReportRow>> columns = columns();
+            return format == ReportFormat.EXCEL
+                    ? excelReportGenerator.generate(openTemplate(), EXCEL_DATA_START_ROW, columns, rows)
+                    : csvReportGenerator.generate(columns, rows);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("TransactionReportService.export", e);
+        }
     }
 
     private InputStream openTemplate() {
