@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
  * — so files survive container recreation). Only the relative path this returns is
  * ever stored in the DB; {@link TransactionService} owns validation and DB updates.
  */
+// No @Transactional on purpose: this component only touches the file system, never the database.
 @Component
 @Slf4j(topic = "ReceiptStorageService")
 public class ReceiptStorageService {

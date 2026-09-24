@@ -22,12 +22,19 @@ import com.family.expensemanager.auth.domain.entity.User;
 import com.family.expensemanager.auth.dto.FamilyAdminResponse;
 import com.family.expensemanager.auth.dto.UserAdminResponse;
 import com.family.expensemanager.common.dto.PageResponse;
+import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
+import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.common.security.CurrentUser;
+import java.io.UncheckedIOException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.access.AccessDeniedException;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
 
 /**
  * System-wide operations restricted to {@code isSystemAdmin} users (see
@@ -52,37 +59,49 @@ public class AdminService {
 
     @PreAuthorize("hasRole('ADMIN')")
     public PageResponse<FamilyAdminResponse> listFamiliesPaged(int page, int size, String keyword) {
-        log.info("listFamiliesPaged - start, page={}, size={}, keyword={}", page, size, keyword);
-        validatePage(page, size);
-        String pattern = likePattern(keyword);
-        long totalElements = familyDao.countBySearch(pattern);
-        // Per-row enrichment (memberships + owner lookup) only runs for this page's rows.
-        List<FamilyAdminResponse> content = familyDao.selectBySearchPaged(pattern, size, page * size).stream()
-                .map(this::toFamilyAdminResponse)
-                .toList();
-        return PageResponse.of(content, page, size, totalElements);
+        try {
+            log.info("listFamiliesPaged - start, page={}, size={}, keyword={}", page, size, keyword);
+            validatePage(page, size);
+            String pattern = likePattern(keyword);
+            long totalElements = familyDao.countBySearch(pattern);
+            // Per-row enrichment (memberships + owner lookup) only runs for this page's rows.
+            List<FamilyAdminResponse> content = familyDao.selectBySearchPaged(pattern, size, page * size).stream()
+                    .map(this::toFamilyAdminResponse)
+                    .toList();
+            return PageResponse.of(content, page, size, totalElements);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AdminService.listFamiliesPaged", e);
+        }
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     public PageResponse<UserAdminResponse> listUsersPaged(int page, int size, String keyword) {
-        log.info("listUsersPaged - start, page={}, size={}, keyword={}", page, size, keyword);
-        validatePage(page, size);
-        String pattern = likePattern(keyword);
-        long totalElements = userDao.countBySearch(pattern);
-        List<User> users = userDao.selectBySearchPaged(pattern, size, page * size);
-        // Resolve family names only for the families referenced by this page's users.
-        Map<Long, String> familyNames = new HashMap<>();
-        Set<Long> familyIds = users.stream()
-                .map(User::getFamilyId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        for (Long familyId : familyIds) {
-            familyDao.selectById(familyId).ifPresent(f -> familyNames.put(f.getId(), f.getName()));
+        try {
+            log.info("listUsersPaged - start, page={}, size={}, keyword={}", page, size, keyword);
+            validatePage(page, size);
+            String pattern = likePattern(keyword);
+            long totalElements = userDao.countBySearch(pattern);
+            List<User> users = userDao.selectBySearchPaged(pattern, size, page * size);
+            // Resolve family names only for the families referenced by this page's users.
+            Map<Long, String> familyNames = new HashMap<>();
+            Set<Long> familyIds = users.stream()
+                    .map(User::getFamilyId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+            for (Long familyId : familyIds) {
+                familyDao.selectById(familyId).ifPresent(f -> familyNames.put(f.getId(), f.getName()));
+            }
+            List<UserAdminResponse> content = users.stream()
+                    .map(u -> UserAdminResponse.from(u, familyNames.get(u.getFamilyId())))
+                    .toList();
+            return PageResponse.of(content, page, size, totalElements);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AdminService.listUsersPaged", e);
         }
-        List<UserAdminResponse> content = users.stream()
-                .map(u -> UserAdminResponse.from(u, familyNames.get(u.getFamilyId())))
-                .toList();
-        return PageResponse.of(content, page, size, totalElements);
     }
 
     /** Case-insensitive contains-pattern for `LIKE ... ESCAPE '!'`; null when there is nothing to search for. */
@@ -92,7 +111,7 @@ public class AdminService {
         }
         String trimmed = keyword.trim();
         if (trimmed.length() > MAX_KEYWORD_LENGTH) {
-            throw new BadRequestException("Từ khoá tìm kiếm tối đa " + MAX_KEYWORD_LENGTH + " ký tự");
+            throw logged(log, new BadRequestException("Từ khoá tìm kiếm tối đa " + MAX_KEYWORD_LENGTH + " ký tự"));
         }
         String escaped = trimmed.toLowerCase(Locale.ROOT)
                 .replace("!", "!!")
@@ -103,42 +122,54 @@ public class AdminService {
 
     private static void validatePage(int page, int size) {
         if (page < 0) {
-            throw new BadRequestException("page phải >= 0");
+            throw logged(log, new BadRequestException("page phải >= 0"));
         }
         if (size < 1 || size > MAX_PAGE_SIZE) {
-            throw new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE);
+            throw logged(log, new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE));
         }
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     public void setSystemAdmin(Long targetUserId, boolean isSystemAdmin) {
-        log.info("setSystemAdmin - start, targetUserId={}, isSystemAdmin={}", targetUserId, isSystemAdmin);
-        if (!isSystemAdmin && targetUserId.equals(CurrentUser.userId())) {
-            throw new BadRequestException("Không thể tự gỡ quyền admin của chính mình");
+        try {
+            log.info("setSystemAdmin - start, targetUserId={}, isSystemAdmin={}", targetUserId, isSystemAdmin);
+            if (!isSystemAdmin && targetUserId.equals(CurrentUser.userId())) {
+                throw logged(log, new BadRequestException("Không thể tự gỡ quyền admin của chính mình"));
+            }
+            User user = userDao.selectById(targetUserId)
+                    .orElseThrow(() -> logged(log, new NotFoundException("Tài khoản không tồn tại: " + targetUserId)));
+            user.setIsSystemAdmin(isSystemAdmin);
+            userDao.update(user);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AdminService.setSystemAdmin", e);
         }
-        User user = userDao.selectById(targetUserId)
-                .orElseThrow(() -> new NotFoundException("Tài khoản không tồn tại: " + targetUserId));
-        user.setIsSystemAdmin(isSystemAdmin);
-        userDao.update(user);
     }
 
     /** Locking also revokes every session of the target at once, so a locked user is kicked out immediately. */
     @PreAuthorize("hasRole('ADMIN')")
     public void setLocked(Long targetUserId, boolean locked) {
-        log.info("setLocked - start, targetUserId={}, locked={}", targetUserId, locked);
-        if (locked && targetUserId.equals(CurrentUser.userId())) {
-            throw new BadRequestException("Không thể tự khoá tài khoản của chính mình");
-        }
-        User user = userDao.selectById(targetUserId)
-                .orElseThrow(() -> new NotFoundException("Tài khoản không tồn tại: " + targetUserId));
-        if (locked && Boolean.TRUE.equals(user.getIsSystemAdmin())) {
-            throw new BadRequestException("Không thể khoá tài khoản quản trị hệ thống khác");
-        }
-        user.setLocked(locked);
-        user.setLockedAt(locked ? LocalDateTime.now() : null);
-        userDao.update(user);
-        if (locked) {
-            authService.revokeAllSessions(targetUserId);
+        try {
+            log.info("setLocked - start, targetUserId={}, locked={}", targetUserId, locked);
+            if (locked && targetUserId.equals(CurrentUser.userId())) {
+                throw logged(log, new BadRequestException("Không thể tự khoá tài khoản của chính mình"));
+            }
+            User user = userDao.selectById(targetUserId)
+                    .orElseThrow(() -> logged(log, new NotFoundException("Tài khoản không tồn tại: " + targetUserId)));
+            if (locked && Boolean.TRUE.equals(user.getIsSystemAdmin())) {
+                throw logged(log, new BadRequestException("Không thể khoá tài khoản quản trị hệ thống khác"));
+            }
+            user.setLocked(locked);
+            user.setLockedAt(locked ? LocalDateTime.now() : null);
+            userDao.update(user);
+            if (locked) {
+                authService.revokeAllSessions(targetUserId);
+            }
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AdminService.setLocked", e);
         }
     }
 

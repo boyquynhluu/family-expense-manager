@@ -48,7 +48,7 @@ class BudgetServiceTest {
     void create_savesBudget_whenCategoryOwnedByFamily() {
         var response = budgetService.create(1L, new CreateBudgetRequest(5L, "2026-01", BigDecimal.valueOf(1000)));
 
-        verify(categoryService).requireOwnedByFamily(5L, 1L);
+        verify(categoryService).requireOwnedByFamily(5L, 1L, "EXPENSE");
         assertThat(response.familyId()).isEqualTo(1L);
         assertThat(response.categoryId()).isEqualTo(5L);
     }
@@ -56,7 +56,7 @@ class BudgetServiceTest {
     @Test
     void create_propagatesNotFound_whenCategoryNotOwnedByFamily() {
         doThrow(new NotFoundException("Category không tồn tại: 5"))
-                .when(categoryService).requireOwnedByFamily(5L, 1L);
+                .when(categoryService).requireOwnedByFamily(5L, 1L, "EXPENSE");
 
         assertThatThrownBy(() -> budgetService.create(1L, new CreateBudgetRequest(5L, "2026-01", BigDecimal.TEN)))
                 .isInstanceOf(NotFoundException.class);
@@ -66,7 +66,7 @@ class BudgetServiceTest {
     void create_savesOverallBudget_whenCategoryIdNull() {
         var response = budgetService.create(1L, new CreateBudgetRequest(null, "2026-01", BigDecimal.valueOf(1000)));
 
-        verify(categoryService, never()).requireOwnedByFamily(any(), any());
+        verify(categoryService, never()).requireOwnedByFamily(any(), any(), any());
         assertThat(response.categoryId()).isNull();
         assertThat(response.familyId()).isEqualTo(1L);
     }

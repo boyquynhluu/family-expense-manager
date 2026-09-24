@@ -5,6 +5,7 @@ import com.family.expensemanager.common.event.ExpenseEvent;
 import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
+import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.expense.dao.RecurringTransactionDao;
 import com.family.expensemanager.expense.domain.entity.Category;
 import com.family.expensemanager.expense.domain.entity.RecurringTransaction;
@@ -12,9 +13,13 @@ import com.family.expensemanager.expense.dto.CreateRecurringTransactionRequest;
 import com.family.expensemanager.expense.dto.RecurringTransactionResponse;
 import com.family.expensemanager.expense.dto.TransactionRequest;
 import com.family.expensemanager.expense.dto.TransactionResponse;
+import java.io.UncheckedIOException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -30,6 +35,8 @@ import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
+
 /**
  * CRUD for recurring-bill templates (rent, internet, subscriptions — see README
  * "3. Không có giao dịch định kỳ") plus the daily catch-up job that turns a due
@@ -37,6 +44,7 @@ import lombok.extern.slf4j.Slf4j;
  * cron trigger.
  */
 @Service
+@Transactional
 @RequiredArgsConstructor
 @Slf4j(topic = "RecurringTransactionService")
 public class RecurringTransactionService {
@@ -61,84 +69,110 @@ public class RecurringTransactionService {
     private final Clock clock;
     private final ApplicationEventPublisher eventPublisher;
 
-    @Transactional
     public RecurringTransactionResponse create(
             Long familyId, Long userId, String userEmail, String userDisplayName,
             CreateRecurringTransactionRequest request) {
-        log.info("create - start, familyId={}, walletId={}, categoryId={}",
-                familyId, request.walletId(), request.categoryId());
-        walletService.requireOwnedByFamily(request.walletId(), familyId);
-        categoryService.requireOwnedByFamily(request.categoryId(), familyId);
+        try {
+            log.info("create - start, familyId={}, walletId={}, categoryId={}",
+                    familyId, request.walletId(), request.categoryId());
+            walletService.requireOwnedByFamily(request.walletId(), familyId);
+            categoryService.requireOwnedByFamily(request.categoryId(), familyId, request.type());
 
-        RecurringTransaction r = new RecurringTransaction();
-        r.setFamilyId(familyId);
-        r.setWalletId(request.walletId());
-        r.setCategoryId(request.categoryId());
-        r.setCreatedByUserId(userId);
-        r.setCreatedByEmail(userEmail);
-        r.setCreatedByDisplayName(userDisplayName);
-        r.setType(request.type());
-        r.setAmount(request.amount());
-        r.setNote(request.note());
-        applySchedule(r, request);
-        r.setActive(true);
-        r.setCreatedAt(LocalDateTime.now(clock));
+            RecurringTransaction r = new RecurringTransaction();
+            r.setFamilyId(familyId);
+            r.setWalletId(request.walletId());
+            r.setCategoryId(request.categoryId());
+            r.setCreatedByUserId(userId);
+            r.setCreatedByEmail(userEmail);
+            r.setCreatedByDisplayName(userDisplayName);
+            r.setType(request.type());
+            r.setAmount(request.amount());
+            r.setNote(request.note());
+            applySchedule(r, request);
+            r.setActive(true);
+            r.setCreatedAt(LocalDateTime.now(clock));
 
-        recurringTransactionDao.insert(r);
-        return RecurringTransactionResponse.from(r);
+            recurringTransactionDao.insert(r);
+            return RecurringTransactionResponse.from(r);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("RecurringTransactionService.create", e);
+        }
     }
 
     public PageResponse<RecurringTransactionResponse> listByFamilyPaged(Long familyId, int page, int size) {
-        log.info("listByFamilyPaged - start, familyId={}, page={}, size={}", familyId, page, size);
-        if (page < 0) {
-            throw new BadRequestException("page phải >= 0");
+        try {
+            log.info("listByFamilyPaged - start, familyId={}, page={}, size={}", familyId, page, size);
+            if (page < 0) {
+                throw logged(log, new BadRequestException("page phải >= 0"));
+            }
+            if (size < 1 || size > MAX_PAGE_SIZE) {
+                throw logged(log, new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE));
+            }
+            long totalElements = recurringTransactionDao.countByFamilyId(familyId);
+            List<RecurringTransactionResponse> content =
+                    recurringTransactionDao.selectByFamilyIdPaged(familyId, size, page * size).stream()
+                            .map(RecurringTransactionResponse::from)
+                            .toList();
+            return PageResponse.of(content, page, size, totalElements);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("RecurringTransactionService.listByFamilyPaged", e);
         }
-        if (size < 1 || size > MAX_PAGE_SIZE) {
-            throw new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE);
-        }
-        long totalElements = recurringTransactionDao.countByFamilyId(familyId);
-        List<RecurringTransactionResponse> content =
-                recurringTransactionDao.selectByFamilyIdPaged(familyId, size, page * size).stream()
-                        .map(RecurringTransactionResponse::from)
-                        .toList();
-        return PageResponse.of(content, page, size, totalElements);
     }
 
-    @Transactional
     public RecurringTransactionResponse update(
             Long id, Long familyId, Long callerUserId, boolean callerIsOwner,
             CreateRecurringTransactionRequest request) {
-        log.info("update - start, id={}, familyId={}", id, familyId);
-        RecurringTransaction r = requireOwnedByFamily(id, familyId);
-        requireCanModify(r, callerUserId, callerIsOwner);
-        walletService.requireOwnedByFamily(request.walletId(), familyId);
-        categoryService.requireOwnedByFamily(request.categoryId(), familyId);
+        try {
+            log.info("update - start, id={}, familyId={}", id, familyId);
+            RecurringTransaction r = requireOwnedByFamily(id, familyId);
+            requireCanModify(r, callerUserId, callerIsOwner);
+            walletService.requireOwnedByFamily(request.walletId(), familyId);
+            categoryService.requireOwnedByFamily(request.categoryId(), familyId, request.type());
 
-        r.setWalletId(request.walletId());
-        r.setCategoryId(request.categoryId());
-        r.setType(request.type());
-        r.setAmount(request.amount());
-        r.setNote(request.note());
-        applySchedule(r, request);
-        recurringTransactionDao.update(r);
-        return RecurringTransactionResponse.from(r);
+            r.setWalletId(request.walletId());
+            r.setCategoryId(request.categoryId());
+            r.setType(request.type());
+            r.setAmount(request.amount());
+            r.setNote(request.note());
+            applySchedule(r, request);
+            recurringTransactionDao.update(r);
+            return RecurringTransactionResponse.from(r);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("RecurringTransactionService.update", e);
+        }
     }
 
-    @Transactional
     public void setActive(Long id, Long familyId, Long callerUserId, boolean callerIsOwner, boolean active) {
-        log.info("setActive - start, id={}, familyId={}, active={}", id, familyId, active);
-        RecurringTransaction r = requireOwnedByFamily(id, familyId);
-        requireCanModify(r, callerUserId, callerIsOwner);
-        r.setActive(active);
-        recurringTransactionDao.update(r);
+        try {
+            log.info("setActive - start, id={}, familyId={}, active={}", id, familyId, active);
+            RecurringTransaction r = requireOwnedByFamily(id, familyId);
+            requireCanModify(r, callerUserId, callerIsOwner);
+            r.setActive(active);
+            recurringTransactionDao.update(r);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("RecurringTransactionService.setActive", e);
+        }
     }
 
-    @Transactional
     public void delete(Long id, Long familyId, Long callerUserId, boolean callerIsOwner) {
-        log.info("delete - start, id={}, familyId={}", id, familyId);
-        RecurringTransaction r = requireOwnedByFamily(id, familyId);
-        requireCanModify(r, callerUserId, callerIsOwner);
-        recurringTransactionDao.delete(r);
+        try {
+            log.info("delete - start, id={}, familyId={}", id, familyId);
+            RecurringTransaction r = requireOwnedByFamily(id, familyId);
+            requireCanModify(r, callerUserId, callerIsOwner);
+            recurringTransactionDao.delete(r);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("RecurringTransactionService.delete", e);
+        }
     }
 
     /**
@@ -149,17 +183,26 @@ public class RecurringTransactionService {
      * skipped rather than aborting the whole run, since rules across different families
      * are independent.
      */
+    // Deliberately outside the class-level transaction: each due rule commits (or fails) on its own,
+    // so one bad rule can't mark a shared transaction rollback-only and take the whole run down with it.
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void generateDueTransactions() {
-        LocalDate today = LocalDate.now(clock);
-        List<RecurringTransaction> due = recurringTransactionDao.selectDue(today);
-        log.info("generateDueTransactions - start, today={}, dueCount={}", today, due.size());
-        for (RecurringTransaction r : due) {
-            try {
-                processDueRule(r, today);
-            } catch (Exception e) {
-                log.error("Không xử lý được recurring transaction id={}, familyId={}", r.getId(), r.getFamilyId(), e);
-                publishRecurringEvent(ExpenseEvent.RECURRING_FAILED, r, null, r.getNextRunDate());
+        try {
+            LocalDate today = LocalDate.now(clock);
+            List<RecurringTransaction> due = recurringTransactionDao.selectDue(today);
+            log.info("generateDueTransactions - start, today={}, dueCount={}", today, due.size());
+            for (RecurringTransaction r : due) {
+                try {
+                    processDueRule(r, today);
+                } catch (Exception e) {
+                    log.error("Không xử lý được recurring transaction id={}, familyId={}", r.getId(), r.getFamilyId(), e);
+                    publishRecurringEvent(ExpenseEvent.RECURRING_FAILED, r, null, r.getNextRunDate());
+                }
             }
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("RecurringTransactionService.generateDueTransactions", e);
         }
     }
 
@@ -221,7 +264,7 @@ public class RecurringTransactionService {
         switch (frequency) {
             case FREQUENCY_WEEKLY -> {
                 if (request.dayOfWeek() == null) {
-                    throw new BadRequestException("Giao dịch hàng tuần cần chọn thứ trong tuần");
+                    throw logged(log, new BadRequestException("Giao dịch hàng tuần cần chọn thứ trong tuần"));
                 }
                 r.setDayOfMonth(WEEKLY_PLACEHOLDER_DAY_OF_MONTH);
                 r.setDayOfWeek(request.dayOfWeek());
@@ -229,11 +272,11 @@ public class RecurringTransactionService {
             }
             case FREQUENCY_YEARLY -> {
                 if (request.monthOfYear() == null || request.dayOfMonth() == null) {
-                    throw new BadRequestException("Giao dịch hàng năm cần chọn tháng và ngày trong tháng");
+                    throw logged(log, new BadRequestException("Giao dịch hàng năm cần chọn tháng và ngày trong tháng"));
                 }
                 if (request.dayOfMonth() > Month.of(request.monthOfYear()).maxLength()) {
-                    throw new BadRequestException(
-                            "Tháng " + request.monthOfYear() + " không có ngày " + request.dayOfMonth());
+                    throw logged(log, new BadRequestException(
+                            "Tháng " + request.monthOfYear() + " không có ngày " + request.dayOfMonth()));
                 }
                 r.setDayOfMonth(request.dayOfMonth());
                 r.setDayOfWeek(null);
@@ -241,13 +284,13 @@ public class RecurringTransactionService {
             }
             case FREQUENCY_MONTHLY -> {
                 if (request.dayOfMonth() == null) {
-                    throw new BadRequestException("Giao dịch hàng tháng cần chọn ngày trong tháng");
+                    throw logged(log, new BadRequestException("Giao dịch hàng tháng cần chọn ngày trong tháng"));
                 }
                 r.setDayOfMonth(request.dayOfMonth());
                 r.setDayOfWeek(null);
                 r.setMonthOfYear(null);
             }
-            default -> throw new BadRequestException("Tần suất không hợp lệ: " + frequency);
+            default -> throw logged(log, new BadRequestException("Tần suất không hợp lệ: " + frequency));
         }
         r.setFrequency(frequency);
         r.setStartDate(request.startDate());
@@ -304,16 +347,16 @@ public class RecurringTransactionService {
 
     private void requireCanModify(RecurringTransaction r, Long callerUserId, boolean callerIsOwner) {
         if (!callerIsOwner && !Objects.equals(r.getCreatedByUserId(), callerUserId)) {
-            throw new ApiException(HttpStatus.FORBIDDEN,
-                    "Chỉ chủ hộ hoặc người tạo giao dịch định kỳ mới có quyền thực hiện thao tác này");
+            throw logged(log, new ApiException(HttpStatus.FORBIDDEN,
+                    "Chỉ chủ hộ hoặc người tạo giao dịch định kỳ mới có quyền thực hiện thao tác này"));
         }
     }
 
     private RecurringTransaction requireOwnedByFamily(Long id, Long familyId) {
         RecurringTransaction r = recurringTransactionDao.selectById(id)
-                .orElseThrow(() -> new NotFoundException("Giao dịch định kỳ không tồn tại: " + id));
+                .orElseThrow(() -> logged(log, new NotFoundException("Giao dịch định kỳ không tồn tại: " + id)));
         if (!r.getFamilyId().equals(familyId)) {
-            throw new NotFoundException("Giao dịch định kỳ không tồn tại: " + id);
+            throw logged(log, new NotFoundException("Giao dịch định kỳ không tồn tại: " + id));
         }
         return r;
     }

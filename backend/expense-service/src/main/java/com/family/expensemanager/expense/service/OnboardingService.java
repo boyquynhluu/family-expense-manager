@@ -1,10 +1,15 @@
 package com.family.expensemanager.expense.service;
 
+import com.family.expensemanager.common.exception.ApiException;
+import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.expense.dao.CategoryDao;
 import com.family.expensemanager.expense.dao.WalletDao;
 import com.family.expensemanager.expense.domain.entity.Category;
 import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.dto.SeedDefaultsResponse;
+import java.io.UncheckedIOException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 
 /** Gives a brand-new family the minimum data (a wallet + categories) it needs to record its first transaction. */
 @Service
+@Transactional
 @RequiredArgsConstructor
 @Slf4j(topic = "OnboardingService")
 public class OnboardingService {
@@ -46,36 +52,41 @@ public class OnboardingService {
     private final WalletDao walletDao;
 
     /** Each half is independent and a no-op once the family already has that kind of data, so re-calling is safe. */
-    @Transactional
     @PreAuthorize("hasRole('OWNER')")
     public SeedDefaultsResponse seedDefaults(Long familyId) {
-        log.info("seedDefaults - start, familyId={}", familyId);
-        int categoriesCreated = 0;
-        if (categoryDao.selectByFamilyId(familyId).isEmpty()) {
-            for (DefaultCategory defaults : DEFAULT_CATEGORIES) {
-                Category category = new Category();
-                category.setFamilyId(familyId);
-                category.setName(defaults.name());
-                category.setType(defaults.type());
-                category.setIcon(defaults.icon());
-                category.setColor(defaults.color());
-                categoryDao.insert(category);
-                categoriesCreated++;
+        try {
+            log.info("seedDefaults - start, familyId={}", familyId);
+            int categoriesCreated = 0;
+            if (categoryDao.selectByFamilyId(familyId).isEmpty()) {
+                for (DefaultCategory defaults : DEFAULT_CATEGORIES) {
+                    Category category = new Category();
+                    category.setFamilyId(familyId);
+                    category.setName(defaults.name());
+                    category.setType(defaults.type());
+                    category.setIcon(defaults.icon());
+                    category.setColor(defaults.color());
+                    categoryDao.insert(category);
+                    categoriesCreated++;
+                }
             }
-        }
 
-        int walletsCreated = 0;
-        if (walletDao.selectByFamilyId(familyId).isEmpty()) {
-            Wallet wallet = new Wallet();
-            wallet.setFamilyId(familyId);
-            wallet.setName(DEFAULT_WALLET_NAME);
-            wallet.setCurrency(DEFAULT_CURRENCY);
-            wallet.setInitialBalance(BigDecimal.ZERO);
-            walletDao.insert(wallet);
-            walletsCreated++;
+            int walletsCreated = 0;
+            if (walletDao.selectByFamilyId(familyId).isEmpty()) {
+                Wallet wallet = new Wallet();
+                wallet.setFamilyId(familyId);
+                wallet.setName(DEFAULT_WALLET_NAME);
+                wallet.setCurrency(DEFAULT_CURRENCY);
+                wallet.setInitialBalance(BigDecimal.ZERO);
+                walletDao.insert(wallet);
+                walletsCreated++;
+            }
+            log.info("seedDefaults - done, familyId={}, categoriesCreated={}, walletsCreated={}",
+                    familyId, categoriesCreated, walletsCreated);
+            return new SeedDefaultsResponse(categoriesCreated, walletsCreated);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("OnboardingService.seedDefaults", e);
         }
-        log.info("seedDefaults - done, familyId={}, categoriesCreated={}, walletsCreated={}",
-                familyId, categoriesCreated, walletsCreated);
-        return new SeedDefaultsResponse(categoriesCreated, walletsCreated);
     }
 }

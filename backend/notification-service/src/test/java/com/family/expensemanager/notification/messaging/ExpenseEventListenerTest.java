@@ -1,6 +1,7 @@
 package com.family.expensemanager.notification.messaging;
 
 import com.family.expensemanager.common.event.ExpenseEvent;
+import com.family.expensemanager.notification.client.FamilyMemberDirectory;
 import com.family.expensemanager.notification.dao.NotificationDao;
 import com.family.expensemanager.notification.domain.NotificationType;
 import com.family.expensemanager.notification.domain.entity.Notification;
@@ -21,6 +22,7 @@ import jakarta.mail.Session;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Properties;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,15 +42,18 @@ class ExpenseEventListenerTest {
     private JavaMailSender mailSender;
     @Mock
     private NotificationPreferenceService preferenceService;
+    @Mock
+    private FamilyMemberDirectory memberDirectory;
 
     private ExpenseEventListener listener;
 
     @BeforeEach
     void setUp() {
         lenient().when(preferenceService.isEmailEnabled(any(), eq(NotificationType.BUDGET_EXCEEDED))).thenReturn(true);
+        lenient().when(preferenceService.isEmailEnabled(any(), eq(NotificationType.WALLET_TRANSFERRED))).thenReturn(true);
         listener = new ExpenseEventListener(
                 notificationDao, preferenceService, new ObjectMapper().registerModule(new JavaTimeModule()),
-                mailSender, "http://localhost:5173", "no-reply@fem.local");
+                mailSender, memberDirectory, "http://localhost:5173", "no-reply@fem.local");
     }
 
     @Test
@@ -196,5 +201,125 @@ class ExpenseEventListenerTest {
                 ExpenseEvent.BUDGET_EXCEEDED, 1L, 10L, 100L, 5L, BigDecimal.valueOf(50),
                 "2026-01", BigDecimal.valueOf(500), BigDecimal.valueOf(550), "Ăn uống",
                 userEmail, "Chủ hộ", Instant.now());
+    }
+
+    @Test
+    void onExpenseEvent_recordsSharedNotificationAndEmailsCreator_whenWalletTransferred() throws Exception {
+        MimeMessage mimeMessage = new MimeMessage(Session.getInstance(new Properties()));
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+
+        listener.onExpenseEvent(walletTransferEvent("user@b.com", "Tiền chợ"));
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(notificationCaptor.capture());
+        Notification saved = notificationCaptor.getValue();
+        assertThat(saved.getType()).isEqualTo(ExpenseEvent.WALLET_TRANSFERRED);
+        assertThat(saved.getFamilyId()).isEqualTo(1L);
+        assertThat(saved.getUserId()).isEqualTo(10L);
+        assertThat(saved.getTitle()).isEqualTo("Chuyển tiền giữa các ví");
+        assertThat(saved.getMessage()).isEqualTo("Chủ hộ đã chuyển 200,000 từ Ví tiền mặt sang Ví ngân hàng");
+
+        verify(mailSender).send(mimeMessage);
+        assertThat(mimeMessage.getAllRecipients()[0].toString()).isEqualTo("user@b.com");
+        assertThat(mimeMessage.getSubject()).contains("200,000");
+    }
+
+    @Test
+    void onExpenseEvent_skipsWalletTransferEmail_whenUserDisabledIt() throws Exception {
+        when(preferenceService.isEmailEnabled(10L, NotificationType.WALLET_TRANSFERRED)).thenReturn(false);
+
+        listener.onExpenseEvent(walletTransferEvent("user@b.com", null));
+
+        verify(notificationDao).insert(any());
+        verify(mailSender, never()).createMimeMessage();
+        verify(mailSender, never()).send(any(MimeMessage.class));
+    }
+
+    @Test
+    void onExpenseEvent_skipsWalletTransferEmail_whenUserEmailMissing() throws Exception {
+        listener.onExpenseEvent(walletTransferEvent(null, null));
+
+        verify(notificationDao).insert(any());
+        verify(mailSender, never()).createMimeMessage();
+        verify(mailSender, never()).send(any(MimeMessage.class));
+    }
+
+    @Test
+    void onExpenseEvent_emailsOtherFamilyMembersButNotTheCreator_whenWalletTransferred() throws Exception {
+        MimeMessage creatorMail = new MimeMessage(Session.getInstance(new Properties()));
+        MimeMessage receiverMail = new MimeMessage(Session.getInstance(new Properties()));
+        when(mailSender.createMimeMessage()).thenReturn(creatorMail, receiverMail);
+        when(memberDirectory.listMembers(1L)).thenReturn(List.of(
+                new FamilyMemberDirectory.Member(10L, "user@b.com", "Chủ hộ"),
+                new FamilyMemberDirectory.Member(11L, "wife@b.com", "Hồng Huế")));
+
+        listener.onExpenseEvent(walletTransferEvent("user@b.com", "Tiền chợ"));
+
+        verify(mailSender).send(creatorMail);
+        verify(mailSender).send(receiverMail);
+        assertThat(creatorMail.getAllRecipients()[0].toString()).isEqualTo("user@b.com");
+        assertThat(receiverMail.getAllRecipients()).hasSize(1);
+        assertThat(receiverMail.getAllRecipients()[0].toString()).isEqualTo("wife@b.com");
+        assertThat(receiverMail.getSubject()).contains("Chủ hộ").contains("200,000");
+    }
+
+    @Test
+    void onExpenseEvent_skipsReceiverWhoOptedOut_andKeepsGoingWhenOneReceiverFails() throws Exception {
+        MimeMessage okMail = new MimeMessage(Session.getInstance(new Properties()));
+        MimeMessage failingMail = new MimeMessage(Session.getInstance(new Properties()));
+        MimeMessage creatorMail = new MimeMessage(Session.getInstance(new Properties()));
+        when(mailSender.createMimeMessage()).thenReturn(creatorMail, failingMail, okMail);
+        when(memberDirectory.listMembers(1L)).thenReturn(List.of(
+                new FamilyMemberDirectory.Member(11L, "optout@b.com", "A"),
+                new FamilyMemberDirectory.Member(12L, "bad@b.com", "B"),
+                new FamilyMemberDirectory.Member(13L, "ok@b.com", "C")));
+        lenient().when(preferenceService.isEmailEnabled(11L, NotificationType.WALLET_TRANSFERRED)).thenReturn(false);
+        org.mockito.Mockito.lenient().doThrow(new org.springframework.mail.MailSendException("smtp down"))
+                .when(mailSender).send(failingMail);
+
+        listener.onExpenseEvent(walletTransferEvent("user@b.com", null));
+
+        verify(mailSender).send(creatorMail);
+        verify(mailSender).send(failingMail);
+        verify(mailSender).send(okMail);
+        // creator + the failing receiver + the ok receiver — the opted-out one never even builds a message
+        verify(mailSender, org.mockito.Mockito.times(3)).createMimeMessage();
+    }
+
+    @Test
+    void onExpenseEvent_doesNotThrow_andStillEmailsReceivers_whenCreatorEmailFails() throws Exception {
+        MimeMessage creatorMail = new MimeMessage(Session.getInstance(new Properties()));
+        MimeMessage receiverMail = new MimeMessage(Session.getInstance(new Properties()));
+        when(mailSender.createMimeMessage()).thenReturn(creatorMail, receiverMail);
+        when(memberDirectory.listMembers(1L)).thenReturn(List.of(
+                new FamilyMemberDirectory.Member(11L, "wife@b.com", "Hồng Huế")));
+        org.mockito.Mockito.lenient().doThrow(new org.springframework.mail.MailSendException("smtp down"))
+                .when(mailSender).send(creatorMail);
+
+        org.assertj.core.api.Assertions.assertThatCode(
+                () -> listener.onExpenseEvent(walletTransferEvent("user@b.com", null))).doesNotThrowAnyException();
+
+        verify(notificationDao).insert(any());
+        verify(mailSender).send(receiverMail);
+    }
+
+    @Test
+    void onExpenseEvent_doesNotThrow_whenBudgetExceededEmailFails() throws Exception {
+        MimeMessage mimeMessage = new MimeMessage(Session.getInstance(new Properties()));
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+        org.mockito.Mockito.doThrow(new org.springframework.mail.MailSendException("smtp down"))
+                .when(mailSender).send(mimeMessage);
+
+        org.assertj.core.api.Assertions.assertThatCode(
+                () -> listener.onExpenseEvent(budgetExceededEvent("user@b.com"))).doesNotThrowAnyException();
+
+        verify(notificationDao).insert(any());
+    }
+
+    private static ExpenseEvent walletTransferEvent(String userEmail, String note) {
+        return new ExpenseEvent(
+                ExpenseEvent.WALLET_TRANSFERRED, 1L, 10L, null, null, BigDecimal.valueOf(200000),
+                null, null, null, null, userEmail, "Chủ hộ", Instant.now(), LocalDate.of(2026, 2, 1), note,
+                "Ví tiền mặt", "Ví ngân hàng");
     }
 }

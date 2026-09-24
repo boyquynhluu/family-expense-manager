@@ -1,11 +1,15 @@
 package com.family.expensemanager.expense.service;
 
+import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
+import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.expense.dto.CategoryResponse;
 import com.family.expensemanager.expense.dto.ImportResult;
 import com.family.expensemanager.expense.dto.ImportRowError;
 import com.family.expensemanager.expense.dto.TransactionRequest;
 import com.family.expensemanager.expense.dto.WalletResponse;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.access.AccessDeniedException;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -40,6 +44,8 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
+
 /**
  * The reverse of {@link TransactionReportService}'s export: reads a CSV or Excel file
  * back in and bulk-creates transactions from it (README "5. Chỉ export, không import").
@@ -52,6 +58,9 @@ import lombok.extern.slf4j.Slf4j;
  * (unknown wallet/category, bad amount, etc.) is skipped and reported — the rest of the
  * file still imports, since one typo shouldn't block importing everything else.
  */
+// No class-level @Transactional on purpose: each row is created through TransactionService (its own
+// transaction) and a failing row is caught and reported, so one shared outer transaction would be
+// marked rollback-only by that failure and discard the rows that did import.
 @Service
 @RequiredArgsConstructor
 @Slf4j(topic = "TransactionImportService")
@@ -80,39 +89,45 @@ public class TransactionImportService {
 
     public ImportResult importFile(
             Long familyId, Long userId, String userEmail, String userDisplayName, MultipartFile file) {
-        log.info("importFile - start, familyId={}, filename={}", familyId, file.getOriginalFilename());
-        if (file.isEmpty()) {
-            throw new BadRequestException("File trống");
-        }
-
-        List<Map<String, String>> rawRows = isExcel(file) ? parseExcel(file) : parseCsv(file);
-        if (rawRows.isEmpty()) {
-            throw new BadRequestException("File không có dữ liệu để nhập");
-        }
-        if (rawRows.size() > MAX_IMPORT_ROWS) {
-            throw new BadRequestException("Chỉ hỗ trợ nhập tối đa " + MAX_IMPORT_ROWS + " dòng mỗi lần");
-        }
-        requireValidHeaders(rawRows.get(0).keySet());
-
-        Map<String, WalletResponse> walletsByName = walletService.listByFamily(familyId).stream()
-                .collect(Collectors.toMap(w -> key(w.name()), w -> w, (a, b) -> a));
-        Map<String, CategoryResponse> categoriesByKey = categoryService.listByFamily(familyId).stream()
-                .collect(Collectors.toMap(c -> key(c.name()) + "|" + c.type(), c -> c, (a, b) -> a));
-
-        List<ImportRowError> errors = new ArrayList<>();
-        int imported = 0;
-        for (int i = 0; i < rawRows.size(); i++) {
-            int rowNumber = i + 2; // row 1 is the header
-            int errorsBefore = errors.size();
-            processRow(rowNumber, rawRows.get(i), familyId, userId, userEmail, userDisplayName, walletsByName,
-                    categoriesByKey, errors);
-            if (errors.size() == errorsBefore) {
-                imported++;
+        try {
+            log.info("importFile - start, familyId={}, filename={}", familyId, file.getOriginalFilename());
+            if (file.isEmpty()) {
+                throw logged(log, new BadRequestException("File trống"));
             }
+
+            List<Map<String, String>> rawRows = isExcel(file) ? parseExcel(file) : parseCsv(file);
+            if (rawRows.isEmpty()) {
+                throw logged(log, new BadRequestException("File không có dữ liệu để nhập"));
+            }
+            if (rawRows.size() > MAX_IMPORT_ROWS) {
+                throw logged(log, new BadRequestException("Chỉ hỗ trợ nhập tối đa " + MAX_IMPORT_ROWS + " dòng mỗi lần"));
+            }
+            requireValidHeaders(rawRows.get(0).keySet());
+
+            Map<String, WalletResponse> walletsByName = walletService.listByFamily(familyId).stream()
+                    .collect(Collectors.toMap(w -> key(w.name()), w -> w, (a, b) -> a));
+            Map<String, CategoryResponse> categoriesByKey = categoryService.listByFamily(familyId).stream()
+                    .collect(Collectors.toMap(c -> key(c.name()) + "|" + c.type(), c -> c, (a, b) -> a));
+
+            List<ImportRowError> errors = new ArrayList<>();
+            int imported = 0;
+            for (int i = 0; i < rawRows.size(); i++) {
+                int rowNumber = i + 2; // row 1 is the header
+                int errorsBefore = errors.size();
+                processRow(rowNumber, rawRows.get(i), familyId, userId, userEmail, userDisplayName, walletsByName,
+                        categoriesByKey, errors);
+                if (errors.size() == errorsBefore) {
+                    imported++;
+                }
+            }
+            log.info("importFile - done, familyId={}, totalRows={}, imported={}, errors={}",
+                    familyId, rawRows.size(), imported, errors.size());
+            return new ImportResult(rawRows.size(), imported, errors);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("TransactionImportService.importFile", e);
         }
-        log.info("importFile - done, familyId={}, totalRows={}, imported={}, errors={}",
-                familyId, rawRows.size(), imported, errors.size());
-        return new ImportResult(rawRows.size(), imported, errors);
     }
 
     private void processRow(int rowNumber, Map<String, String> raw, Long familyId, Long userId, String userEmail,
@@ -188,8 +203,8 @@ public class TransactionImportService {
 
     private void requireValidHeaders(Set<String> headers) {
         if (!headers.containsAll(REQUIRED_HEADERS)) {
-            throw new BadRequestException(
-                    "File thiếu cột bắt buộc. Cần có: " + String.join(", ", REQUIRED_HEADERS));
+            throw logged(log, new BadRequestException(
+                    "File thiếu cột bắt buộc. Cần có: " + String.join(", ", REQUIRED_HEADERS)));
         }
     }
 
@@ -288,8 +303,8 @@ public class TransactionImportService {
                 return r;
             }
         }
-        throw new BadRequestException(
-                "Không tìm thấy dòng tiêu đề hợp lệ trong file (cần có các cột: " + String.join(", ", REQUIRED_HEADERS) + ")");
+        throw logged(log, new BadRequestException(
+                "Không tìm thấy dòng tiêu đề hợp lệ trong file (cần có các cột: " + String.join(", ", REQUIRED_HEADERS) + ")"));
     }
 
     private boolean isRowBlank(Row row) {

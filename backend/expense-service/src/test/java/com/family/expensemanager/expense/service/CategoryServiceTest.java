@@ -65,6 +65,27 @@ class CategoryServiceTest {
     }
 
     @Test
+    void requireOwnedByFamily_withType_returnsCategory_whenTypeMatches() {
+        Category category = category(1L, 1L);
+        category.setType("EXPENSE");
+        when(categoryDao.selectById(1L)).thenReturn(Optional.of(category));
+
+        assertThat(categoryService.requireOwnedByFamily(1L, 1L, "EXPENSE")).isSameAs(category);
+    }
+
+    @Test
+    void requireOwnedByFamily_withType_throwsBadRequest_whenTypeDiffers() {
+        Category category = category(1L, 1L);
+        category.setType("INCOME");
+        when(categoryDao.selectById(1L)).thenReturn(Optional.of(category));
+
+        assertThatThrownBy(() -> categoryService.requireOwnedByFamily(1L, 1L, "EXPENSE"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("INCOME")
+                .hasMessageContaining("EXPENSE");
+    }
+
+    @Test
     void update_throwsNotFound_whenCategoryMissing() {
         when(categoryDao.selectById(1L)).thenReturn(Optional.empty());
 

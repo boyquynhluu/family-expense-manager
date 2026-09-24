@@ -2,14 +2,15 @@ import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import client from "../api/client";
-import { TrashIcon } from "../components/AppIcons";
+import { LogoutIcon, TrashIcon } from "../components/AppIcons";
 import { EyeIcon, EyeOffIcon } from "../components/AuthIcons";
 import Pagination from "../components/Pagination";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
-import { formatServerDateTime } from "../utils/format";
+import { formatServerDateTime, truncate } from "../utils/format";
 import { clearTokens } from "../utils/tokenStorage";
 
 // The stored value is always this fixed Vietnamese word regardless of UI language —
@@ -179,6 +180,7 @@ export default function Profile() {
   const [deleteCredential, setDeleteCredential] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     client.get("/auth/me").then((res) => {
@@ -368,6 +370,7 @@ export default function Profile() {
       setCurrentPassword("");
       setNewPassword("");
       toast.success(t("passwordChangeSuccess"));
+      navigate("/login");
     } catch (err) {
       setPasswordError(err.response?.data?.message || t("passwordChangeFailed"));
     } finally {
@@ -677,9 +680,12 @@ export default function Profile() {
         <Pagination pageData={membersPage} onPageChange={setMembersPage} />
 
         {profile.role !== "OWNER" && (
-          <button type="button" className="btn-secondary" onClick={handleLeaveFamily} disabled={leavingFamily}>
-            {t("leaveFamilyButton")}
-          </button>
+          <div className="leave-family-action">
+            <button type="button" className="btn-outline-warning" onClick={handleLeaveFamily} disabled={leavingFamily}>
+              <LogoutIcon />
+              {leavingFamily ? t("common:saving") : t("leaveFamilyButton")}
+            </button>
+          </div>
         )}
 
         {profile.role === "OWNER" && (
@@ -728,8 +734,8 @@ export default function Profile() {
             <tbody>
               {sessions.map((s) => (
                 <tr key={s.id}>
-                  <td data-label={t("deviceHeader")}>
-                    {s.deviceInfo || t("unknownDevice")}
+                  <td data-label={t("deviceHeader")} title={s.deviceInfo || undefined}>
+                    {truncate(s.deviceInfo, 50) || t("unknownDevice")}
                     {s.isCurrent && <span className="badge">{t("currentSessionBadge")}</span>}
                   </td>
                   <td data-label={t("ipAddressHeader")}>{s.ipAddress || t("notAvailable")}</td>

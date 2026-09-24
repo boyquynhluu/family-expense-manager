@@ -1,5 +1,8 @@
 package com.family.expensemanager.auth.service;
 
+import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
+
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -12,6 +15,7 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -19,7 +23,9 @@ import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
@@ -69,7 +75,6 @@ import com.family.expensemanager.auth.security.TotpService;
 import com.family.expensemanager.auth.security.TwoFactorChallengeStore;
 import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.event.FamilyInviteEvent;
-import com.family.expensemanager.common.message.Messages;
 import com.family.expensemanager.common.event.FamilyMemberEvent;
 import com.family.expensemanager.common.event.NewUserRegisteredEvent;
 import com.family.expensemanager.common.event.PasswordResetEvent;
@@ -78,7 +83,9 @@ import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
+import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.common.exception.UnauthorizedException;
+import com.family.expensemanager.common.message.Messages;
 import com.family.expensemanager.common.security.JwtUtil;
 import com.family.expensemanager.common.security.RevokedSessionStore;
 
@@ -167,44 +174,42 @@ public class AuthService {
         this.inviteTokenTtl = Duration.ofHours(inviteTokenTtlHours);
     }
 
+    /**
+     * Register User
+     *
+     * @param request
+     */
     public MessageResponse register(RegisterRequest request) {
         log.info("register - start, email={}", request.email());
-        User existing = userDao.selectByEmail(request.email()).orElse(null);
-        if (existing != null) {
-            if (!isPendingLocalRegistration(existing)) {
-                throw new ConflictException("Email đã được đăng ký: " + request.email());
+        try {
+            User existing = userDao.selectByEmail(request.email()).orElse(null);
+            if (existing != null) {
+                if (!isPendingLocalRegistration(existing)) {
+                    throw logged(log, new ConflictException("Email đã được đăng ký: " + request.email()));
+                }
+                return reRegisterPending(existing, request);
             }
-            return reRegisterPending(existing, request);
+
+            Family family = registerFamily(request);
+
+            String verificationToken = generateOpaqueToken();
+
+            User user = registerUser(family, request, verificationToken);
+
+            addMembership(user.getId(), family.getId(), ROLE_OWNER);
+
+            // Register event for kafka
+            eventPublisher.publishEvent(new UserVerificationEvent(
+                    user.getId(), user.getEmail(), user.getDisplayName(), verificationToken, Instant.now()));
+
+                    publishNewUserRegistered(user, family.getName(), NewUserRegisteredEvent.SOURCE_LOCAL, false);
+            return new MessageResponse(messages.get("auth.registerSuccess"));
+        } catch (ApiException e) {
+            // Business errors (e.g. 409 email already registered) keep their own status and message.
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.register", messages.get("auth.registerFailed"), e);
         }
-
-        Family family = new Family();
-        family.setName(request.familyName());
-        family.setCreatedAt(LocalDateTime.now());
-        familyDao.insert(family);
-
-        String verificationToken = generateOpaqueToken();
-
-        User user = new User();
-        user.setFamilyId(family.getId());
-        user.setEmail(request.email());
-        user.setPasswordHash(passwordEncoder.encode(request.password()));
-        user.setDisplayName(request.displayName());
-        user.setRole(ROLE_OWNER);
-        user.setActive(false);
-        user.setProvider(PROVIDER_LOCAL);
-        user.setIsSystemAdmin(Boolean.FALSE);
-        user.setTotpEnabled(Boolean.FALSE);
-        user.setLocked(Boolean.FALSE);
-        user.setVerificationToken(verificationToken);
-        user.setVerificationTokenExpiresAt(LocalDateTime.now().plus(verificationTokenTtl));
-        userDao.insert(user);
-        addMembership(user.getId(), family.getId(), ROLE_OWNER);
-
-        eventPublisher.publishEvent(new UserVerificationEvent(
-                user.getId(), user.getEmail(), user.getDisplayName(), verificationToken, Instant.now()));
-        publishNewUserRegistered(user, family.getName(), NewUserRegisteredEvent.SOURCE_LOCAL, false);
-
-        return new MessageResponse(messages.get("auth.registerSuccess"));
     }
 
     /**
@@ -225,11 +230,17 @@ public class AuthService {
 
     /** Sends a fresh verification email to an account that registered but never verified; the answer never reveals whether the email exists. */
     public MessageResponse resendVerification(ResendVerificationRequest request) {
-        log.info("resendVerification - start, email={}", request.email());
-        userDao.selectByEmail(request.email())
-                .filter(this::isPendingLocalRegistration)
-                .ifPresent(this::issueVerificationEmail);
-        return new MessageResponse(messages.get("auth.resendVerification"));
+        try {
+            log.info("resendVerification - start, email={}", request.email());
+            userDao.selectByEmail(request.email())
+                    .filter(this::isPendingLocalRegistration)
+                    .ifPresent(this::issueVerificationEmail);
+            return new MessageResponse(messages.get("auth.resendVerification"));
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.resendVerification", e);
+        }
     }
 
     private boolean isPendingLocalRegistration(User user) {
@@ -258,100 +269,124 @@ public class AuthService {
     }
 
     public void verifyEmail(String token) {
-        log.info("verifyEmail - start");
-        User user = userDao.selectByVerificationToken(token)
-                .orElseThrow(() -> new BadRequestException("Token xác thực không hợp lệ"));
+        try {
+            log.info("verifyEmail - start");
+            User user = userDao.selectByVerificationToken(token)
+                    .orElseThrow(() -> logged(log, new BadRequestException("Token xác thực không hợp lệ")));
 
-        if (user.getVerificationTokenExpiresAt() == null
-                || user.getVerificationTokenExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new BadRequestException("Token xác thực đã hết hạn");
+            if (user.getVerificationTokenExpiresAt() == null
+                    || user.getVerificationTokenExpiresAt().isBefore(LocalDateTime.now())) {
+                throw logged(log, new BadRequestException("Token xác thực đã hết hạn"));
+            }
+
+            user.setActive(true);
+            user.setVerificationToken(null);
+            user.setVerificationTokenExpiresAt(null);
+            userDao.update(user);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.verifyEmail", e);
         }
-
-        user.setActive(true);
-        user.setVerificationToken(null);
-        user.setVerificationTokenExpiresAt(null);
-        userDao.update(user);
     }
 
     public LoginResponse login(LoginRequest request, String deviceInfo, String ipAddress) {
-        log.info("login - start, email={}", request.email());
-        String email = request.email();
-        requireNotLockedOut(email);
+        try {
+            log.info("login - start, email={}", request.email());
+            String email = request.email();
+            requireNotLockedOut(email);
 
-        // Unknown email and wrong password share one message and both count toward the lockout.
-        User user = userDao.selectByEmail(email).orElse(null);
-        if (user == null) {
-            loginAttemptStore.recordFailure(email);
-            throw new UnauthorizedException(messages.get("auth.badCredentials"));
+            // Unknown email and wrong password share one message and both count toward the lockout.
+            User user = userDao.selectByEmail(email).orElse(null);
+            if (user == null) {
+                loginAttemptStore.recordFailure(email);
+                throw logged(log, new UnauthorizedException(messages.get("auth.badCredentials")));
+            }
+
+            if (user.getPasswordHash() == null) {
+                throw logged(log, new UnauthorizedException(
+                        "Tài khoản này được đăng ký qua " + user.getProvider() + ". Vui lòng đăng nhập bằng phương thức đó."));
+            }
+
+            if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+                loginAttemptStore.recordFailure(email);
+                throw logged(log, new UnauthorizedException(messages.get("auth.badCredentials")));
+            }
+
+            requireNotLocked(user);
+
+            if (!Boolean.TRUE.equals(user.getActive())) {
+                // Frontend detects this text on a failed login to offer "resend verification email" — keep in sync with Login.jsx and messages/auth-messages.properties.
+                throw logged(log, new UnauthorizedException(messages.get("auth.notVerified")));
+            }
+
+            if (Boolean.TRUE.equals(user.getTotpEnabled())) {
+                // Password alone isn't enough — hand back a short-lived challenge instead of
+                // tokens; the real tokens only get minted once /2fa/verify-login checks the
+                // code (see README "9. Không có 2FA"). The failure counter is only cleared
+                // after that second step, so the 2FA code can't be brute-forced for free.
+                String challengeToken = twoFactorChallengeStore.issueChallenge(user.getId());
+                return LoginResponse.ofChallenge(challengeToken);
+            }
+
+            loginAttemptStore.reset(email);
+            return LoginResponse.ofTokens(issueTokens(user, deviceInfo, ipAddress));
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.login", e);
         }
-
-        if (user.getPasswordHash() == null) {
-            throw new UnauthorizedException(
-                    "Tài khoản này được đăng ký qua " + user.getProvider() + ". Vui lòng đăng nhập bằng phương thức đó.");
-        }
-
-        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            loginAttemptStore.recordFailure(email);
-            throw new UnauthorizedException(messages.get("auth.badCredentials"));
-        }
-
-        requireNotLocked(user);
-
-        if (!Boolean.TRUE.equals(user.getActive())) {
-            // Frontend detects this text on a failed login to offer "resend verification email" — keep in sync with Login.jsx and messages/auth-messages.properties.
-            throw new UnauthorizedException(messages.get("auth.notVerified"));
-        }
-
-        if (Boolean.TRUE.equals(user.getTotpEnabled())) {
-            // Password alone isn't enough — hand back a short-lived challenge instead of
-            // tokens; the real tokens only get minted once /2fa/verify-login checks the
-            // code (see README "9. Không có 2FA"). The failure counter is only cleared
-            // after that second step, so the 2FA code can't be brute-forced for free.
-            String challengeToken = twoFactorChallengeStore.issueChallenge(user.getId());
-            return LoginResponse.ofChallenge(challengeToken);
-        }
-
-        loginAttemptStore.reset(email);
-        return LoginResponse.ofTokens(issueTokens(user, deviceInfo, ipAddress));
     }
 
     private void requireNotLockedOut(String email) {
         long minutes = loginAttemptStore.remainingLockMinutes(email);
         if (minutes > 0) {
-            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,
-                    "Tài khoản tạm khoá do đăng nhập sai nhiều lần, thử lại sau " + minutes + " phút");
+            throw logged(log, new ApiException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Tài khoản tạm khoá do đăng nhập sai nhiều lần, thử lại sau " + minutes + " phút"));
         }
     }
 
     private void requireNotLocked(User user) {
         if (Boolean.TRUE.equals(user.getLocked())) {
-            throw new ApiException(HttpStatus.FORBIDDEN, messages.get("auth.accountLocked"));
+            throw logged(log, new ApiException(HttpStatus.FORBIDDEN, messages.get("auth.accountLocked")));
         }
     }
 
     /** For login paths that authenticate the user without a password (OAuth2) but must still demand the 2FA code. */
     public String issueTwoFactorChallenge(Long userId) {
-        return twoFactorChallengeStore.issueChallenge(userId);
+        try {
+            return twoFactorChallengeStore.issueChallenge(userId);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.issueTwoFactorChallenge", e);
+        }
     }
 
     /** Second step of login for a 2FA-enabled account — accepts either a live TOTP code or an unused recovery code. */
     public AuthResponse verifyTwoFactorLogin(String challengeToken, String code, String deviceInfo, String ipAddress) {
-        log.info("verifyTwoFactorLogin - start");
-        Long userId = twoFactorChallengeStore.consumeChallenge(challengeToken)
-                .orElseThrow(() -> new UnauthorizedException("Yêu cầu đăng nhập đã hết hạn, vui lòng đăng nhập lại"));
-        User user = userDao.selectById(userId)
-                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+        try {
+            log.info("verifyTwoFactorLogin - start");
+            Long userId = twoFactorChallengeStore.consumeChallenge(challengeToken)
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Yêu cầu đăng nhập đã hết hạn, vui lòng đăng nhập lại")));
+            User user = userDao.selectById(userId)
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không tồn tại")));
 
-        requireNotLocked(user);
-        requireNotLockedOut(user.getEmail());
+            requireNotLocked(user);
+            requireNotLockedOut(user.getEmail());
 
-        if (!isValidTwoFactorCode(user, code)) {
-            loginAttemptStore.recordFailure(user.getEmail());
-            throw new UnauthorizedException("Mã xác thực không đúng");
+            if (!isValidTwoFactorCode(user, code)) {
+                loginAttemptStore.recordFailure(user.getEmail());
+                throw logged(log, new UnauthorizedException("Mã xác thực không đúng"));
+            }
+
+            loginAttemptStore.reset(user.getEmail());
+            return issueTokens(user, deviceInfo, ipAddress);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.verifyTwoFactorLogin", e);
         }
-
-        loginAttemptStore.reset(user.getEmail());
-        return issueTokens(user, deviceInfo, ipAddress);
     }
 
     private boolean isValidTwoFactorCode(User user, String code) {
@@ -398,23 +433,29 @@ public class AuthService {
     }
 
     public AuthResponse refresh(RefreshRequest request, String deviceInfo, String ipAddress) {
-        log.info("refresh - start");
-        String tokenHash = sha256(request.refreshToken());
-        RefreshToken stored = refreshTokenDao.selectByTokenHash(tokenHash)
-                .orElseThrow(() -> new UnauthorizedException("Refresh token không hợp lệ"));
+        try {
+            log.info("refresh - start");
+            String tokenHash = sha256(request.refreshToken());
+            RefreshToken stored = refreshTokenDao.selectByTokenHash(tokenHash)
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Refresh token không hợp lệ")));
 
-        if (Boolean.TRUE.equals(stored.getRevoked()) || stored.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new UnauthorizedException("Refresh token đã hết hạn hoặc bị thu hồi");
+            if (Boolean.TRUE.equals(stored.getRevoked()) || stored.getExpiresAt().isBefore(LocalDateTime.now())) {
+                throw logged(log, new UnauthorizedException("Refresh token đã hết hạn hoặc bị thu hồi"));
+            }
+
+            User user = userDao.selectById(stored.getUserId())
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không còn tồn tại")));
+            requireNotLocked(user);
+
+            stored.setRevoked(true);
+            refreshTokenDao.update(stored);
+
+            return issueTokens(user, deviceInfo, ipAddress);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.refresh", e);
         }
-
-        User user = userDao.selectById(stored.getUserId())
-                .orElseThrow(() -> new UnauthorizedException("Tài khoản không còn tồn tại"));
-        requireNotLocked(user);
-
-        stored.setRevoked(true);
-        refreshTokenDao.update(stored);
-
-        return issueTokens(user, deviceInfo, ipAddress);
     }
 
     /**
@@ -422,84 +463,114 @@ public class AuthService {
      * — revealing that would let an attacker enumerate which emails have accounts.
      */
     public MessageResponse forgotPassword(ForgotPasswordRequest request) {
-        log.info("forgotPassword - start, email={}", request.email());
-        userDao.selectByEmail(request.email()).ifPresent(user -> {
-            LocalDateTime now = LocalDateTime.now();
-            LocalDateTime expiresAt = user.getResetPasswordTokenExpiresAt();
-            boolean hasLiveToken = user.getResetPasswordToken() != null && expiresAt != null && expiresAt.isAfter(now);
+        try {
+            log.info("forgotPassword - start, email={}", request.email());
+            userDao.selectByEmail(request.email()).ifPresent(user -> {
+                LocalDateTime now = LocalDateTime.now();
+                LocalDateTime expiresAt = user.getResetPasswordTokenExpiresAt();
+                boolean hasLiveToken = user.getResetPasswordToken() != null && expiresAt != null && expiresAt.isAfter(now);
 
-            String resetToken;
-            if (hasLiveToken) {
-                // Keep the token that was already emailed valid instead of overwriting it, and don't
-                // send another email while the previous one is still fresh.
-                boolean sentRecently = expiresAt.isAfter(
-                        now.plus(resetPasswordTokenTtl).minusSeconds(RESET_EMAIL_COOLDOWN_SECONDS));
-                if (sentRecently) {
-                    return;
+                String resetToken;
+                if (hasLiveToken) {
+                    // Keep the token that was already emailed valid instead of overwriting it, and don't
+                    // send another email while the previous one is still fresh.
+                    boolean sentRecently = expiresAt.isAfter(
+                            now.plus(resetPasswordTokenTtl).minusSeconds(RESET_EMAIL_COOLDOWN_SECONDS));
+                    if (sentRecently) {
+                        return;
+                    }
+                    resetToken = user.getResetPasswordToken();
+                } else {
+                    resetToken = generateOpaqueToken();
+                    user.setResetPasswordToken(resetToken);
+                    user.setResetPasswordTokenExpiresAt(now.plus(resetPasswordTokenTtl));
+                    userDao.update(user);
                 }
-                resetToken = user.getResetPasswordToken();
-            } else {
-                resetToken = generateOpaqueToken();
-                user.setResetPasswordToken(resetToken);
-                user.setResetPasswordTokenExpiresAt(now.plus(resetPasswordTokenTtl));
-                userDao.update(user);
-            }
 
-            eventPublisher.publishEvent(new PasswordResetEvent(
-                    user.getId(), user.getEmail(), user.getDisplayName(), resetToken, Instant.now()));
-        });
-        return new MessageResponse("Nếu email tồn tại trong hệ thống, chúng tôi đã gửi link đặt lại mật khẩu.");
+                eventPublisher.publishEvent(new PasswordResetEvent(
+                        user.getId(), user.getEmail(), user.getDisplayName(), resetToken, Instant.now()));
+            });
+            return new MessageResponse("Nếu email tồn tại trong hệ thống, chúng tôi đã gửi link đặt lại mật khẩu.");
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.forgotPassword", e);
+        }
     }
 
     public void resetPassword(ResetPasswordRequest request) {
-        log.info("resetPassword - start");
-        User user = userDao.selectByResetPasswordToken(request.token())
-                .orElseThrow(() -> new BadRequestException("Token đặt lại mật khẩu không hợp lệ"));
+        try {
+            log.info("resetPassword - start");
+            User user = userDao.selectByResetPasswordToken(request.token())
+                    .orElseThrow(() -> logged(log, new BadRequestException("Token đặt lại mật khẩu không hợp lệ")));
 
-        if (user.getResetPasswordTokenExpiresAt() == null
-                || user.getResetPasswordTokenExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new BadRequestException("Token đặt lại mật khẩu đã hết hạn");
+            if (user.getResetPasswordTokenExpiresAt() == null
+                    || user.getResetPasswordTokenExpiresAt().isBefore(LocalDateTime.now())) {
+                throw logged(log, new BadRequestException("Token đặt lại mật khẩu đã hết hạn"));
+            }
+
+            user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+            user.setResetPasswordToken(null);
+            user.setResetPasswordTokenExpiresAt(null);
+            userDao.update(user);
+            loginAttemptStore.reset(user.getEmail());
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.resetPassword", e);
         }
-
-        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
-        user.setResetPasswordToken(null);
-        user.setResetPasswordTokenExpiresAt(null);
-        userDao.update(user);
-        loginAttemptStore.reset(user.getEmail());
     }
 
     public UserProfileResponse getProfile(Long userId) {
-        log.info("getProfile - start, userId={}", userId);
-        User user = userDao.selectById(userId)
-                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
-        return UserProfileResponse.from(user);
+        try {
+            log.info("getProfile - start, userId={}", userId);
+            User user = userDao.selectById(userId)
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không tồn tại")));
+            return UserProfileResponse.from(user);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.getProfile", e);
+        }
     }
 
     public UserProfileResponse updateProfile(Long userId, UpdateProfileRequest request) {
-        log.info("updateProfile - start, userId={}", userId);
-        User user = userDao.selectById(userId)
-                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
-        user.setDisplayName(request.displayName());
-        user.setRelationship(request.relationship());
-        userDao.update(user);
-        return UserProfileResponse.from(user);
+        try {
+            log.info("updateProfile - start, userId={}", userId);
+            User user = userDao.selectById(userId)
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không tồn tại")));
+            user.setDisplayName(request.displayName());
+            user.setRelationship(request.relationship());
+            userDao.update(user);
+            return UserProfileResponse.from(user);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.updateProfile", e);
+        }
     }
 
     public void changePassword(Long userId, ChangePasswordRequest request) {
-        log.info("changePassword - start, userId={}", userId);
-        User user = userDao.selectById(userId)
-                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+        try {
+            log.info("changePassword - start, userId={}", userId);
+            User user = userDao.selectById(userId)
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không tồn tại")));
 
-        if (user.getPasswordHash() == null) {
-            throw new BadRequestException(
-                    "Tài khoản này đăng nhập qua " + user.getProvider() + ", không có mật khẩu để đổi.");
-        }
-        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
-            throw new UnauthorizedException("Mật khẩu hiện tại không đúng");
-        }
+            if (user.getPasswordHash() == null) {
+                throw logged(log, new BadRequestException(
+                        "Tài khoản này đăng nhập qua " + user.getProvider() + ", không có mật khẩu để đổi."));
+            }
+            if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+                throw logged(log, new UnauthorizedException("Mật khẩu hiện tại không đúng"));
+            }
 
-        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
-        userDao.update(user);
+            user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+            userDao.update(user);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.changePassword", e);
+        }
     }
 
     /**
@@ -510,84 +581,108 @@ public class AuthService {
         if (user.getPasswordHash() != null) {
             if (password == null || password.isBlank()
                     || !passwordEncoder.matches(password, user.getPasswordHash())) {
-                throw new UnauthorizedException("Mật khẩu không đúng");
+                throw logged(log, new UnauthorizedException("Mật khẩu không đúng"));
             }
             return;
         }
         if (!Boolean.TRUE.equals(user.getTotpEnabled())) {
-            throw new BadRequestException("Tài khoản này đăng nhập qua " + user.getProvider()
-                    + " và chưa có mật khẩu. Hãy bật xác thực 2 lớp (2FA) để thực hiện thao tác này.");
+            throw logged(log, new BadRequestException("Tài khoản này đăng nhập qua " + user.getProvider()
+                    + " và chưa có mật khẩu. Hãy bật xác thực 2 lớp (2FA) để thực hiện thao tác này."));
         }
         if (code == null || code.isBlank() || !acceptTotpCode(user, code)) {
-            throw new UnauthorizedException(messages.get("auth.invalidTwoFactorCode"));
+            throw logged(log, new UnauthorizedException(messages.get("auth.invalidTwoFactorCode")));
         }
         userDao.update(user);
     }
 
     /** Stores the new address as pending and mails a confirmation link to it; the address only changes once that link is opened. */
     public MessageResponse requestEmailChange(Long userId, ChangeEmailRequest request) {
-        log.info("requestEmailChange - start, userId={}", userId);
-        User user = userDao.selectById(userId)
-                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
-        requireReauthentication(user, request.password(), request.code());
+        try {
+            log.info("requestEmailChange - start, userId={}", userId);
+            User user = userDao.selectById(userId)
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không tồn tại")));
+            requireReauthentication(user, request.password(), request.code());
 
-        String newEmail = request.newEmail().trim();
-        if (newEmail.equalsIgnoreCase(user.getEmail())) {
-            throw new BadRequestException("Email mới trùng với email hiện tại");
+            String newEmail = request.newEmail().trim();
+            if (newEmail.equalsIgnoreCase(user.getEmail())) {
+                throw logged(log, new BadRequestException("Email mới trùng với email hiện tại"));
+            }
+            userDao.selectByEmail(newEmail).ifPresent(existing -> {
+                throw logged(log, new ConflictException("Email đã được sử dụng: " + newEmail));
+            });
+
+            String token = EMAIL_CHANGE_TOKEN_PREFIX + generateOpaqueToken();
+            user.setPendingEmail(newEmail);
+            user.setPendingEmailToken(token);
+            user.setPendingEmailExpiresAt(LocalDateTime.now().plus(verificationTokenTtl));
+            userDao.update(user);
+
+            eventPublisher.publishEvent(new UserVerificationEvent(
+                    user.getId(), newEmail, user.getDisplayName(), token, Instant.now()));
+
+            return new MessageResponse("Đã gửi link xác nhận đến " + newEmail + ". Email chỉ đổi sau khi bạn mở link đó.");
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.requestEmailChange", e);
         }
-        userDao.selectByEmail(newEmail).ifPresent(existing -> {
-            throw new ConflictException("Email đã được sử dụng: " + newEmail);
-        });
-
-        String token = EMAIL_CHANGE_TOKEN_PREFIX + generateOpaqueToken();
-        user.setPendingEmail(newEmail);
-        user.setPendingEmailToken(token);
-        user.setPendingEmailExpiresAt(LocalDateTime.now().plus(verificationTokenTtl));
-        userDao.update(user);
-
-        eventPublisher.publishEvent(new UserVerificationEvent(
-                user.getId(), newEmail, user.getDisplayName(), token, Instant.now()));
-
-        return new MessageResponse("Đã gửi link xác nhận đến " + newEmail + ". Email chỉ đổi sau khi bạn mở link đó.");
     }
 
     public boolean isEmailChangeToken(String token) {
-        return token != null && token.startsWith(EMAIL_CHANGE_TOKEN_PREFIX);
+        try {
+            return token != null && token.startsWith(EMAIL_CHANGE_TOKEN_PREFIX);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.isEmailChangeToken", e);
+        }
     }
 
     /** Public (the link may be opened without being logged in), so every session of the account is revoked afterwards. */
     public void verifyEmailChange(String token) {
-        log.info("verifyEmailChange - start");
-        User user = userDao.selectByPendingEmailToken(token)
-                .orElseThrow(() -> new BadRequestException("Link đổi email không hợp lệ"));
+        try {
+            log.info("verifyEmailChange - start");
+            User user = userDao.selectByPendingEmailToken(token)
+                    .orElseThrow(() -> logged(log, new BadRequestException("Link đổi email không hợp lệ")));
 
-        if (user.getPendingEmail() == null || user.getPendingEmailExpiresAt() == null
-                || user.getPendingEmailExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new BadRequestException("Link đổi email đã hết hạn");
+            if (user.getPendingEmail() == null || user.getPendingEmailExpiresAt() == null
+                    || user.getPendingEmailExpiresAt().isBefore(LocalDateTime.now())) {
+                throw logged(log, new BadRequestException("Link đổi email đã hết hạn"));
+            }
+            String newEmail = user.getPendingEmail();
+            userDao.selectByEmail(newEmail)
+                    .filter(existing -> !existing.getId().equals(user.getId()))
+                    .ifPresent(existing -> {
+                        throw logged(log, new ConflictException("Email đã được sử dụng: " + newEmail));
+                    });
+
+            user.setEmail(newEmail);
+            user.setPendingEmail(null);
+            user.setPendingEmailToken(null);
+            user.setPendingEmailExpiresAt(null);
+            userDao.update(user);
+            revokeAllSessions(user.getId());
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.verifyEmailChange", e);
         }
-        String newEmail = user.getPendingEmail();
-        userDao.selectByEmail(newEmail)
-                .filter(existing -> !existing.getId().equals(user.getId()))
-                .ifPresent(existing -> {
-                    throw new ConflictException("Email đã được sử dụng: " + newEmail);
-                });
-
-        user.setEmail(newEmail);
-        user.setPendingEmail(null);
-        user.setPendingEmailToken(null);
-        user.setPendingEmailExpiresAt(null);
-        userDao.update(user);
-        revokeAllSessions(user.getId());
     }
 
     public PersonalDataExportResponse exportPersonalData(Long userId, Long currentSessionId) {
-        log.info("exportPersonalData - start, userId={}", userId);
-        User user = userDao.selectById(userId)
-                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
-        List<SessionResponse> sessions = refreshTokenDao.selectActiveByUserId(userId).stream()
-                .map(t -> SessionResponse.from(t, currentSessionId))
-                .toList();
-        return new PersonalDataExportResponse(UserProfileResponse.from(user), listMyFamilies(userId), sessions);
+        try {
+            log.info("exportPersonalData - start, userId={}", userId);
+            User user = userDao.selectById(userId)
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không tồn tại")));
+            List<SessionResponse> sessions = refreshTokenDao.selectActiveByUserId(userId).stream()
+                    .map(t -> SessionResponse.from(t, currentSessionId))
+                    .toList();
+            return new PersonalDataExportResponse(UserProfileResponse.from(user), listMyFamilies(userId), sessions);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.exportPersonalData", e);
+        }
     }
 
     /**
@@ -595,24 +690,30 @@ public class AuthService {
      * orphaned in those services. An OWNER of a family that still has other members must transfer ownership first.
      */
     public void deleteAccount(Long userId, DeleteAccountRequest request) {
-        log.info("deleteAccount - start, userId={}", userId);
-        User user = userDao.selectById(userId)
-                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
-        requireReauthentication(user, request.password(), request.code());
+        try {
+            log.info("deleteAccount - start, userId={}", userId);
+            User user = userDao.selectById(userId)
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không tồn tại")));
+            requireReauthentication(user, request.password(), request.code());
 
-        List<FamilyMembership> memberships = familyMembershipDao.selectByUserId(userId);
-        for (FamilyMembership membership : memberships) {
-            if (ROLE_OWNER.equals(membership.getRole())
-                    && familyMembershipDao.countByFamilyId(membership.getFamilyId()) > 1) {
-                String familyName = familyDao.selectById(membership.getFamilyId())
-                        .map(Family::getName)
-                        .orElse(String.valueOf(membership.getFamilyId()));
-                throw new BadRequestException("Bạn đang là chủ hộ của gia đình \"" + familyName
-                        + "\" vẫn còn thành viên khác. Hãy chuyển quyền chủ hộ trước khi xoá tài khoản.");
+            List<FamilyMembership> memberships = familyMembershipDao.selectByUserId(userId);
+            for (FamilyMembership membership : memberships) {
+                if (ROLE_OWNER.equals(membership.getRole())
+                        && familyMembershipDao.countByFamilyId(membership.getFamilyId()) > 1) {
+                    String familyName = familyDao.selectById(membership.getFamilyId())
+                            .map(Family::getName)
+                            .orElse(String.valueOf(membership.getFamilyId()));
+                    throw logged(log, new BadRequestException("Bạn đang là chủ hộ của gia đình \"" + familyName
+                            + "\" vẫn còn thành viên khác. Hãy chuyển quyền chủ hộ trước khi xoá tài khoản."));
+                }
             }
-        }
 
-        removeUserAndOwnedData(user, memberships);
+            removeUserAndOwnedData(user, memberships);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.deleteAccount", e);
+        }
     }
 
     private void removeUserAndOwnedData(User user, List<FamilyMembership> memberships) {
@@ -641,21 +742,27 @@ public class AuthService {
      * the email can be registered again and stale rows don't pile up. Returns how many accounts were removed.
      */
     public int purgeStaleUnverifiedAccounts(int retentionDays) {
-        LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
-        int purged = 0;
-        for (User user : userDao.selectStaleUnverified(cutoff)) {
-            List<FamilyMembership> memberships = familyMembershipDao.selectByUserId(user.getId());
-            boolean ownsFamilyWithOthers = memberships.stream().anyMatch(m ->
-                    ROLE_OWNER.equals(m.getRole()) && familyMembershipDao.countByFamilyId(m.getFamilyId()) > 1);
-            if (ownsFamilyWithOthers) {
-                log.warn("purgeStaleUnverifiedAccounts - bỏ qua userId={} vì đang là chủ hộ của gia đình có thành viên khác",
-                        user.getId());
-                continue;
+        try {
+            LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
+            int purged = 0;
+            for (User user : userDao.selectStaleUnverified(cutoff)) {
+                List<FamilyMembership> memberships = familyMembershipDao.selectByUserId(user.getId());
+                boolean ownsFamilyWithOthers = memberships.stream().anyMatch(m ->
+                        ROLE_OWNER.equals(m.getRole()) && familyMembershipDao.countByFamilyId(m.getFamilyId()) > 1);
+                if (ownsFamilyWithOthers) {
+                    log.warn("purgeStaleUnverifiedAccounts - bỏ qua userId={} vì đang là chủ hộ của gia đình có thành viên khác",
+                            user.getId());
+                    continue;
+                }
+                removeUserAndOwnedData(user, memberships);
+                purged++;
             }
-            removeUserAndOwnedData(user, memberships);
-            purged++;
+            return purged;
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.purgeStaleUnverifiedAccounts", e);
         }
-        return purged;
     }
 
     /**
@@ -665,49 +772,61 @@ public class AuthService {
      * anyone out of their own account.
      */
     public TwoFactorSetupResponse setupTwoFactor(Long userId) {
-        log.info("setupTwoFactor - start, userId={}", userId);
-        User user = userDao.selectById(userId)
-                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
-        if (Boolean.TRUE.equals(user.getTotpEnabled())) {
-            throw new BadRequestException("2FA đang bật. Hãy tắt 2FA (cần nhập mật khẩu) trước khi thiết lập lại");
+        try {
+            log.info("setupTwoFactor - start, userId={}", userId);
+            User user = userDao.selectById(userId)
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không tồn tại")));
+            if (Boolean.TRUE.equals(user.getTotpEnabled())) {
+                throw logged(log, new BadRequestException("2FA đang bật. Hãy tắt 2FA (cần nhập mật khẩu) trước khi thiết lập lại"));
+            }
+
+            String secret = totpService.generateSecret();
+            user.setTotpSecret(totpSecretCipher.encrypt(secret));
+            user.setTotpLastStep(null);
+            user.setTotpEnabled(false);
+            userDao.update(user);
+
+            return new TwoFactorSetupResponse(secret, totpService.buildOtpAuthUri(secret, user.getEmail()));
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.setupTwoFactor", e);
         }
-
-        String secret = totpService.generateSecret();
-        user.setTotpSecret(totpSecretCipher.encrypt(secret));
-        user.setTotpLastStep(null);
-        user.setTotpEnabled(false);
-        userDao.update(user);
-
-        return new TwoFactorSetupResponse(secret, totpService.buildOtpAuthUri(secret, user.getEmail()));
     }
 
     /** Step 2: proves the secret from setupTwoFactor works, turns 2FA on, and hands out one-time recovery codes. */
     public TwoFactorConfirmResponse confirmTwoFactor(Long userId, String code) {
-        log.info("confirmTwoFactor - start, userId={}", userId);
-        User user = userDao.selectById(userId)
-                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
-        if (user.getTotpSecret() == null) {
-            throw new BadRequestException("Chưa bắt đầu thiết lập 2FA");
-        }
-        if (!acceptTotpCode(user, code)) {
-            throw new BadRequestException("Mã xác thực không đúng");
-        }
+        try {
+            log.info("confirmTwoFactor - start, userId={}", userId);
+            User user = userDao.selectById(userId)
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không tồn tại")));
+            if (user.getTotpSecret() == null) {
+                throw logged(log, new BadRequestException("Chưa bắt đầu thiết lập 2FA"));
+            }
+            if (!acceptTotpCode(user, code)) {
+                throw logged(log, new BadRequestException("Mã xác thực không đúng"));
+            }
 
-        user.setTotpEnabled(true);
-        userDao.update(user);
+            user.setTotpEnabled(true);
+            userDao.update(user);
 
-        twoFactorRecoveryCodeDao.deleteByUserId(userId);
-        List<String> recoveryCodes = new ArrayList<>();
-        for (int i = 0; i < RECOVERY_CODE_COUNT; i++) {
-            String rawCode = generateRecoveryCode();
-            recoveryCodes.add(rawCode);
-            TwoFactorRecoveryCode entity = new TwoFactorRecoveryCode();
-            entity.setUserId(userId);
-            entity.setCodeHash(passwordEncoder.encode(rawCode));
-            entity.setCreatedAt(LocalDateTime.now());
-            twoFactorRecoveryCodeDao.insert(entity);
+            twoFactorRecoveryCodeDao.deleteByUserId(userId);
+            List<String> recoveryCodes = new ArrayList<>();
+            for (int i = 0; i < RECOVERY_CODE_COUNT; i++) {
+                String rawCode = generateRecoveryCode();
+                recoveryCodes.add(rawCode);
+                TwoFactorRecoveryCode entity = new TwoFactorRecoveryCode();
+                entity.setUserId(userId);
+                entity.setCodeHash(passwordEncoder.encode(rawCode));
+                entity.setCreatedAt(LocalDateTime.now());
+                twoFactorRecoveryCodeDao.insert(entity);
+            }
+            return new TwoFactorConfirmResponse(recoveryCodes);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.confirmTwoFactor", e);
         }
-        return new TwoFactorConfirmResponse(recoveryCodes);
     }
 
     /**
@@ -715,34 +834,40 @@ public class AuthService {
      * provider-only accounts (no password) confirm with a live TOTP or an unused recovery code.
      */
     public void disableTwoFactor(Long userId, String password, String code) {
-        log.info("disableTwoFactor - start, userId={}", userId);
-        User user = userDao.selectById(userId)
-                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+        try {
+            log.info("disableTwoFactor - start, userId={}", userId);
+            User user = userDao.selectById(userId)
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không tồn tại")));
 
-        boolean hasPassword = password != null && !password.isBlank();
-        boolean hasCode = code != null && !code.isBlank();
-        if (hasPassword == hasCode) {
-            throw new BadRequestException("Vui lòng nhập mật khẩu hoặc mã xác thực (chỉ một trong hai)");
+            boolean hasPassword = password != null && !password.isBlank();
+            boolean hasCode = code != null && !code.isBlank();
+            if (hasPassword == hasCode) {
+                throw logged(log, new BadRequestException("Vui lòng nhập mật khẩu hoặc mã xác thực (chỉ một trong hai)"));
+            }
+
+            if (hasPassword) {
+                if (user.getPasswordHash() == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
+                    throw logged(log, new UnauthorizedException("Mật khẩu không đúng"));
+                }
+            } else {
+                if (user.getPasswordHash() != null) {
+                    throw logged(log, new BadRequestException("Tài khoản có mật khẩu, vui lòng nhập mật khẩu để tắt 2FA"));
+                }
+                if (!isValidTwoFactorCode(user, code)) {
+                    throw logged(log, new UnauthorizedException(messages.get("auth.invalidTwoFactorCode")));
+                }
+            }
+
+            user.setTotpEnabled(false);
+            user.setTotpSecret(null);
+            user.setTotpLastStep(null);
+            userDao.update(user);
+            twoFactorRecoveryCodeDao.deleteByUserId(userId);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.disableTwoFactor", e);
         }
-
-        if (hasPassword) {
-            if (user.getPasswordHash() == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
-                throw new UnauthorizedException("Mật khẩu không đúng");
-            }
-        } else {
-            if (user.getPasswordHash() != null) {
-                throw new BadRequestException("Tài khoản có mật khẩu, vui lòng nhập mật khẩu để tắt 2FA");
-            }
-            if (!isValidTwoFactorCode(user, code)) {
-                throw new UnauthorizedException(messages.get("auth.invalidTwoFactorCode"));
-            }
-        }
-
-        user.setTotpEnabled(false);
-        user.setTotpSecret(null);
-        user.setTotpLastStep(null);
-        userDao.update(user);
-        twoFactorRecoveryCodeDao.deleteByUserId(userId);
     }
 
     private String generateRecoveryCode() {
@@ -753,60 +878,72 @@ public class AuthService {
 
     /** The real member list for this family — unlike USERS.family_id, which only tracks each user's currently-active one. */
     public PageResponse<UserProfileResponse> getFamilyMembersPaged(Long familyId, int page, int size) {
-        log.info("getFamilyMembersPaged - start, familyId={}, page={}, size={}", familyId, page, size);
-        validatePage(page, size);
-        long totalElements = familyMembershipDao.countByFamilyId(familyId);
-        // User lookup only runs for this page's memberships.
-        List<UserProfileResponse> content = familyMembershipDao.selectByFamilyIdPaged(familyId, size, page * size).stream()
-                .map(m -> userDao.selectById(m.getUserId())
-                        .map(u -> UserProfileResponse.from(u, familyId, m.getRole()))
-                        .orElse(null))
-                .filter(Objects::nonNull)
-                .toList();
-        return PageResponse.of(content, page, size, totalElements);
+        try {
+            log.info("getFamilyMembersPaged - start, familyId={}, page={}, size={}", familyId, page, size);
+            validatePage(page, size);
+            long totalElements = familyMembershipDao.countByFamilyId(familyId);
+            // User lookup only runs for this page's memberships.
+            List<UserProfileResponse> content = familyMembershipDao.selectByFamilyIdPaged(familyId, size, page * size).stream()
+                    .map(m -> userDao.selectById(m.getUserId())
+                            .map(u -> UserProfileResponse.from(u, familyId, m.getRole()))
+                            .orElse(null))
+                    .filter(Objects::nonNull)
+                    .toList();
+            return PageResponse.of(content, page, size, totalElements);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.getFamilyMembersPaged", e);
+        }
     }
 
     private static void validatePage(int page, int size) {
         if (page < 0) {
-            throw new BadRequestException("page phải >= 0");
+            throw logged(log, new BadRequestException("page phải >= 0"));
         }
         if (size < 1 || size > MAX_PAGE_SIZE) {
-            throw new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE);
+            throw logged(log, new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE));
         }
     }
 
     @PreAuthorize("hasRole('OWNER')")
     public void removeMember(Long familyId, Long callerUserId, Long targetUserId) {
-        log.info("removeMember - start, familyId={}, targetUserId={}", familyId, targetUserId);
-        if (targetUserId.equals(callerUserId)) {
-            throw new BadRequestException("Không thể tự xoá chính mình khỏi gia đình");
-        }
-        FamilyMembership membership = familyMembershipDao.selectByUserIdAndFamilyId(targetUserId, familyId)
-                .orElseThrow(() -> new NotFoundException("Thành viên không tồn tại: " + targetUserId));
-        if (ROLE_OWNER.equals(membership.getRole())) {
-            throw new BadRequestException("Không thể xoá chủ hộ khỏi gia đình");
-        }
-        familyMembershipDao.delete(membership);
+        try {
+            log.info("removeMember - start, familyId={}, targetUserId={}", familyId, targetUserId);
+            if (targetUserId.equals(callerUserId)) {
+                throw logged(log, new BadRequestException("Không thể tự xoá chính mình khỏi gia đình"));
+            }
+            FamilyMembership membership = familyMembershipDao.selectByUserIdAndFamilyId(targetUserId, familyId)
+                    .orElseThrow(() -> logged(log, new NotFoundException("Thành viên không tồn tại: " + targetUserId)));
+            if (ROLE_OWNER.equals(membership.getRole())) {
+                throw logged(log, new BadRequestException("Không thể xoá chủ hộ khỏi gia đình"));
+            }
+            familyMembershipDao.delete(membership);
 
-        User target = userDao.selectById(targetUserId)
-                .orElseThrow(() -> new NotFoundException("Thành viên không tồn tại: " + targetUserId));
-        List<FamilyMembership> remaining = familyMembershipDao.selectByUserId(targetUserId);
-        if (remaining.isEmpty()) {
-            // No families left at all — an account with none is meaningless here, so
-            // remove it entirely (matches this app's pre-multi-family behavior).
-            refreshTokenDao.deleteByUserId(targetUserId);
-            userDao.delete(target);
-        } else if (target.getFamilyId().equals(familyId)) {
-            // Their currently-active family was the one they just lost — fall back to
-            // another membership so USERS.family_id/role (what every JWT is minted
-            // from) still points somewhere valid. Their next /refresh call picks this
-            // up automatically since issueTokens() reads the row fresh.
-            FamilyMembership fallback = remaining.get(0);
-            target.setFamilyId(fallback.getFamilyId());
-            target.setRole(fallback.getRole());
-            userDao.update(target);
+            User target = userDao.selectById(targetUserId)
+                    .orElseThrow(() -> logged(log, new NotFoundException("Thành viên không tồn tại: " + targetUserId)));
+            List<FamilyMembership> remaining = familyMembershipDao.selectByUserId(targetUserId);
+            if (remaining.isEmpty()) {
+                // No families left at all — an account with none is meaningless here, so
+                // remove it entirely (matches this app's pre-multi-family behavior).
+                refreshTokenDao.deleteByUserId(targetUserId);
+                userDao.delete(target);
+            } else if (target.getFamilyId().equals(familyId)) {
+                // Their currently-active family was the one they just lost — fall back to
+                // another membership so USERS.family_id/role (what every JWT is minted
+                // from) still points somewhere valid. Their next /refresh call picks this
+                // up automatically since issueTokens() reads the row fresh.
+                FamilyMembership fallback = remaining.get(0);
+                target.setFamilyId(fallback.getFamilyId());
+                target.setRole(fallback.getRole());
+                userDao.update(target);
+            }
+            publishMemberEvent(FamilyMemberEvent.MEMBER_REMOVED, familyId, targetUserId, target.getDisplayName());
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.removeMember", e);
         }
-        publishMemberEvent(FamilyMemberEvent.MEMBER_REMOVED, familyId, targetUserId, target.getDisplayName());
     }
 
     private void publishMemberEvent(String eventType, Long familyId, Long memberUserId, String memberDisplayName) {
@@ -816,12 +953,18 @@ public class AuthService {
 
     @PreAuthorize("hasRole('OWNER')")
     public MessageResponse renameFamily(Long familyId, RenameFamilyRequest request) {
-        log.info("renameFamily - start, familyId={}", familyId);
-        Family family = familyDao.selectById(familyId)
-                .orElseThrow(() -> new NotFoundException("Gia đình không tồn tại: " + familyId));
-        family.setName(request.name().trim());
-        familyDao.update(family);
-        return new MessageResponse("Đã đổi tên gia đình");
+        try {
+            log.info("renameFamily - start, familyId={}", familyId);
+            Family family = familyDao.selectById(familyId)
+                    .orElseThrow(() -> logged(log, new NotFoundException("Gia đình không tồn tại: " + familyId)));
+            family.setName(request.name().trim());
+            familyDao.update(family);
+            return new MessageResponse("Đã đổi tên gia đình");
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.renameFamily", e);
+        }
     }
 
     /**
@@ -831,37 +974,43 @@ public class AuthService {
      */
     public AuthResponse leaveFamily(Long familyId, Long userId, Long currentSessionId,
                                      String deviceInfo, String ipAddress) {
-        log.info("leaveFamily - start, familyId={}, userId={}", familyId, userId);
-        FamilyMembership membership = familyMembershipDao.selectByUserIdAndFamilyId(userId, familyId)
-                .orElseThrow(() -> new NotFoundException("Bạn không thuộc gia đình này"));
-        if (ROLE_OWNER.equals(membership.getRole())) {
-            throw new BadRequestException(
-                    "Chủ hộ không thể rời gia đình. Hãy chuyển quyền chủ hộ cho thành viên khác trước.");
-        }
-        User user = userDao.selectById(userId)
-                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
-        familyMembershipDao.delete(membership);
+        try {
+            log.info("leaveFamily - start, familyId={}, userId={}", familyId, userId);
+            FamilyMembership membership = familyMembershipDao.selectByUserIdAndFamilyId(userId, familyId)
+                    .orElseThrow(() -> logged(log, new NotFoundException("Bạn không thuộc gia đình này")));
+            if (ROLE_OWNER.equals(membership.getRole())) {
+                throw logged(log, new BadRequestException(
+                        "Chủ hộ không thể rời gia đình. Hãy chuyển quyền chủ hộ cho thành viên khác trước."));
+            }
+            User user = userDao.selectById(userId)
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không tồn tại")));
+            familyMembershipDao.delete(membership);
 
-        List<FamilyMembership> remaining = familyMembershipDao.selectByUserId(userId);
-        if (!remaining.isEmpty()) {
-            FamilyMembership fallback = remaining.get(0);
-            user.setFamilyId(fallback.getFamilyId());
-            user.setRole(fallback.getRole());
-        } else {
-            // Every account needs at least one family to be active in, or it can't log in usefully.
-            Family personal = new Family();
-            personal.setName(user.getDisplayName() + "'s Family");
-            personal.setCreatedAt(LocalDateTime.now());
-            familyDao.insert(personal);
-            addMembership(userId, personal.getId(), ROLE_OWNER);
-            user.setFamilyId(personal.getId());
-            user.setRole(ROLE_OWNER);
-        }
-        userDao.update(user);
-        publishMemberEvent(FamilyMemberEvent.MEMBER_LEFT, familyId, userId, user.getDisplayName());
+            List<FamilyMembership> remaining = familyMembershipDao.selectByUserId(userId);
+            if (!remaining.isEmpty()) {
+                FamilyMembership fallback = remaining.get(0);
+                user.setFamilyId(fallback.getFamilyId());
+                user.setRole(fallback.getRole());
+            } else {
+                // Every account needs at least one family to be active in, or it can't log in usefully.
+                Family personal = new Family();
+                personal.setName(user.getDisplayName() + "'s Family");
+                personal.setCreatedAt(LocalDateTime.now());
+                familyDao.insert(personal);
+                addMembership(userId, personal.getId(), ROLE_OWNER);
+                user.setFamilyId(personal.getId());
+                user.setRole(ROLE_OWNER);
+            }
+            userDao.update(user);
+            publishMemberEvent(FamilyMemberEvent.MEMBER_LEFT, familyId, userId, user.getDisplayName());
 
-        logout(userId, currentSessionId);
-        return issueTokens(user, deviceInfo, ipAddress);
+            logout(userId, currentSessionId);
+            return issueTokens(user, deviceInfo, ipAddress);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.leaveFamily", e);
+        }
     }
 
     /**
@@ -873,62 +1022,74 @@ public class AuthService {
     @PreAuthorize("hasRole('OWNER')")
     public AuthResponse transferOwnership(Long familyId, Long callerUserId, Long currentSessionId,
                                            TransferOwnershipRequest request, String deviceInfo, String ipAddress) {
-        Long targetUserId = request.userId();
-        log.info("transferOwnership - start, familyId={}, targetUserId={}", familyId, targetUserId);
-        if (targetUserId.equals(callerUserId)) {
-            throw new BadRequestException("Bạn đã là chủ hộ của gia đình này");
-        }
-        FamilyMembership callerMembership = familyMembershipDao.selectByUserIdAndFamilyId(callerUserId, familyId)
-                .orElseThrow(() -> new NotFoundException("Bạn không thuộc gia đình này"));
-        FamilyMembership targetMembership = familyMembershipDao.selectByUserIdAndFamilyId(targetUserId, familyId)
-                .orElseThrow(() -> new NotFoundException("Thành viên không tồn tại: " + targetUserId));
-        User caller = userDao.selectById(callerUserId)
-                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
-        User target = userDao.selectById(targetUserId)
-                .orElseThrow(() -> new NotFoundException("Thành viên không tồn tại: " + targetUserId));
+        try {
+            Long targetUserId = request.userId();
+            log.info("transferOwnership - start, familyId={}, targetUserId={}", familyId, targetUserId);
+            if (targetUserId.equals(callerUserId)) {
+                throw logged(log, new BadRequestException("Bạn đã là chủ hộ của gia đình này"));
+            }
+            FamilyMembership callerMembership = familyMembershipDao.selectByUserIdAndFamilyId(callerUserId, familyId)
+                    .orElseThrow(() -> logged(log, new NotFoundException("Bạn không thuộc gia đình này")));
+            FamilyMembership targetMembership = familyMembershipDao.selectByUserIdAndFamilyId(targetUserId, familyId)
+                    .orElseThrow(() -> logged(log, new NotFoundException("Thành viên không tồn tại: " + targetUserId)));
+            User caller = userDao.selectById(callerUserId)
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không tồn tại")));
+            User target = userDao.selectById(targetUserId)
+                    .orElseThrow(() -> logged(log, new NotFoundException("Thành viên không tồn tại: " + targetUserId)));
 
-        targetMembership.setRole(ROLE_OWNER);
-        familyMembershipDao.update(targetMembership);
-        callerMembership.setRole(ROLE_MEMBER);
-        familyMembershipDao.update(callerMembership);
+            targetMembership.setRole(ROLE_OWNER);
+            familyMembershipDao.update(targetMembership);
+            callerMembership.setRole(ROLE_MEMBER);
+            familyMembershipDao.update(callerMembership);
 
-        if (familyId.equals(target.getFamilyId())) {
-            target.setRole(ROLE_OWNER);
-            userDao.update(target);
-        }
-        if (familyId.equals(caller.getFamilyId())) {
-            caller.setRole(ROLE_MEMBER);
-            userDao.update(caller);
-        }
+            if (familyId.equals(target.getFamilyId())) {
+                target.setRole(ROLE_OWNER);
+                userDao.update(target);
+            }
+            if (familyId.equals(caller.getFamilyId())) {
+                caller.setRole(ROLE_MEMBER);
+                userDao.update(caller);
+            }
 
-        logout(callerUserId, currentSessionId);
-        return issueTokens(caller, deviceInfo, ipAddress);
+            logout(callerUserId, currentSessionId);
+            return issueTokens(caller, deviceInfo, ipAddress);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.transferOwnership", e);
+        }
     }
 
     @PreAuthorize("hasRole('OWNER')")
     public MessageResponse inviteMember(Long familyId, Long inviterUserId, InviteMemberRequest request) {
-        log.info("inviteMember - start, familyId={}, email={}", familyId, request.email());
-        userDao.selectByEmail(request.email()).ifPresent(existing ->
-                familyMembershipDao.selectByUserIdAndFamilyId(existing.getId(), familyId).ifPresent(m -> {
-                    throw new ConflictException("Email này đã là thành viên của gia đình: " + request.email());
-                }));
+        try {
+            log.info("inviteMember - start, familyId={}, email={}", familyId, request.email());
+            userDao.selectByEmail(request.email()).ifPresent(existing ->
+                    familyMembershipDao.selectByUserIdAndFamilyId(existing.getId(), familyId).ifPresent(m -> {
+                        throw logged(log, new ConflictException("Email này đã là thành viên của gia đình: " + request.email()));
+                    }));
 
-        Family family = familyDao.selectById(familyId)
-                .orElseThrow(() -> new NotFoundException("Gia đình không tồn tại: " + familyId));
-        User inviter = userDao.selectById(inviterUserId)
-                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
+            Family family = familyDao.selectById(familyId)
+                    .orElseThrow(() -> logged(log, new NotFoundException("Gia đình không tồn tại: " + familyId)));
+            User inviter = userDao.selectById(inviterUserId)
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không tồn tại")));
 
-        FamilyInvite invite = new FamilyInvite();
-        invite.setFamilyId(familyId);
-        invite.setEmail(request.email());
-        invite.setInvitedByUserId(inviterUserId);
-        invite.setCreatedAt(LocalDateTime.now());
-        renewInviteToken(invite);
-        familyInviteDao.insert(invite);
+            FamilyInvite invite = new FamilyInvite();
+            invite.setFamilyId(familyId);
+            invite.setEmail(request.email());
+            invite.setInvitedByUserId(inviterUserId);
+            invite.setCreatedAt(LocalDateTime.now());
+            renewInviteToken(invite);
+            familyInviteDao.insert(invite);
 
-        publishInviteEvent(family, inviter, invite);
+            publishInviteEvent(family, inviter, invite);
 
-        return new MessageResponse("Đã gửi lời mời đến " + request.email());
+            return new MessageResponse("Đã gửi lời mời đến " + request.email());
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.inviteMember", e);
+        }
     }
 
     private void renewInviteToken(FamilyInvite invite) {
@@ -944,52 +1105,76 @@ public class AuthService {
 
     @PreAuthorize("hasRole('OWNER')")
     public PageResponse<PendingInviteResponse> getPendingInvitesPaged(Long familyId, int page, int size) {
-        log.info("getPendingInvitesPaged - start, familyId={}, page={}, size={}", familyId, page, size);
-        validatePage(page, size);
-        long totalElements = familyInviteDao.countPendingByFamilyId(familyId);
-        List<PendingInviteResponse> content = familyInviteDao.selectPendingByFamilyIdPaged(familyId, size, page * size)
-                .stream()
-                .map(PendingInviteResponse::from)
-                .toList();
-        return PageResponse.of(content, page, size, totalElements);
+        try {
+            log.info("getPendingInvitesPaged - start, familyId={}, page={}, size={}", familyId, page, size);
+            validatePage(page, size);
+            long totalElements = familyInviteDao.countPendingByFamilyId(familyId);
+            List<PendingInviteResponse> content = familyInviteDao.selectPendingByFamilyIdPaged(familyId, size, page * size)
+                    .stream()
+                    .map(PendingInviteResponse::from)
+                    .toList();
+            return PageResponse.of(content, page, size, totalElements);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.getPendingInvitesPaged", e);
+        }
     }
 
     @PreAuthorize("hasRole('OWNER')")
     public void cancelInvite(Long familyId, Long inviteId) {
-        log.info("cancelInvite - start, familyId={}, inviteId={}", familyId, inviteId);
-        FamilyInvite invite = familyInviteDao.selectByIdAndFamilyId(inviteId, familyId)
-                .orElseThrow(() -> new NotFoundException("Lời mời không tồn tại: " + inviteId));
-        familyInviteDao.delete(invite);
+        try {
+            log.info("cancelInvite - start, familyId={}, inviteId={}", familyId, inviteId);
+            FamilyInvite invite = familyInviteDao.selectByIdAndFamilyId(inviteId, familyId)
+                    .orElseThrow(() -> logged(log, new NotFoundException("Lời mời không tồn tại: " + inviteId)));
+            familyInviteDao.delete(invite);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.cancelInvite", e);
+        }
     }
 
     /** Issues a fresh token (the old link stops working) and extends the expiry, so an expired invite can be revived too. */
     @PreAuthorize("hasRole('OWNER')")
     public MessageResponse resendInvite(Long familyId, Long callerUserId, Long inviteId) {
-        log.info("resendInvite - start, familyId={}, inviteId={}", familyId, inviteId);
-        FamilyInvite invite = familyInviteDao.selectByIdAndFamilyId(inviteId, familyId)
-                .orElseThrow(() -> new NotFoundException("Lời mời không tồn tại: " + inviteId));
-        if (invite.getAcceptedAt() != null) {
-            throw new BadRequestException("Lời mời này đã được sử dụng");
+        try {
+            log.info("resendInvite - start, familyId={}, inviteId={}", familyId, inviteId);
+            FamilyInvite invite = familyInviteDao.selectByIdAndFamilyId(inviteId, familyId)
+                    .orElseThrow(() -> logged(log, new NotFoundException("Lời mời không tồn tại: " + inviteId)));
+            if (invite.getAcceptedAt() != null) {
+                throw logged(log, new BadRequestException("Lời mời này đã được sử dụng"));
+            }
+            Family family = familyDao.selectById(familyId)
+                    .orElseThrow(() -> logged(log, new NotFoundException("Gia đình không tồn tại: " + familyId)));
+            User caller = userDao.selectById(callerUserId)
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không tồn tại")));
+
+            renewInviteToken(invite);
+            familyInviteDao.update(invite);
+            publishInviteEvent(family, caller, invite);
+
+            return new MessageResponse("Đã gửi lại lời mời đến " + invite.getEmail());
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.resendInvite", e);
         }
-        Family family = familyDao.selectById(familyId)
-                .orElseThrow(() -> new NotFoundException("Gia đình không tồn tại: " + familyId));
-        User caller = userDao.selectById(callerUserId)
-                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
-
-        renewInviteToken(invite);
-        familyInviteDao.update(invite);
-        publishInviteEvent(family, caller, invite);
-
-        return new MessageResponse("Đã gửi lại lời mời đến " + invite.getEmail());
     }
 
     public InviteDetailsResponse getInviteDetails(String token) {
-        log.info("getInviteDetails - start");
-        FamilyInvite invite = requireValidInvite(token);
-        Family family = familyDao.selectById(invite.getFamilyId())
-                .orElseThrow(() -> new NotFoundException("Gia đình không tồn tại: " + invite.getFamilyId()));
-        boolean isExistingAccount = userDao.selectByEmail(invite.getEmail()).isPresent();
-        return new InviteDetailsResponse(invite.getEmail(), family.getName(), isExistingAccount);
+        try {
+            log.info("getInviteDetails - start");
+            FamilyInvite invite = requireValidInvite(token);
+            Family family = familyDao.selectById(invite.getFamilyId())
+                    .orElseThrow(() -> logged(log, new NotFoundException("Gia đình không tồn tại: " + invite.getFamilyId())));
+            boolean isExistingAccount = userDao.selectByEmail(invite.getEmail()).isPresent();
+            return new InviteDetailsResponse(invite.getEmail(), family.getName(), isExistingAccount);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.getInviteDetails", e);
+        }
     }
 
     /**
@@ -1001,57 +1186,63 @@ public class AuthService {
      * longer enforce that with static annotations.
      */
     public void acceptInvite(String token, AcceptInviteRequest request) {
-        log.info("acceptInvite - start");
-        FamilyInvite invite = requireValidInvite(token);
+        try {
+            log.info("acceptInvite - start");
+            FamilyInvite invite = requireValidInvite(token);
 
-        User existingUser = userDao.selectByEmail(invite.getEmail()).orElse(null);
-        if (existingUser != null) {
-            familyMembershipDao.selectByUserIdAndFamilyId(existingUser.getId(), invite.getFamilyId())
-                    .ifPresent(m -> {
-                        throw new ConflictException("Bạn đã là thành viên của gia đình này");
-                    });
-            addMembership(existingUser.getId(), invite.getFamilyId(), ROLE_MEMBER);
+            User existingUser = userDao.selectByEmail(invite.getEmail()).orElse(null);
+            if (existingUser != null) {
+                familyMembershipDao.selectByUserIdAndFamilyId(existingUser.getId(), invite.getFamilyId())
+                        .ifPresent(m -> {
+                            throw logged(log, new ConflictException("Bạn đã là thành viên của gia đình này"));
+                        });
+                addMembership(existingUser.getId(), invite.getFamilyId(), ROLE_MEMBER);
+                invite.setAcceptedAt(LocalDateTime.now());
+                familyInviteDao.update(invite);
+                publishMemberEvent(FamilyMemberEvent.MEMBER_JOINED, invite.getFamilyId(), existingUser.getId(),
+                        existingUser.getDisplayName());
+                return;
+            }
+
+            if (request.displayName() == null || request.displayName().isBlank()
+                    || request.password() == null || request.password().length() < 8) {
+                throw logged(log, new BadRequestException(
+                        "Cần nhập tên hiển thị và mật khẩu (tối thiểu 8 ký tự) để tạo tài khoản mới"));
+            }
+
+            User user = new User();
+            user.setFamilyId(invite.getFamilyId());
+            user.setEmail(invite.getEmail());
+            user.setPasswordHash(passwordEncoder.encode(request.password()));
+            user.setDisplayName(request.displayName());
+            user.setRole(ROLE_MEMBER);
+            user.setActive(true);
+            user.setProvider(PROVIDER_LOCAL);
+            user.setIsSystemAdmin(Boolean.FALSE);
+            user.setTotpEnabled(Boolean.FALSE);
+            user.setLocked(Boolean.FALSE);
+            userDao.insert(user);
+            addMembership(user.getId(), invite.getFamilyId(), ROLE_MEMBER);
+
             invite.setAcceptedAt(LocalDateTime.now());
             familyInviteDao.update(invite);
-            publishMemberEvent(FamilyMemberEvent.MEMBER_JOINED, invite.getFamilyId(), existingUser.getId(),
-                    existingUser.getDisplayName());
-            return;
+            publishMemberEvent(FamilyMemberEvent.MEMBER_JOINED, invite.getFamilyId(), user.getId(), user.getDisplayName());
+            publishNewUserRegistered(user, familyNameOf(invite.getFamilyId()), NewUserRegisteredEvent.SOURCE_INVITE, true);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.acceptInvite", e);
         }
-
-        if (request.displayName() == null || request.displayName().isBlank()
-                || request.password() == null || request.password().length() < 8) {
-            throw new BadRequestException(
-                    "Cần nhập tên hiển thị và mật khẩu (tối thiểu 8 ký tự) để tạo tài khoản mới");
-        }
-
-        User user = new User();
-        user.setFamilyId(invite.getFamilyId());
-        user.setEmail(invite.getEmail());
-        user.setPasswordHash(passwordEncoder.encode(request.password()));
-        user.setDisplayName(request.displayName());
-        user.setRole(ROLE_MEMBER);
-        user.setActive(true);
-        user.setProvider(PROVIDER_LOCAL);
-        user.setIsSystemAdmin(Boolean.FALSE);
-        user.setTotpEnabled(Boolean.FALSE);
-        user.setLocked(Boolean.FALSE);
-        userDao.insert(user);
-        addMembership(user.getId(), invite.getFamilyId(), ROLE_MEMBER);
-
-        invite.setAcceptedAt(LocalDateTime.now());
-        familyInviteDao.update(invite);
-        publishMemberEvent(FamilyMemberEvent.MEMBER_JOINED, invite.getFamilyId(), user.getId(), user.getDisplayName());
-        publishNewUserRegistered(user, familyNameOf(invite.getFamilyId()), NewUserRegisteredEvent.SOURCE_INVITE, true);
     }
 
     private FamilyInvite requireValidInvite(String token) {
         FamilyInvite invite = familyInviteDao.selectByToken(token)
-                .orElseThrow(() -> new BadRequestException("Lời mời không hợp lệ"));
+                .orElseThrow(() -> logged(log, new BadRequestException("Lời mời không hợp lệ")));
         if (invite.getAcceptedAt() != null) {
-            throw new BadRequestException("Lời mời này đã được sử dụng");
+            throw logged(log, new BadRequestException("Lời mời này đã được sử dụng"));
         }
         if (invite.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new BadRequestException("Lời mời đã hết hạn");
+            throw logged(log, new BadRequestException("Lời mời đã hết hạn"));
         }
         return invite;
     }
@@ -1063,50 +1254,57 @@ public class AuthService {
      * the account comes back {@code active} immediately.
      */
     public User processOAuth2User(String provider, String providerId, String email, String displayName) {
-        log.info("processOAuth2User - start, provider={}, email={}", provider, email);
-        if (email == null || email.isBlank()) {
-            throw new BadRequestException(
-                    "Không lấy được email từ " + provider + ". Vui lòng cấp quyền chia sẻ email.");
+        try {
+            log.info("processOAuth2User - start, provider={}, email={}", provider, email);
+            if (email == null || email.isBlank()) {
+                throw logged(log, new BadRequestException(
+                        "Không lấy được email từ " + provider + ". Vui lòng cấp quyền chia sẻ email."));
+            }
+            email = email.trim().toLowerCase(Locale.ROOT);
+
+            User existingByProvider = userDao.selectByProviderAndProviderId(provider, providerId).orElse(null);
+            if (existingByProvider != null) {
+                requireNotLockedForOAuth2(existingByProvider);
+                return existingByProvider;
+            }
+
+            User existingByEmail = userDao.selectByEmail(email).orElse(null);
+            if (existingByEmail != null) {
+                requireNotLockedForOAuth2(existingByEmail);
+                // Link this provider to the account already registered with that (verified) email.
+                existingByEmail.setProvider(provider);
+                existingByEmail.setProviderId(providerId);
+                existingByEmail.setActive(true);
+                userDao.update(existingByEmail);
+                return existingByEmail;
+            }
+
+            Family family = new Family();
+            family.setName(displayName + "'s Family");
+            family.setCreatedAt(LocalDateTime.now());
+            familyDao.insert(family);
+
+            User user = new User();
+            user.setFamilyId(family.getId());
+            user.setEmail(email);
+            user.setPasswordHash(null);
+            user.setDisplayName(displayName);
+            user.setRole(ROLE_OWNER);
+            user.setActive(true);
+            user.setProvider(provider);
+            user.setProviderId(providerId);
+            user.setIsSystemAdmin(Boolean.FALSE);
+            user.setTotpEnabled(Boolean.FALSE);
+            user.setLocked(Boolean.FALSE);
+            userDao.insert(user);
+            addMembership(user.getId(), family.getId(), ROLE_OWNER);
+            publishNewUserRegistered(user, family.getName(), NewUserRegisteredEvent.SOURCE_GOOGLE, true);
+            return user;
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.processOAuth2User", e);
         }
-
-        User existingByProvider = userDao.selectByProviderAndProviderId(provider, providerId).orElse(null);
-        if (existingByProvider != null) {
-            requireNotLockedForOAuth2(existingByProvider);
-            return existingByProvider;
-        }
-
-        User existingByEmail = userDao.selectByEmail(email).orElse(null);
-        if (existingByEmail != null) {
-            requireNotLockedForOAuth2(existingByEmail);
-            // Link this provider to the account already registered with that (verified) email.
-            existingByEmail.setProvider(provider);
-            existingByEmail.setProviderId(providerId);
-            existingByEmail.setActive(true);
-            userDao.update(existingByEmail);
-            return existingByEmail;
-        }
-
-        Family family = new Family();
-        family.setName(displayName + "'s Family");
-        family.setCreatedAt(LocalDateTime.now());
-        familyDao.insert(family);
-
-        User user = new User();
-        user.setFamilyId(family.getId());
-        user.setEmail(email);
-        user.setPasswordHash(null);
-        user.setDisplayName(displayName);
-        user.setRole(ROLE_OWNER);
-        user.setActive(true);
-        user.setProvider(provider);
-        user.setProviderId(providerId);
-        user.setIsSystemAdmin(Boolean.FALSE);
-        user.setTotpEnabled(Boolean.FALSE);
-        user.setLocked(Boolean.FALSE);
-        userDao.insert(user);
-        addMembership(user.getId(), family.getId(), ROLE_OWNER);
-        publishNewUserRegistered(user, family.getName(), NewUserRegisteredEvent.SOURCE_GOOGLE, true);
-        return user;
     }
 
     private void publishNewUserRegistered(User user, String familyName, String source, boolean emailVerified) {
@@ -1134,16 +1332,22 @@ public class AuthService {
 
     /** Every family this account belongs to — backs the family switcher UI. */
     public List<FamilyMembershipResponse> listMyFamilies(Long userId) {
-        log.info("listMyFamilies - start, userId={}", userId);
-        User user = userDao.selectById(userId)
-                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
-        return familyMembershipDao.selectByUserId(userId).stream()
-                .map(m -> {
-                    String familyName = familyDao.selectById(m.getFamilyId()).map(Family::getName).orElse("");
-                    return new FamilyMembershipResponse(
-                            m.getFamilyId(), familyName, m.getRole(), m.getFamilyId().equals(user.getFamilyId()));
-                })
-                .toList();
+        try {
+            log.info("listMyFamilies - start, userId={}", userId);
+            User user = userDao.selectById(userId)
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không tồn tại")));
+            return familyMembershipDao.selectByUserId(userId).stream()
+                    .map(m -> {
+                        String familyName = familyDao.selectById(m.getFamilyId()).map(Family::getName).orElse("");
+                        return new FamilyMembershipResponse(
+                                m.getFamilyId(), familyName, m.getRole(), m.getFamilyId().equals(user.getFamilyId()));
+                    })
+                    .toList();
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.listMyFamilies", e);
+        }
     }
 
     /**
@@ -1152,18 +1356,23 @@ public class AuthService {
      * Every other service only ever reads the JWT's single familyId claim per request,
      * so this is the only place that needs to know an account can have more than one.
      */
-    @Transactional
     public AuthResponse switchFamily(Long userId, Long targetFamilyId, String deviceInfo, String ipAddress) {
-        log.info("switchFamily - start, userId={}, targetFamilyId={}", userId, targetFamilyId);
-        FamilyMembership membership = familyMembershipDao.selectByUserIdAndFamilyId(userId, targetFamilyId)
-                .orElseThrow(() -> new NotFoundException("Bạn không thuộc gia đình này"));
-        User user = userDao.selectById(userId)
-                .orElseThrow(() -> new UnauthorizedException("Tài khoản không tồn tại"));
-        requireNotLocked(user);
-        user.setFamilyId(targetFamilyId);
-        user.setRole(membership.getRole());
-        userDao.update(user);
-        return issueTokens(user, deviceInfo, ipAddress);
+        try {
+            log.info("switchFamily - start, userId={}, targetFamilyId={}", userId, targetFamilyId);
+            FamilyMembership membership = familyMembershipDao.selectByUserIdAndFamilyId(userId, targetFamilyId)
+                    .orElseThrow(() -> logged(log, new NotFoundException("Bạn không thuộc gia đình này")));
+            User user = userDao.selectById(userId)
+                    .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không tồn tại")));
+            requireNotLocked(user);
+            user.setFamilyId(targetFamilyId);
+            user.setRole(membership.getRole());
+            userDao.update(user);
+            return issueTokens(user, deviceInfo, ipAddress);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.switchFamily", e);
+        }
     }
 
     private void addMembership(Long userId, Long familyId, String role) {
@@ -1176,7 +1385,13 @@ public class AuthService {
     }
 
     public AuthResponse issueTokens(User user) {
-        return issueTokens(user, null, null);
+        try {
+            return issueTokens(user, null, null);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.issueTokens", e);
+        }
     }
 
     /**
@@ -1187,86 +1402,122 @@ public class AuthService {
      * via {@link RevokedSessionStore}, instead of only preventing future refreshes.
      */
     public AuthResponse issueTokens(User user, String deviceInfo, String ipAddress) {
-        log.info("issueTokens - start, userId={}", user.getId());
-        requireNotLocked(user);
-        LocalDateTime now = LocalDateTime.now();
-        String rawRefreshToken = generateOpaqueToken();
-        RefreshToken refreshToken = new RefreshToken();
-        refreshToken.setUserId(user.getId());
-        refreshToken.setTokenHash(sha256(rawRefreshToken));
-        refreshToken.setExpiresAt(now.plus(refreshTokenTtl));
-        refreshToken.setRevoked(false);
-        refreshToken.setCreatedAt(now);
-        refreshToken.setDeviceInfo(truncate(deviceInfo, 255));
-        refreshToken.setIpAddress(truncate(ipAddress, 255));
-        refreshToken.setLastUsedAt(now);
-        refreshTokenDao.insert(refreshToken);
+        try {
+            log.info("issueTokens - start, userId={}", user.getId());
+            requireNotLocked(user);
+            LocalDateTime now = LocalDateTime.now();
+            String rawRefreshToken = generateOpaqueToken();
+            RefreshToken refreshToken = new RefreshToken();
+            refreshToken.setUserId(user.getId());
+            refreshToken.setTokenHash(sha256(rawRefreshToken));
+            refreshToken.setExpiresAt(now.plus(refreshTokenTtl));
+            refreshToken.setRevoked(false);
+            refreshToken.setCreatedAt(now);
+            refreshToken.setDeviceInfo(truncate(deviceInfo, 255));
+            refreshToken.setIpAddress(truncate(ipAddress, 255));
+            refreshToken.setLastUsedAt(now);
+            refreshTokenDao.insert(refreshToken);
 
-        Map<String, Object> claims = new HashMap<>();
-        claims.put(JwtUtil.CLAIM_FAMILY_ID, user.getFamilyId());
-        claims.put(JwtUtil.CLAIM_ROLE, user.getRole());
-        claims.put(JwtUtil.CLAIM_DISPLAY_NAME, user.getDisplayName());
-        claims.put(JwtUtil.CLAIM_IS_SYSTEM_ADMIN, Boolean.TRUE.equals(user.getIsSystemAdmin()));
-        claims.put(JwtUtil.CLAIM_EMAIL, user.getEmail());
-        claims.put(JwtUtil.CLAIM_SESSION_ID, refreshToken.getId());
-        String accessToken = jwtUtil.generateToken(String.valueOf(user.getId()), claims, accessTokenTtlMillis);
+            Map<String, Object> claims = new HashMap<>();
+            claims.put(JwtUtil.CLAIM_FAMILY_ID, user.getFamilyId());
+            claims.put(JwtUtil.CLAIM_ROLE, user.getRole());
+            claims.put(JwtUtil.CLAIM_DISPLAY_NAME, user.getDisplayName());
+            claims.put(JwtUtil.CLAIM_IS_SYSTEM_ADMIN, Boolean.TRUE.equals(user.getIsSystemAdmin()));
+            claims.put(JwtUtil.CLAIM_EMAIL, user.getEmail());
+            claims.put(JwtUtil.CLAIM_SESSION_ID, refreshToken.getId());
+            String accessToken = jwtUtil.generateToken(String.valueOf(user.getId()), claims, accessTokenTtlMillis);
 
-        return new AuthResponse(accessToken, rawRefreshToken, "Bearer");
+            return new AuthResponse(accessToken, rawRefreshToken, "Bearer");
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.issueTokens", e);
+        }
     }
 
     /** Every active login session for a user — backs the "phiên đăng nhập" list (README "8"). */
     public PageResponse<SessionResponse> listSessionsPaged(Long userId, Long currentSessionId, int page, int size) {
-        log.info("listSessionsPaged - start, userId={}, page={}, size={}", userId, page, size);
-        validatePage(page, size);
-        long totalElements = refreshTokenDao.countActiveByUserId(userId);
-        List<SessionResponse> content = refreshTokenDao.selectActiveByUserIdPaged(userId, size, page * size).stream()
-                .map(t -> SessionResponse.from(t, currentSessionId))
-                .toList();
-        return PageResponse.of(content, page, size, totalElements);
+        try {
+            log.info("listSessionsPaged - start, userId={}, page={}, size={}", userId, page, size);
+            validatePage(page, size);
+            long totalElements = refreshTokenDao.countActiveByUserId(userId);
+            List<SessionResponse> content = refreshTokenDao.selectActiveByUserIdPaged(userId, size, page * size).stream()
+                    .map(t -> SessionResponse.from(t, currentSessionId))
+                    .toList();
+            return PageResponse.of(content, page, size, totalElements);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.listSessionsPaged", e);
+        }
     }
 
     /** Logs out the session the current access token belongs to, blocking it immediately. */
     public void logout(Long userId, Long sessionId) {
-        log.info("logout - start, userId={}, sessionId={}", userId, sessionId);
-        if (sessionId == null) {
-            return;
+        try {
+            log.info("logout - start, userId={}, sessionId={}", userId, sessionId);
+            if (sessionId == null) {
+                return;
+            }
+            refreshTokenDao.revokeById(sessionId, userId);
+            revokedSessionStore.markRevoked(sessionId, accessTokenTtlMillis);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.logout", e);
         }
-        refreshTokenDao.revokeById(sessionId, userId);
-        revokedSessionStore.markRevoked(sessionId, accessTokenTtlMillis);
     }
 
     /** Remotely revokes one other session by id — the "log out this device" action. */
     public void revokeSession(Long userId, Long sessionId) {
-        log.info("revokeSession - start, userId={}, sessionId={}", userId, sessionId);
-        int updated = refreshTokenDao.revokeById(sessionId, userId);
-        if (updated == 0) {
-            throw new NotFoundException("Phiên đăng nhập không tồn tại");
+        try {
+            log.info("revokeSession - start, userId={}, sessionId={}", userId, sessionId);
+            int updated = refreshTokenDao.revokeById(sessionId, userId);
+            if (updated == 0) {
+                throw logged(log, new NotFoundException("Phiên đăng nhập không tồn tại"));
+            }
+            revokedSessionStore.markRevoked(sessionId, accessTokenTtlMillis);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.revokeSession", e);
         }
-        revokedSessionStore.markRevoked(sessionId, accessTokenTtlMillis);
     }
 
     /** "Log out everywhere else" — revokes every active session except the caller's own. */
     public void revokeAllOtherSessions(Long userId, Long currentSessionId) {
-        log.info("revokeAllOtherSessions - start, userId={}, currentSessionId={}", userId, currentSessionId);
-        List<RefreshToken> toRevoke = refreshTokenDao.selectActiveByUserId(userId).stream()
-                .filter(t -> !t.getId().equals(currentSessionId))
-                .toList();
-        if (toRevoke.isEmpty()) {
-            return;
+        try {
+            log.info("revokeAllOtherSessions - start, userId={}, currentSessionId={}", userId, currentSessionId);
+            List<RefreshToken> toRevoke = refreshTokenDao.selectActiveByUserId(userId).stream()
+                    .filter(t -> !t.getId().equals(currentSessionId))
+                    .toList();
+            if (toRevoke.isEmpty()) {
+                return;
+            }
+            refreshTokenDao.revokeAllByUserIdExcept(userId, currentSessionId);
+            toRevoke.forEach(t -> revokedSessionStore.markRevoked(t.getId(), accessTokenTtlMillis));
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.revokeAllOtherSessions", e);
         }
-        refreshTokenDao.revokeAllByUserIdExcept(userId, currentSessionId);
-        toRevoke.forEach(t -> revokedSessionStore.markRevoked(t.getId(), accessTokenTtlMillis));
     }
 
     /** Revokes every active session of the account and blocks their access tokens immediately (admin lock, e-mail change). */
     public void revokeAllSessions(Long userId) {
-        log.info("revokeAllSessions - start, userId={}", userId);
-        List<RefreshToken> active = refreshTokenDao.selectActiveByUserId(userId);
-        if (active.isEmpty()) {
-            return;
+        try {
+            log.info("revokeAllSessions - start, userId={}", userId);
+            List<RefreshToken> active = refreshTokenDao.selectActiveByUserId(userId);
+            if (active.isEmpty()) {
+                return;
+            }
+            refreshTokenDao.revokeAllByUserId(userId);
+            active.forEach(t -> revokedSessionStore.markRevoked(t.getId(), accessTokenTtlMillis));
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.revokeAllSessions", e);
         }
-        refreshTokenDao.revokeAllByUserId(userId);
-        active.forEach(t -> revokedSessionStore.markRevoked(t.getId(), accessTokenTtlMillis));
     }
 
     private String truncate(String value, int maxLength) {
@@ -1292,5 +1543,45 @@ public class AuthService {
             log.error("Không tạo được SHA-256 MessageDigest", e);
             throw new IllegalStateException(e);
         }
+    }
+
+    /**
+     * Register User
+     *
+     * @param family
+     * @param request
+     * @param verificationToken
+     * @return user
+     */
+    private User registerUser(Family family, RegisterRequest request, String verificationToken) {
+        User user = new User();
+        user.setFamilyId(family.getId());
+        user.setEmail(request.email());
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setDisplayName(request.displayName());
+        user.setRole(ROLE_OWNER);
+        user.setActive(false);
+        user.setProvider(PROVIDER_LOCAL);
+        user.setIsSystemAdmin(Boolean.FALSE);
+        user.setTotpEnabled(Boolean.FALSE);
+        user.setLocked(Boolean.FALSE);
+        user.setVerificationToken(verificationToken);
+        user.setVerificationTokenExpiresAt(LocalDateTime.now().plus(verificationTokenTtl));
+        userDao.insert(user);
+        return user;
+    }
+
+    /**
+     * Register Family
+     *
+     * @param request
+     * @return family
+     */
+    private Family registerFamily(RegisterRequest request) {
+        Family family = new Family();
+        family.setName(request.familyName());
+        family.setCreatedAt(LocalDateTime.now());
+        familyDao.insert(family);
+        return family;
     }
 }

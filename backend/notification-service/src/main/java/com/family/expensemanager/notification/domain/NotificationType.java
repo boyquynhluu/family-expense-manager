@@ -8,7 +8,8 @@ public enum NotificationType {
     RECURRING_FAILED(false),
     MEMBER_JOINED(false),
     MEMBER_LEFT(false),
-    MEMBER_REMOVED(false);
+    MEMBER_REMOVED(false),
+    WALLET_TRANSFERRED(true);
 
     private final boolean emailSupported;
 
