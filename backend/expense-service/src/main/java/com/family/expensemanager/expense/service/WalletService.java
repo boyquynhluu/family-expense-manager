@@ -185,6 +185,14 @@ public class WalletService {
         return wallet.getInitialBalance().add(income).subtract(expense).add(transferIn).subtract(transferOut);
     }
 
+    /**
+     * Row-locks the wallet until the caller's transaction ends, so two concurrent transfers out of it can't
+     * both read the same balance, both pass the "enough money" check, and together overdraw it.
+     */
+    void lockForUpdate(Long walletId) {
+        walletDao.selectByIdForUpdate(walletId);
+    }
+
     Wallet requireOwnedByFamily(Long walletId, Long familyId) {
         log.info("requireOwnedByFamily - start, walletId={}, familyId={}", walletId, familyId);
         Wallet wallet = walletDao.selectById(walletId)

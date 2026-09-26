@@ -7,6 +7,7 @@ import { confirmDialog } from "../utils/confirm";
 import { useAuth } from "../hooks/useAuth";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { usePagedList } from "../hooks/usePagedList";
+import { LIMITS } from "../utils/inputLimits";
 
 function formatDate(value) {
   if (!value) return "-";
@@ -79,7 +80,7 @@ export default function AdminPanel() {
             onChange={(e) => setFamilyQuery(e.target.value)}
             placeholder={t("searchFamiliesPlaceholder")}
             aria-label={t("searchFamiliesPlaceholder")}
-            maxLength={100}
+            maxLength={LIMITS.search}
           />
         </div>
         {families.length === 0 ? (
@@ -121,7 +122,7 @@ export default function AdminPanel() {
             onChange={(e) => setUserQuery(e.target.value)}
             placeholder={t("searchUsersPlaceholder")}
             aria-label={t("searchUsersPlaceholder")}
-            maxLength={100}
+            maxLength={LIMITS.search}
           />
         </div>
         {users.length === 0 ? (

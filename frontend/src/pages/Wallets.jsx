@@ -2,14 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
-import { EditIcon, TrashIcon, WalletIcon } from "../components/AppIcons";
 import AmountInput from "../components/AmountInput";
+import { EditIcon, TrashIcon, WalletIcon } from "../components/AppIcons";
 import Pagination from "../components/Pagination";
 import SeedDefaultsButton from "../components/SeedDefaultsButton";
-import { confirmDialog } from "../utils/confirm";
-import { formatCurrency } from "../utils/format";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
+import { confirmDialog } from "../utils/confirm";
+import { formatCurrency } from "../utils/format";
+import { LIMITS } from "../utils/inputLimits";
 
 // <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" in the browser's local time.
 function nowForDateTimeInput() {
@@ -195,6 +196,7 @@ export default function Wallets() {
               <input
                 placeholder={t("wallets:namePlaceholder")}
                 value={name}
+                maxLength={LIMITS.walletName}
                 onChange={(e) => setName(e.target.value)}
                 required
               />
@@ -364,7 +366,7 @@ export default function Wallets() {
               <input
                 placeholder={t("wallets:transferNotePlaceholder")}
                 value={transferForm.note}
-                maxLength={255}
+                maxLength={LIMITS.transferNote}
                 onChange={(e) => updateTransferField("note", e.target.value)}
               />
             </label>

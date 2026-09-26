@@ -8,6 +8,7 @@ import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
 import { formatCurrency } from "../utils/format";
+import { LIMITS } from "../utils/inputLimits";
 
 const emptyForm = {
   walletId: "",
@@ -288,6 +289,7 @@ export default function RecurringTransactions() {
               <input
                 placeholder={t("recurringTransactions:optionalPlaceholder")}
                 value={form.note}
+                maxLength={LIMITS.transactionNote}
                 onChange={(e) => updateField("note", e.target.value)}
               />
             </label>

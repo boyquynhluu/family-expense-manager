@@ -21,6 +21,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.DayOfWeek;
@@ -68,6 +69,7 @@ public class RecurringTransactionService {
     private final TransactionService transactionService;
     private final Clock clock;
     private final ApplicationEventPublisher eventPublisher;
+    private final TransactionTemplate transactionTemplate;
 
     public RecurringTransactionResponse create(
             Long familyId, Long userId, String userEmail, String userDisplayName,
@@ -228,28 +230,48 @@ public class RecurringTransactionService {
         }
     }
 
+    /**
+     * Each occurrence — the transaction AND the rule advancing past it — commits as one unit, so a failure on
+     * a later occurrence (or a crash) can never leave an already-created transaction behind with the rule still
+     * pointing at its date, which the next run would then create a second time.
+     */
     private void processDueRule(RecurringTransaction r, LocalDate today) {
         LocalDate runDate = r.getNextRunDate();
         int runs = 0;
-        while (!runDate.isAfter(today) && runs < MAX_CATCH_UP_RUNS) {
-            TransactionRequest request = new TransactionRequest(
-                    r.getWalletId(), r.getCategoryId(), r.getType(), r.getAmount(), runDate.atStartOfDay(),
-                    r.getNote());
-            TransactionResponse created = transactionService.create(
-                    r.getFamilyId(), r.getCreatedByUserId(), r.getCreatedByEmail(), r.getCreatedByDisplayName(),
-                    request);
-            publishRecurringEvent(ExpenseEvent.RECURRING_EXECUTED, r, created.id(), runDate);
-            // Frontend status badge ("Chưa thực hiện" vs "Hoàn thành") is null-vs-not-null
-            // on this field — set only once a transaction actually got created above.
-            r.setLastRunDate(runDate);
-            runDate = nextOccurrence(runDate, r);
+        while (!runDate.isAfter(today) && !isPastEndDate(r, runDate) && runs < MAX_CATCH_UP_RUNS) {
+            LocalDate occurrence = runDate;
+            LocalDate next = nextOccurrence(occurrence, r);
+            Long createdId = transactionTemplate.execute(status -> {
+                TransactionRequest request = new TransactionRequest(
+                        r.getWalletId(), r.getCategoryId(), r.getType(), r.getAmount(), occurrence.atStartOfDay(),
+                        r.getNote());
+                TransactionResponse created = transactionService.create(
+                        r.getFamilyId(), r.getCreatedByUserId(), r.getCreatedByEmail(), r.getCreatedByDisplayName(),
+                        request);
+                // Frontend status badge ("Chưa thực hiện" vs "Hoàn thành") is null-vs-not-null
+                // on this field — set only once a transaction actually got created above.
+                r.setLastRunDate(occurrence);
+                r.setNextRunDate(next);
+                if (isPastEndDate(r, next)) {
+                    r.setActive(false);
+                }
+                recurringTransactionDao.update(r);
+                return created.id();
+            });
+            // Outside the unit above, so the notification only goes out once both are committed.
+            publishRecurringEvent(ExpenseEvent.RECURRING_EXECUTED, r, createdId, occurrence);
+            runDate = next;
             runs++;
         }
-        r.setNextRunDate(runDate);
-        if (r.getEndDate() != null && runDate.isAfter(r.getEndDate())) {
+        // Due but already past its end date (e.g. the end date was moved earlier) — retire it without running.
+        if (Boolean.TRUE.equals(r.getActive()) && isPastEndDate(r, runDate)) {
             r.setActive(false);
+            recurringTransactionDao.update(r);
         }
-        recurringTransactionDao.update(r);
+    }
+
+    private static boolean isPastEndDate(RecurringTransaction r, LocalDate date) {
+        return r.getEndDate() != null && date.isAfter(r.getEndDate());
     }
 
     /**

@@ -17,6 +17,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
@@ -32,6 +34,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -54,6 +57,9 @@ class RecurringTransactionServiceTest {
 
     private static final Long OTHER_USER_ID = 99L;
 
+    /** Runs the callback inline — a real rollback is covered by Spring, only the call shape matters here. */
+    private final TransactionTemplate transactionTemplate = new TransactionTemplate(mock(PlatformTransactionManager.class));
+
     private RecurringTransactionService service;
 
     private static Clock clockOn(String isoDate) {
@@ -64,7 +70,7 @@ class RecurringTransactionServiceTest {
     void setUp() {
         service = new RecurringTransactionService(
                 recurringTransactionDao, walletService, categoryService, transactionService, clockOn("2026-01-15"),
-                eventPublisher);
+                eventPublisher, transactionTemplate);
     }
 
     @Test
@@ -533,6 +539,50 @@ class RecurringTransactionServiceTest {
     }
 
     @Test
+    void generateDueTransactions_persistsEachOccurrence_soAFailureMidCatchUpNeverDuplicatesEarlierOnes() {
+        // Nov succeeds, Dec fails: the rule must already point at Dec, or tomorrow's run re-creates Nov.
+        RecurringTransaction rule = rule(1L, LocalDate.of(2025, 11, 1), 1, null);
+        when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
+        when(transactionService.create(any(), any(), any(), any(), any()))
+                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.TEN, null, null,
+                        false, null))
+                .thenThrow(new RuntimeException("wallet was deleted"));
+
+        service.generateDueTransactions();
+
+        verify(transactionService, times(2)).create(any(), any(), any(), any(), any());
+        verify(recurringTransactionDao, times(1)).update(rule);
+        assertThat(rule.getLastRunDate()).isEqualTo(LocalDate.of(2025, 11, 1));
+        assertThat(rule.getNextRunDate()).isEqualTo(LocalDate.of(2025, 12, 1));
+    }
+
+    @Test
+    void generateDueTransactions_weekly_catchUpStopsAtEndDate() {
+        // Due by Jan 15: Dec 29, Jan 5, Jan 12 — but the rule ends Jan 6, so Jan 12 must not be created.
+        RecurringTransaction rule = weeklyRule(LocalDate.of(2025, 12, 29), 1, LocalDate.of(2026, 1, 6));
+        when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
+        stubTransactionCreate();
+
+        service.generateDueTransactions();
+
+        verify(transactionService, times(2)).create(eq(1L), eq(10L), eq("a@b.com"), eq("An"), any());
+        assertThat(rule.getLastRunDate()).isEqualTo(LocalDate.of(2026, 1, 5));
+        assertThat(rule.getActive()).isFalse();
+    }
+
+    @Test
+    void generateDueTransactions_retiresWithoutRunning_aDueRuleAlreadyPastItsEndDate() {
+        RecurringTransaction rule = rule(1L, LocalDate.of(2026, 1, 1), 1, LocalDate.of(2025, 12, 31));
+        when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
+
+        service.generateDueTransactions();
+
+        verify(transactionService, never()).create(any(), any(), any(), any(), any());
+        assertThat(rule.getActive()).isFalse();
+        verify(recurringTransactionDao).update(rule);
+    }
+
+    @Test
     void generateDueTransactions_yearly_clampsFeb29ToFeb28InNonLeapYears() {
         // Due runs: 2024-02-29 (leap) and 2025-02-28 (clamped); next is 2026-02-28, not yet due.
         RecurringTransaction rule = yearlyRule(LocalDate.of(2024, 2, 29), 2, 29);
@@ -552,7 +602,7 @@ class RecurringTransactionServiceTest {
         // Re-anchor the clock past the 2027 run so the loop advances into 2028.
         service = new RecurringTransactionService(
                 recurringTransactionDao, walletService, categoryService, transactionService, clockOn("2027-03-01"),
-                eventPublisher);
+                eventPublisher, transactionTemplate);
         when(recurringTransactionDao.selectDue(LocalDate.of(2027, 3, 1))).thenReturn(List.of(rule));
         stubTransactionCreate();
 

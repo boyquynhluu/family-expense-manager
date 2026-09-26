@@ -22,7 +22,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ErrorResponse> handleApiException(ApiException ex, HttpServletRequest request) {
-        log.warn("ApiException tại {}: {}", request.getRequestURI(), ex.getMessage());
+        // Business exceptions are already logged with more detail (which service/method threw it) right
+        // where they're created, via ExceptionLogger.logged(...) or ServiceException.unexpected(...) —
+        // this is just the request-path context, so DEBUG is enough to avoid a duplicate WARN per request.
+        log.debug("ApiException tại {}: {}", request.getRequestURI(), ex.getMessage());
         return build(ex.getStatus(), ex.getMessage(), request);
     }
 

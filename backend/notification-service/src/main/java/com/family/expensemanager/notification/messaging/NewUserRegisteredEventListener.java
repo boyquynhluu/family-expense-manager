@@ -91,6 +91,9 @@ public class NewUserRegisteredEventListener {
         if (NewUserRegisteredEvent.SOURCE_GOOGLE.equals(source)) {
             return "Đăng nhập Google";
         }
+        if (NewUserRegisteredEvent.SOURCE_FACEBOOK.equals(source)) {
+            return "Đăng nhập Facebook";
+        }
         if (NewUserRegisteredEvent.SOURCE_INVITE.equals(source)) {
             return "Lời mời vào gia đình";
         }

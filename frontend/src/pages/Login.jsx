@@ -6,6 +6,7 @@ import client, { oauth2AuthorizationUrl } from "../api/client";
 import { EyeIcon, EyeOffIcon, FacebookIcon, GithubIcon, GoogleIcon, KeyIcon, MailIcon } from "../components/AuthIcons";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuth } from "../hooks/useAuth";
+import { LIMITS } from "../utils/inputLimits";
 
 export default function Login() {
   const { t } = useTranslation("login");
@@ -117,6 +118,7 @@ export default function Login() {
               </span>
               <input
                 value={totpCode}
+                maxLength={LIMITS.twoFactorCode}
                 onChange={(e) => setTotpCode(e.target.value)}
                 placeholder={t("twoFactorCodePlaceholder")}
                 aria-label={t("twoFactorCodePlaceholder")}
@@ -164,6 +166,7 @@ export default function Login() {
             <input
               type="email"
               value={email}
+              maxLength={LIMITS.email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder={t("emailPlaceholder")}
               aria-label="Email"
@@ -178,6 +181,7 @@ export default function Login() {
             <input
               type={showPassword ? "text" : "password"}
               value={password}
+              maxLength={LIMITS.password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder={t("passwordPlaceholder")}
               aria-label={t("passwordPlaceholder")}

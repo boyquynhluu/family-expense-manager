@@ -1,5 +1,6 @@
 package com.family.expensemanager.auth.dao;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -41,6 +42,13 @@ public interface RefreshTokenDao {
     /** Revokes one session by id, scoped to its owner so a user can't revoke someone else's. */
     @Update(sqlFile = true)
     int revokeById(Long id, Long userId);
+
+    /**
+     * Like {@link #revokeById} but also stamps {@code rotated_at} — used only by /refresh, so a later replay of
+     * this token can be recognised as a rotated one (see AuthService#refresh).
+     */
+    @Update(sqlFile = true)
+    int rotateById(Long id, Long userId, LocalDateTime rotatedAt);
 
     /** Revokes every other active session, keeping the one the request came from. */
     @Update(sqlFile = true)

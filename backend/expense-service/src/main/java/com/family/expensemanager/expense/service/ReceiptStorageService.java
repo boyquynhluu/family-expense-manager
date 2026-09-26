@@ -27,11 +27,19 @@ public class ReceiptStorageService {
         this.basePath = Path.of(basePath);
     }
 
-    /** Returns the relative path (family-scoped subfolder) to store as {@code receipt_path}. */
-    public String save(Long familyId, Long transactionId, MultipartFile file) throws IOException {
+    /**
+     * Returns the relative path (family-scoped subfolder) to store as {@code receipt_path}.
+     *
+     * @param validatedContentType the file's real type as sniffed from its own bytes (see
+     *                              {@link TransactionService#uploadReceipt}) — the on-disk extension is
+     *                              chosen from this, never from the client-supplied original filename,
+     *                              so a mislabelled upload can't end up saved as e.g. {@code .html}.
+     */
+    public String save(Long familyId, Long transactionId, MultipartFile file, String validatedContentType)
+            throws IOException {
         Path dir = basePath.resolve(String.valueOf(familyId));
         Files.createDirectories(dir);
-        String filename = transactionId + "-" + System.currentTimeMillis() + extensionOf(file);
+        String filename = transactionId + "-" + System.currentTimeMillis() + extensionFor(validatedContentType);
         Path target = dir.resolve(filename);
         file.transferTo(target);
         return familyId + "/" + filename;
@@ -58,9 +66,12 @@ public class ReceiptStorageService {
         return resolved;
     }
 
-    private String extensionOf(MultipartFile file) {
-        String original = file.getOriginalFilename();
-        int dot = original == null ? -1 : original.lastIndexOf('.');
-        return dot >= 0 ? original.substring(dot) : "";
+    private String extensionFor(String validatedContentType) {
+        return switch (validatedContentType) {
+            case "image/jpeg" -> ".jpg";
+            case "image/png" -> ".png";
+            case "image/webp" -> ".webp";
+            default -> throw new IllegalArgumentException("Loại ảnh không hợp lệ: " + validatedContentType);
+        };
     }
 }

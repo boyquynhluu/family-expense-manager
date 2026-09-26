@@ -138,6 +138,7 @@ Topic `expense-events`, key = `familyId`, phân biệt bằng field `eventType`:
 - `BUDGET_WARNING` — chi chạm 80% ngân sách (danh mục hoặc tổng) lần đầu, chưa vượt 100%. Chỉ tạo thông báo trong app.
 - `BUDGET_EXCEEDED` — chi **vượt 100% lần đầu** (không lặp lại ở các giao dịch vượt tiếp theo). Thông báo trong app và email cho người tạo giao dịch.
 - `RECURRING_EXECUTED`, `RECURRING_FAILED` — scheduler giao dịch định kỳ ghi thành công hoặc gặp lỗi. Chỉ trong app.
+- `WALLET_TRANSFERRED` — publish sau khi ghi `WALLET_TRANSFERRED` (mục 14). Một dòng thông báo trong app dùng chung cho cả gia đình (ví không có chủ sở hữu riêng, nên không có "người nhận" theo user). Về email, `notification-service` gửi hai kiểu khác nhau: người tạo giao dịch nhận email "đã trừ" (địa chỉ có sẵn trong event, do expense-service đọc từ JWT lúc publish), còn **mỗi thành viên khác trong gia đình** nhận email "đã cộng, ai chuyển" — địa chỉ của họ được tra cứu qua endpoint nội bộ `GET /internal/families/{familyId}/members` của auth-service (xem "Bảo mật" bên dưới), vì notification-service không có sẵn USERS. Lỗi gửi email (kể cả `BUDGET_EXCEEDED`) chỉ được log, không throw lại — tránh Kafka redeliver event và ghi trùng dòng thông báo trong app.
 
 Các topic khác (khai báo dưới `kafka.topic.*` trong `application.yml`): `user-verification` và `password-reset` (email xác thực, đặt lại mật khẩu, cả xác nhận đổi email), `family-invite` (email mời thành viên), `family-member-events` (`MEMBER_JOINED`, `MEMBER_LEFT`, `MEMBER_REMOVED`, do auth-service phát), `user-registered` (có tài khoản mới, kèm danh sách email admin nhận, xem mục 25).
 
@@ -191,6 +192,8 @@ Khác biệt quan trọng so với bản reactive cần lưu ý nếu sửa gate
 JWT được xác thực **độc lập ở từng service** (qua `common`), không chỉ tin tưởng header do gateway set — gateway cũng xác thực để fail nhanh nhưng vẫn forward nguyên `Authorization` header xuống service. Access token 15 phút, refresh token 7 ngày. Ngoài ra: đăng xuất từ xa tức thì (mục 8), 2FA (mục 9), khoá đăng nhập tạm và khoá tài khoản (mục 22, 23), IP máy khách đáng tin cậy (mục 24), phân quyền OWNER/MEMBER kiểm tra ở backend (mục 17).
 
 Mạng: 3 service nghiệp vụ không publish port HTTP ra host; chỉ `api-gateway` (8080), `eureka-server` và `frontend` là điểm vào. Lưu ý `infra/docker-compose.yml` bản dev còn publish thêm port debug JDWP (5005-5009), Redis 6379 và Kafka 9092 ra máy host — không dùng nguyên bản này khi triển khai thật.
+
+**Gọi service-to-service (`/internal/**`):** ngoại lệ duy nhất cho quy tắc "mọi thứ giữa các service là Kafka bất đồng bộ" (xem `ExpenseEvent`'s javadoc) là `notification-service` gọi thẳng `GET /internal/families/{familyId}/members` của auth-service để lấy email các thành viên gia đình cho email "nhận được tiền" (mục 14). `api-gateway` không có route cho `/internal/**` nên chỉ gọi được trong mạng Docker nội bộ; đồng thời `InternalController` yêu cầu JWT có `role = SERVICE` (`@PreAuthorize("hasRole('SERVICE')")`) — `FamilyMemberDirectory` tự ký một JWT ngắn hạn (60 giây) bằng `JWT_SECRET` dùng chung cho mục đích này, một token của user thường (dù role gì) bị từ chối 403. Lỗi gọi (auth-service down, timeout...) chỉ log và coi như không có người nhận, không throw — không làm hỏng phần còn lại của event.
 
 ## Tính năng theo từng mục
 
@@ -556,6 +559,8 @@ sequenceDiagram
 
 Thời gian hiển thị: backend trả `LocalDateTime` theo giờ UTC không kèm múi giờ, frontend đổi sang giờ máy người xem bằng `formatServerDateTime` (`frontend/src/utils/format.js`).
 
+**Xoay và phát hiện dùng lại refresh token** (`AuthService#refresh`): mỗi lần refresh, token cũ bị thu hồi **nguyên tử** ngay trước khi phát token mới (`RefreshTokenDao#revokeById` chỉ update khi `revoked = false`, trả về số dòng bị ảnh hưởng) — hai request refresh song song cùng một token chỉ một request thắng, request còn lại nhận 401 thay vì cả hai cùng phát được token mới. Nếu một refresh token **đã bị thu hồi** lại được gửi lên lần nữa (dấu hiệu kinh điển của việc token bị đánh cắp và dùng song song với chủ tài khoản thật), toàn bộ phiên đăng nhập của user đó bị thu hồi ngay (`revokeAllByUserId`), buộc đăng nhập lại ở mọi thiết bị. `refresh` cũng kiểm tra tài khoản còn `active` (đã xác thực email), giống điều kiện ở `login`.
+
 ### Mục 9 — Xác thực 2 lớp (TOTP)
 
 **Thành phần và nơi lưu dữ liệu**
@@ -709,15 +714,25 @@ sequenceDiagram
     participant FE as Wallets.jsx
     participant EX as WalletTransferService
     participant DB as MySQL
+    participant K as Kafka expense-events
+    participant N as notification-service
+    participant AU as auth-service (internal)
 
     U->>FE: Chọn ví nguồn, ví đích, số tiền, thời gian, ghi chú
     FE->>EX: POST /api/expenses/transfers
     EX->>DB: Kiểm tra 2 ví thuộc gia đình, chưa xoá, khác nhau, cùng loại tiền, số tiền >= 0.01
+    EX->>DB: Số tiền phải <= số dư hiện tại của VÍ NGUỒN (đầu + thu − chi + chuyển vào − chuyển ra)
     EX->>DB: Ghi WALLET_TRANSFERS (không tạo giao dịch thu hoặc chi)
+    EX->>K: Publish WALLET_TRANSFERRED (sau khi commit)
     EX-->>FE: OK, FE tải lại lịch sử chuyển và số dư ví
-    Note over EX,DB: Số dư ví = số dư đầu + thu − chi + chuyển vào − chuyển ra
+    K->>N: WALLET_TRANSFERRED
+    N->>DB: 1 dòng thông báo trong app, dùng chung cho cả gia đình
+    N-->>U: Email "đã trừ" cho người tạo giao dịch (nếu chưa tắt)
+    N->>AU: GET /internal/families/{id}/members (JWT role SERVICE)
+    N-->>U: Email "đã cộng, ai chuyển" cho từng thành viên khác (nếu chưa tắt)
     U->>FE: Sửa hoặc xoá một khoản chuyển
     FE->>EX: PUT hoặc DELETE /transfers/id (người tạo hoặc OWNER)
+    Note over EX,DB: Khi sửa, số tiền cũ của chính khoản đang sửa được cộng/trừ lại trước khi so với số dư mới — tránh báo "vượt số dư" oan khi chỉ sửa ghi chú
 ```
 
 Khoản chuyển **không** tính vào báo cáo thu chi, biểu đồ xu hướng hay ngân sách, nên tổng thu chi không bị sai. Endpoint: `POST/GET /api/expenses/transfers` (phân trang), `PUT /{id}`, `DELETE /{id}`.
@@ -813,6 +828,7 @@ flowchart LR
         E2["BUDGET_EXCEEDED"]
         E3["RECURRING_EXECUTED"]
         E4["RECURRING_FAILED"]
+        E5["WALLET_TRANSFERRED"]
     end
     subgraph AUTHS["auth-service, topic family-member-events"]
         A1["MEMBER_JOINED"]
@@ -823,15 +839,20 @@ flowchart LR
     E2 --> N
     E3 --> N
     E4 --> N
+    E5 --> N
     A1 --> N
     A2 --> N
     A3 --> N
     E2 -->|"nếu người tạo chưa tắt email"| M["Email cảnh báo vượt ngân sách"]
+    E5 -->|"nếu chưa tắt email"| W1["Email 'đã trừ' cho người tạo"]
+    E5 -->|"tra email qua auth-service /internal, nếu chưa tắt"| W2["Email 'đã cộng' cho từng thành viên khác"]
     N --> UI["Trang Notifications + chuông báo chưa đọc"]
-    P["Tuỳ chọn của từng người dùng<br/>hiện trong app theo loại, email cho BUDGET_EXCEEDED"] -.->|"lọc lúc đọc danh sách và đếm chưa đọc"| UI
+    P["Tuỳ chọn của từng người dùng<br/>hiện trong app theo loại, email cho BUDGET_EXCEEDED/WALLET_TRANSFERRED"] -.->|"lọc lúc đọc danh sách và đếm chưa đọc"| UI
 ```
 
 Endpoint: `GET /api/notifications` (phân trang), `GET /unread-count`, `PUT /{id}/read`, `PUT /read-all`, `DELETE /{id}`, `DELETE /read` (xoá mọi thông báo đã đọc), `GET/PUT /preferences`. Vì thông báo được lưu theo gia đình, việc tắt hiển thị một loại chỉ ảnh hưởng người tắt (lọc lúc đọc), không mất thông báo của người khác. Quy tắc định kỳ đang lỗi sẽ báo lỗi mỗi ngày cho đến khi được sửa.
+
+`GET /api/notifications` **không** trả `payloadJson` — dữ liệu đó là nguyên văn event Kafka gốc (gồm cả email người thực hiện) và mọi thành viên gia đình đều đọc được danh sách này, nên trường này bị bỏ khỏi `NotificationResponse` để không lộ email giữa các thành viên với nhau. Cột `payload_json` vẫn còn trong DB, chỉ không trả ra qua API.
 
 ### Mục 20 — Tìm kiếm, xoá hàng loạt, sao chép giao dịch
 
@@ -1012,7 +1033,9 @@ Bảng port của các service/tool phổ biến trong hạ tầng nói chung �
 
 > Lưu ý: `Tomcat`/`Jenkins` (8080) trùng port với `api-gateway` của project này — nếu chạy chung máy, chỉ được bật một trong hai trên cùng port 8080.
 
-======= DEPLOY BE====
+## Hiện trạng deploy (dev/demo, chưa phải VPS)
+
+```
                          INTERNET
                             │
                             ▼
@@ -1029,3 +1052,24 @@ Bảng port của các service/tool phổ biến trong hạ tầng nói chung �
                             │
                             ▼
                     Spring Boot BE
+```
+
+Tức là hệ thống **chưa chạy trên VPS nào** — backend đang chạy trên máy local, lộ ra ngoài qua Cloudflare Quick Tunnel (URL ngẫu nhiên, đổi mỗi lần container `cloudflared` restart). Đây là mô hình để demo/test, chưa phải production.
+
+### Việc cần làm khi có VPS (chưa làm — TODO)
+
+**Phải sửa trước khi mở ra ngoài Internet (bảo mật nghiêm trọng):**
+- [ ] Bỏ toàn bộ cổng debug JDWP (`JAVA_TOOL_OPTIONS: -agentlib:jdwp=...` và `ports: "500x:500x"`) khỏi mọi service trong `docker-compose.yml` bản chạy thật — JDWP không xác thực mở ra Internet là đường RCE tức thời. Nên tách một `docker-compose.prod.yml` không có các dòng này thay vì sửa trực tiếp file dev.
+- [ ] Bỏ `ports:` publish ra host của `mysql-db` (3307), `kafka` (9092), `redis` (6379) — Docker tự chèn luật iptables NAT nên UFW/firewall thường không chặn được, kể cả khi tưởng đã đóng cổng ở tầng OS. Chỉ nên giao tiếp qua mạng nội bộ `fem-network`.
+- [ ] Bỏ publish cổng Eureka Dashboard (8761) ra ngoài.
+- [ ] Thêm `restart: unless-stopped` cho mọi service (hiện chỉ `cloudflared` có) — VPS reboot hoặc container crash thì cả hệ thống không tự dậy lại.
+
+**Cần có trước khi chạy thật:**
+- [ ] TLS/HTTPS thật qua Nginx/Caddy/Traefik + Let's Encrypt + tên miền riêng (hiện dựa vào HTTPS do Cloudflare Tunnel cấp sẵn).
+- [ ] Đổi `APP_BASE_URL`, `OAUTH2_SUCCESS_REDIRECT_URL` trong `.env` từ `localhost` sang domain thật, đồng thời cập nhật lại Redirect URI ở Google/Facebook Console.
+- [ ] Giới hạn tài nguyên container (`mem_limit`/`deploy.resources.limits`) cho từng service, tương xứng cấu hình VPS — hiện không giới hạn, nhiều JVM cùng chạy có thể chiếm hết RAM khi traffic tăng.
+- [ ] Cấu hình log rotation cho Docker (`logging: driver: json-file, options: {max-size, max-file}`) — mặc định log tích luỹ vô hạn, dễ đầy đĩa VPS.
+- [ ] Có backup định kỳ cho MySQL (`mysqldump` theo lịch, hoặc snapshot volume `mysql-data`) — hiện chưa có.
+- [ ] Ghim version cụ thể cho `grafana/grafana`, `prom/prometheus`, `grafana/loki` (đang dùng `:latest`, không tái lập được).
+- [ ] Chặn `/actuator/**` của `api-gateway` ở tầng reverse proxy/firewall, chỉ cho phép truy cập nội bộ — hiện `/actuator/health` và `/actuator/prometheus` public không cần đăng nhập trên cổng 8080 publish ra ngoài.
+- [ ] CI/CD deploy tự động lên VPS (hiện chỉ có CI build/test — `backend-ci.yml`, `frontend-ci.yml` — chưa có bước SSH/push image + `docker compose pull && up -d` trên VPS; deploy đang hoàn toàn thủ công).

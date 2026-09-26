@@ -46,6 +46,9 @@ class TransactionServiceTest {
 
     private static final Long CREATOR_ID = 10L;
     private static final Long OTHER_USER_ID = 11L;
+    // Real JPEG magic bytes (FF D8 FF) — uploadReceipt now sniffs these instead of trusting the
+    // Content-Type header or filename, so fixtures need genuine bytes for the happy-path tests.
+    private static final byte[] JPEG_BYTES = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0, 1, 2, 3};
 
     @Mock
     private TransactionDao transactionDao;
@@ -109,6 +112,17 @@ class TransactionServiceTest {
     }
 
     @Test
+    void listByFamilyPaged_throwsBadRequest_whenSearchTextLongerThan100() {
+        TransactionReportFilter ok = new TransactionReportFilter(null, null, null, null, null, "a".repeat(100), null, null);
+        TransactionReportFilter tooLong =
+                new TransactionReportFilter(null, null, null, null, null, "a".repeat(101), null, null);
+
+        ok.validate();
+        assertThatThrownBy(() -> transactionService.listByFamilyPaged(1L, tooLong, 0, 20))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
     void update_savesChanges_whenMemberEditsOwnTransaction() {
         Transaction target = transaction(1L);
         stubUpdateDependencies(target);
@@ -141,8 +155,8 @@ class TransactionServiceTest {
     void uploadReceipt_savesFile_andUpdatesTransaction() throws Exception {
         Transaction target = transaction(1L);
         when(transactionDao.selectById(1L)).thenReturn(Optional.of(target));
-        when(receiptStorageService.save(eq(1L), eq(1L), any())).thenReturn("1/1-123.jpg");
-        MockMultipartFile file = new MockMultipartFile("file", "hoadon.jpg", "image/jpeg", new byte[] {1, 2, 3});
+        when(receiptStorageService.save(eq(1L), eq(1L), any(), any())).thenReturn("1/1-123.jpg");
+        MockMultipartFile file = new MockMultipartFile("file", "hoadon.jpg", "image/jpeg", JPEG_BYTES);
 
         var response = transactionService.uploadReceipt(1L, 1L, CREATOR_ID, false, file);
 
@@ -159,8 +173,8 @@ class TransactionServiceTest {
         target.setReceiptPath("1/1-old.jpg");
         target.setReceiptContentType("image/jpeg");
         when(transactionDao.selectById(1L)).thenReturn(Optional.of(target));
-        when(receiptStorageService.save(eq(1L), eq(1L), any())).thenReturn("1/1-new.jpg");
-        MockMultipartFile file = new MockMultipartFile("file", "hoadon.jpg", "image/jpeg", new byte[] {1});
+        when(receiptStorageService.save(eq(1L), eq(1L), any(), any())).thenReturn("1/1-new.jpg");
+        MockMultipartFile file = new MockMultipartFile("file", "hoadon.jpg", "image/jpeg", JPEG_BYTES);
 
         transactionService.uploadReceipt(1L, 1L, CREATOR_ID, false, file);
 
@@ -176,13 +190,27 @@ class TransactionServiceTest {
         verify(transactionDao, never()).selectById(any());
     }
 
+    // Regression test: the Content-Type header and filename are attacker-controlled — a request could
+    // claim "image/jpeg" for bytes that aren't actually a JPEG. uploadReceipt must sniff the real bytes
+    // and reject this, not just check the header.
+    @Test
+    void uploadReceipt_throwsBadRequest_whenContentTypeHeaderIsSpoofed() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "hoadon.jpg", "image/jpeg", "<script>alert(1)</script>".getBytes());
+
+        assertThatThrownBy(() -> transactionService.uploadReceipt(1L, 1L, CREATOR_ID, false, file))
+                .isInstanceOf(BadRequestException.class);
+        verify(transactionDao, never()).selectById(any());
+        verify(receiptStorageService, never()).save(any(), any(), any(), any());
+    }
+
     @Test
     void uploadReceipt_throwsForbidden_whenMemberAttachesToSomeoneElsesTransaction() throws Exception {
         when(transactionDao.selectById(1L)).thenReturn(Optional.of(transaction(1L)));
-        MockMultipartFile file = new MockMultipartFile("file", "hoadon.jpg", "image/jpeg", new byte[] {1});
+        MockMultipartFile file = new MockMultipartFile("file", "hoadon.jpg", "image/jpeg", JPEG_BYTES);
 
         assertForbidden(() -> transactionService.uploadReceipt(1L, 1L, OTHER_USER_ID, false, file));
-        verify(receiptStorageService, never()).save(any(), any(), any());
+        verify(receiptStorageService, never()).save(any(), any(), any(), any());
         verify(transactionDao, never()).update(any());
     }
 
@@ -190,8 +218,8 @@ class TransactionServiceTest {
     void uploadReceipt_succeeds_whenOwnerAttachesToSomeoneElsesTransaction() throws Exception {
         Transaction target = transaction(1L);
         when(transactionDao.selectById(1L)).thenReturn(Optional.of(target));
-        when(receiptStorageService.save(eq(1L), eq(1L), any())).thenReturn("1/1-123.jpg");
-        MockMultipartFile file = new MockMultipartFile("file", "hoadon.jpg", "image/jpeg", new byte[] {1});
+        when(receiptStorageService.save(eq(1L), eq(1L), any(), any())).thenReturn("1/1-123.jpg");
+        MockMultipartFile file = new MockMultipartFile("file", "hoadon.jpg", "image/jpeg", JPEG_BYTES);
 
         transactionService.uploadReceipt(1L, 1L, OTHER_USER_ID, true, file);
 

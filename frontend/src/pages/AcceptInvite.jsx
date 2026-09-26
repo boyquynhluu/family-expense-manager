@@ -5,6 +5,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import client from "../api/client";
 import { EyeIcon, EyeOffIcon, KeyIcon, UserIcon } from "../components/AuthIcons";
 import LanguageSwitcher from "../components/LanguageSwitcher";
+import { LIMITS } from "../utils/inputLimits";
 
 export default function AcceptInvite() {
   const { t } = useTranslation("acceptInvite");
@@ -26,7 +27,7 @@ export default function AcceptInvite() {
       .get(`/auth/invite/${token}`)
       .then((res) => setInvite(res.data.data))
       .catch((err) => setLoadError(err.response?.data?.message || t("invalidInvite")));
-  }, [token]);
+  }, [token, t]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -86,6 +87,7 @@ export default function AcceptInvite() {
                     </span>
                     <input
                       value={displayName}
+                      maxLength={LIMITS.displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
                       placeholder={t("displayNamePlaceholder")}
                       aria-label={t("displayNamePlaceholder")}
@@ -100,6 +102,8 @@ export default function AcceptInvite() {
                     <input
                       type={showPassword ? "text" : "password"}
                       value={password}
+                      minLength={LIMITS.newPasswordMin}
+                      maxLength={LIMITS.newPasswordMax}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder={t("passwordPlaceholder")}
                       aria-label={t("passwordLabel")}

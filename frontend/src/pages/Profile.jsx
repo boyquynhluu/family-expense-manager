@@ -7,11 +7,13 @@ import client from "../api/client";
 import { LogoutIcon, TrashIcon } from "../components/AppIcons";
 import { EyeIcon, EyeOffIcon } from "../components/AuthIcons";
 import Pagination from "../components/Pagination";
+import TwoFactorSetupModal from "../components/TwoFactorSetupModal";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
 import { formatServerDateTime, truncate } from "../utils/format";
 import { clearTokens } from "../utils/tokenStorage";
+import { LIMITS } from "../utils/inputLimits";
 
 // The stored value is always this fixed Vietnamese word regardless of UI language —
 // only the displayed label is translated (see relationshipLabelFor below) — otherwise
@@ -164,6 +166,7 @@ export default function Profile() {
   const [twoFactorCode, setTwoFactorCode] = useState("");
   const [twoFactorError, setTwoFactorError] = useState("");
   const [confirmingTwoFactor, setConfirmingTwoFactor] = useState(false);
+  const [startingTwoFactor, setStartingTwoFactor] = useState(false);
   const [recoveryCodes, setRecoveryCodes] = useState(null);
   const [disablingTwoFactor, setDisablingTwoFactor] = useState(false);
   const [disablePassword, setDisablePassword] = useState("");
@@ -223,6 +226,7 @@ export default function Profile() {
   }
 
   async function handleStartTwoFactorSetup() {
+    setStartingTwoFactor(true);
     try {
       const res = await client.post("/auth/2fa/setup");
       const { secret, otpAuthUri } = res.data.data;
@@ -232,6 +236,8 @@ export default function Profile() {
       setTwoFactorError("");
     } catch (err) {
       toast.error(err.response?.data?.message || t("twoFactorSetupStartFailed"));
+    } finally {
+      setStartingTwoFactor(false);
     }
   }
 
@@ -457,6 +463,7 @@ export default function Profile() {
         <input
           type="password"
           value={value}
+          maxLength={LIMITS.password}
           onChange={(e) => onChange(e.target.value)}
           autoComplete="current-password"
           required
@@ -470,6 +477,7 @@ export default function Profile() {
         </span>
         <input
           value={value}
+          maxLength={LIMITS.totpCode}
           onChange={(e) => onChange(e.target.value)}
           placeholder={t("sixDigitCodePlaceholder")}
           inputMode="numeric"
@@ -501,7 +509,7 @@ export default function Profile() {
               {t("displayNameLabel")}
               <span className="required-mark" aria-hidden="true"> *</span>
             </span>
-            <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
+            <input value={displayName} maxLength={LIMITS.displayName} onChange={(e) => setDisplayName(e.target.value)} required />
           </label>
           <label className="field">
             {t("relationshipLabel")}
@@ -542,6 +550,7 @@ export default function Profile() {
                 <input
                   type={showCurrentPassword ? "text" : "password"}
                   value={currentPassword}
+                  maxLength={LIMITS.password}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   required
                 />
@@ -564,6 +573,8 @@ export default function Profile() {
                 <input
                   type={showNewPassword ? "text" : "password"}
                   value={newPassword}
+                  minLength={LIMITS.newPasswordMin}
+                  maxLength={LIMITS.newPasswordMax}
                   onChange={(e) => setNewPassword(e.target.value)}
                   minLength={8}
                   required
@@ -601,6 +612,7 @@ export default function Profile() {
               <input
                 type="email"
                 value={newEmail}
+                maxLength={LIMITS.email}
                 onChange={(e) => setNewEmail(e.target.value)}
                 placeholder={t("emailPlaceholderExample")}
                 required
@@ -624,7 +636,7 @@ export default function Profile() {
                 {t("familyNameLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <input value={familyName} onChange={(e) => setFamilyName(e.target.value)} maxLength={100} required />
+              <input value={familyName} onChange={(e) => setFamilyName(e.target.value)} maxLength={LIMITS.familyName} required />
             </label>
             <button type="submit" disabled={renamingFamily || !familyName.trim()}>
               {renamingFamily ? t("common:saving") : t("renameFamilyButton")}
@@ -700,6 +712,7 @@ export default function Profile() {
                 <input
                   type="email"
                   value={inviteEmail}
+                  maxLength={LIMITS.email}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   placeholder={t("emailPlaceholderExample")}
                   required
@@ -785,34 +798,6 @@ export default function Profile() {
               {t("recoveryCodesSavedButton")}
             </button>
           </>
-        ) : twoFactorSetup ? (
-          <form className="inline-form" onSubmit={handleConfirmTwoFactor}>
-            <p>{t("scanQrNotice")}</p>
-            <img src={twoFactorSetup.qrDataUrl} alt={t("qrCodeAlt")} width={200} height={200} />
-            <p>
-              {t("secretKeyLabel")} <code>{twoFactorSetup.secret}</code>
-            </p>
-            <label className="field">
-              <span>
-                {t("verificationCodeLabel")}
-                <span className="required-mark" aria-hidden="true"> *</span>
-              </span>
-              <input
-                value={twoFactorCode}
-                onChange={(e) => setTwoFactorCode(e.target.value)}
-                placeholder={t("sixDigitCodePlaceholder")}
-                autoFocus
-                required
-              />
-            </label>
-            <button type="submit" disabled={confirmingTwoFactor}>
-              {confirmingTwoFactor ? t("confirmingTwoFactorLoading") : t("confirmAndEnableButton")}
-            </button>
-            <button type="button" onClick={() => setTwoFactorSetup(null)}>
-              {t("common:cancel")}
-            </button>
-            {twoFactorError && <p className="error-text">{twoFactorError}</p>}
-          </form>
         ) : profile.totpEnabled ? (
           disablingTwoFactor ? (
             <form className="inline-form" onSubmit={handleDisableTwoFactor}>
@@ -824,6 +809,7 @@ export default function Profile() {
                 <input
                   type={hasPassword ? "password" : "text"}
                   value={disablePassword}
+                  maxLength={hasPassword ? LIMITS.password : LIMITS.twoFactorCode}
                   onChange={(e) => setDisablePassword(e.target.value)}
                   placeholder={hasPassword ? undefined : t("codeOrRecoveryPlaceholder")}
                   autoComplete={hasPassword ? "current-password" : "one-time-code"}
@@ -849,12 +835,22 @@ export default function Profile() {
         ) : (
           <>
             <p>{t("twoFactorStatusPrefix")} <strong>{t("disabledWord")}</strong> {t("twoFactorStatusDisabledSuffix")}</p>
-            <button type="button" onClick={handleStartTwoFactorSetup}>
-              {t("enableTwoFactorButton")}
+            <button type="button" onClick={handleStartTwoFactorSetup} disabled={startingTwoFactor}>
+              {startingTwoFactor ? t("startingTwoFactorLoading") : t("enableTwoFactorButton")}
             </button>
           </>
         )}
       </div>
+
+      <TwoFactorSetupModal
+        setup={twoFactorSetup}
+        code={twoFactorCode}
+        onCodeChange={setTwoFactorCode}
+        onSubmit={handleConfirmTwoFactor}
+        onClose={() => setTwoFactorSetup(null)}
+        confirming={confirmingTwoFactor}
+        error={twoFactorError}
+      />
 
       <div className="section-card">
         <h2>{t("exportDataTitle")}</h2>

@@ -40,6 +40,10 @@ public class RefreshToken {
     @Column(name = "last_used_at")
     private LocalDateTime lastUsedAt;
 
+    /** When /refresh rotated this token away; null if it was never rotated (still active, or revoked by logout/admin). */
+    @Column(name = "rotated_at")
+    private LocalDateTime rotatedAt;
+
     public Long getId() {
         return id;
     }
@@ -110,5 +114,13 @@ public class RefreshToken {
 
     public void setLastUsedAt(LocalDateTime lastUsedAt) {
         this.lastUsedAt = lastUsedAt;
+    }
+
+    public LocalDateTime getRotatedAt() {
+        return rotatedAt;
+    }
+
+    public void setRotatedAt(LocalDateTime rotatedAt) {
+        this.rotatedAt = rotatedAt;
     }
 }

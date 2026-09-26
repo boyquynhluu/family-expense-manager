@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -26,6 +27,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -52,6 +54,20 @@ class WalletTransferServiceTest {
     @BeforeEach
     void setUpDefaultBalance() {
         lenient().when(walletService.currentBalanceOf(any())).thenReturn(new BigDecimal("999999999"));
+    }
+
+    @Test
+    void create_locksTheSourceWallet_beforeReadingItsBalance() {
+        Wallet from = wallet(1L, 7L, "VND");
+        when(walletService.requireOwnedByFamily(1L, 7L)).thenReturn(from);
+        when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "VND"));
+
+        service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "150000"));
+
+        // Otherwise two concurrent transfers could both read the same balance and together overdraw it.
+        InOrder order = inOrder(walletService);
+        order.verify(walletService).lockForUpdate(1L);
+        order.verify(walletService).currentBalanceOf(from);
     }
 
     @Test

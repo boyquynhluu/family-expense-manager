@@ -1877,3 +1877,261 @@ select:disabled:focus {
     max-height: none;
   }
 }
+
+/* ---------- Modal (components/Modal.jsx) ---------- */
+/* Above the sidebar/header (max z-index 50) but below react-hot-toast (9999), so a toast fired
+   from inside a dialog — e.g. "secret key copied" — still shows on top of it. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(17, 24, 39, 0.55);
+  backdrop-filter: blur(2px);
+  animation: modal-fade-in 0.15s ease-out;
+}
+
+.modal-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  max-height: calc(100vh - 32px);
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(17, 24, 39, 0.25);
+  outline: none;
+  animation: modal-pop-in 0.18s ease-out;
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+  padding: 1.25rem 1.5rem 1rem;
+  border-bottom: 1px solid #f1f2f5;
+}
+
+.modal-header-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.modal-header-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.modal-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.modal-header-text h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #111827;
+}
+
+.modal-header-text p {
+  margin: 0.3rem 0 0;
+  font-size: 0.87rem;
+  line-height: 1.45;
+  color: #6b7280;
+}
+
+.modal-close {
+  display: flex;
+  flex-shrink: 0;
+  padding: 0.35rem;
+  border-radius: 8px;
+  background: transparent;
+  color: #6b7280;
+}
+
+.modal-close:hover:not(:disabled) {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.modal-body {
+  padding: 1.25rem 1.5rem;
+  overflow-y: auto;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  padding: 0.9rem 1.5rem;
+  border-top: 1px solid #f1f2f5;
+  background: #fafafb;
+  border-radius: 0 0 16px 16px;
+}
+
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes modal-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop,
+  .modal-dialog {
+    animation: none;
+  }
+}
+
+/* ---------- 2FA setup dialog (components/TwoFactorSetupModal.jsx) ---------- */
+.two-factor-step {
+  display: flex;
+  gap: 0.9rem;
+}
+
+.two-factor-step + .two-factor-step {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px dashed #e5e7eb;
+}
+
+.two-factor-step-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #4f46e5;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.two-factor-step-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.two-factor-step-content h3 {
+  margin: 0.2rem 0 0.25rem;
+  font-size: 0.98rem;
+  color: #111827;
+}
+
+.two-factor-hint {
+  display: block;
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: #6b7280;
+}
+
+.two-factor-scan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.1rem;
+}
+
+.two-factor-qr {
+  box-sizing: content-box;
+  padding: 0.5rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.two-factor-manual {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 180px;
+}
+
+.two-factor-manual .two-factor-hint {
+  margin: 0;
+}
+
+.two-factor-secret {
+  padding: 0.55rem 0.7rem;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  background: #f9fafb;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+  color: #111827;
+  word-break: break-all;
+  user-select: all;
+}
+
+.two-factor-copy {
+  align-self: flex-start;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.82rem;
+}
+
+.two-factor-code-input {
+  width: 100%;
+  max-width: 240px;
+  padding: 0.6rem 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 1.5rem;
+  letter-spacing: 0.45em;
+  text-align: center;
+}
+
+.two-factor-code-input:focus {
+  outline: none;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.18);
+}
+
+.two-factor-code-input::placeholder {
+  color: #d1d5db;
+}
+
+.two-factor-step-content .error-text {
+  margin: 0.6rem 0 0;
+  font-size: 0.87rem;
+}
+
+@media (max-width: 520px) {
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .two-factor-scan {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .two-factor-qr {
+    align-self: center;
+  }
+
+  .two-factor-code-input {
+    max-width: none;
+  }
+}

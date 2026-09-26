@@ -29,6 +29,8 @@ import com.family.expensemanager.auth.dto.TwoFactorConfirmResponse;
 import com.family.expensemanager.auth.dto.TwoFactorSetupResponse;
 import com.family.expensemanager.auth.dto.UpdateProfileRequest;
 import com.family.expensemanager.auth.security.LoginAttemptStore;
+import com.family.expensemanager.auth.security.PasswordResetTokenCache;
+import com.family.expensemanager.auth.security.SessionSecurityGuard;
 import com.family.expensemanager.auth.security.TotpSecretCipher;
 import com.family.expensemanager.auth.security.TotpService;
 import com.family.expensemanager.auth.security.TwoFactorChallengeStore;
@@ -71,6 +73,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -104,6 +107,10 @@ class AuthServiceTest {
     @Mock
     private LoginAttemptStore loginAttemptStore;
     @Mock
+    private SessionSecurityGuard sessionSecurityGuard;
+    @Mock
+    private PasswordResetTokenCache passwordResetTokenCache;
+    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     private final TotpSecretCipher totpSecretCipher =
@@ -127,7 +134,10 @@ class AuthServiceTest {
         authService = new AuthService(
                 familyDao, userDao, refreshTokenDao, familyInviteDao, familyMembershipDao, twoFactorRecoveryCodeDao,
                 passwordEncoder, jwtUtil, revokedSessionStore, totpService, twoFactorChallengeStore, loginAttemptStore,
-                totpSecretCipher, messages, eventPublisher, 15, 7, 24, 1, 72);
+                sessionSecurityGuard, passwordResetTokenCache, totpSecretCipher, messages, eventPublisher,
+                15, 7, 24, 1, 72);
+        // The per-user reset-email slot is free unless a test says otherwise.
+        lenient().when(passwordResetTokenCache.tryAcquireEmailSlot(any(), any())).thenReturn(true);
     }
 
     @Test
@@ -201,7 +211,7 @@ class AuthServiceTest {
     @Test
     void acceptInvite_notifiesSystemAdmins_whenInviteCreatesNewAccount() {
         FamilyInvite invite = validInvite();
-        when(familyInviteDao.selectByToken("tok")).thenReturn(Optional.of(invite));
+        when(familyInviteDao.selectByToken(sha256("tok"))).thenReturn(Optional.of(invite));
         when(userDao.selectByEmail("invitee@b.com")).thenReturn(Optional.empty());
         when(passwordEncoder.encode("password1")).thenReturn("hashed");
         Family family = new Family();
@@ -232,9 +242,9 @@ class AuthServiceTest {
     @Test
     void verifyEmail_activatesUser_whenTokenValid() {
         User user = new User();
-        user.setVerificationToken("tok");
+        user.setVerificationToken(sha256("tok"));
         user.setVerificationTokenExpiresAt(LocalDateTime.now().plusHours(1));
-        when(userDao.selectByVerificationToken("tok")).thenReturn(Optional.of(user));
+        when(userDao.selectByVerificationToken(sha256("tok"))).thenReturn(Optional.of(user));
 
         authService.verifyEmail("tok");
 
@@ -246,9 +256,9 @@ class AuthServiceTest {
     @Test
     void verifyEmail_throwsBadRequest_whenTokenExpired() {
         User user = new User();
-        user.setVerificationToken("tok");
+        user.setVerificationToken(sha256("tok"));
         user.setVerificationTokenExpiresAt(LocalDateTime.now().minusHours(1));
-        when(userDao.selectByVerificationToken("tok")).thenReturn(Optional.of(user));
+        when(userDao.selectByVerificationToken(sha256("tok"))).thenReturn(Optional.of(user));
 
         assertThatThrownBy(() -> authService.verifyEmail("tok")).isInstanceOf(BadRequestException.class);
         verify(userDao, never()).update(any());
@@ -256,7 +266,7 @@ class AuthServiceTest {
 
     @Test
     void verifyEmail_throwsBadRequest_whenTokenUnknown() {
-        when(userDao.selectByVerificationToken("bad")).thenReturn(Optional.empty());
+        when(userDao.selectByVerificationToken(sha256("bad"))).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.verifyEmail("bad")).isInstanceOf(BadRequestException.class);
     }
@@ -318,14 +328,17 @@ class AuthServiceTest {
     }
 
     @Test
-    void login_throwsUnauthorized_whenOAuth2OnlyAccount() {
+    void login_throwsUnauthorized_withTheWrongPasswordMessage_whenOAuth2OnlyAccount() {
         User user = activeLocalUser();
         user.setPasswordHash(null);
         user.setProvider("GOOGLE");
         when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(user));
 
+        // Same answer as an unknown email / wrong password — must not reveal the account or its provider.
         assertThatThrownBy(() -> authService.login(new LoginRequest("a@b.com", "password1"), null, null))
-                .isInstanceOf(UnauthorizedException.class);
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("Email hoặc mật khẩu không đúng");
+        verify(loginAttemptStore).recordFailure("a@b.com");
     }
 
     @Test
@@ -388,7 +401,113 @@ class AuthServiceTest {
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
         verify(refreshTokenDao, never()).update(any());
+        verify(refreshTokenDao, never()).rotateById(any(), any(), any());
         verify(refreshTokenDao, never()).insert(any());
+    }
+
+    @Test
+    void refresh_revokesEveryOtherSession_whenATokenRotatedLongAgoIsReplayed() {
+        RefreshToken stored = refreshToken(3L, 1L);
+        stored.setRevoked(true);
+        stored.setRotatedAt(LocalDateTime.now().minusMinutes(10));
+        when(refreshTokenDao.selectByTokenHash(sha256("stolen-refresh"))).thenReturn(Optional.of(stored));
+
+        assertThatThrownBy(() -> authService.refresh(new RefreshRequest("stolen-refresh"), null, null))
+                .isInstanceOf(UnauthorizedException.class);
+
+        // Via the separate SessionSecurityGuard bean (its own transaction), not refreshTokenDao directly —
+        // see the comment at the call site for why: this method's own transaction is about to roll back.
+        verify(sessionSecurityGuard).revokeAllSessionsImmediately(1L);
+        verify(refreshTokenDao, never()).revokeAllByUserId(any());
+        verify(userDao, never()).selectById(any());
+        verify(refreshTokenDao, never()).insert(any());
+    }
+
+    @Test
+    void refresh_rejectsButKeepsSessions_whenATokenRotatedMomentsAgoIsReplayed() {
+        // Two tabs sharing one refresh token (localStorage) racing to refresh — not a theft.
+        RefreshToken stored = refreshToken(3L, 1L);
+        stored.setRevoked(true);
+        stored.setRotatedAt(LocalDateTime.now().minusSeconds(5));
+        when(refreshTokenDao.selectByTokenHash(sha256("raced-refresh"))).thenReturn(Optional.of(stored));
+
+        assertThatThrownBy(() -> authService.refresh(new RefreshRequest("raced-refresh"), null, null))
+                .isInstanceOf(UnauthorizedException.class);
+
+        verify(sessionSecurityGuard, never()).revokeAllSessionsImmediately(any());
+        verify(refreshTokenDao, never()).insert(any());
+    }
+
+    @Test
+    void refresh_rejectsButKeepsSessions_whenATokenRevokedByLogoutIsReplayed() {
+        // "Log out this device" from another session must not also kick out the session that did it.
+        RefreshToken stored = refreshToken(3L, 1L);
+        stored.setRevoked(true);
+        when(refreshTokenDao.selectByTokenHash(sha256("logged-out-refresh"))).thenReturn(Optional.of(stored));
+
+        assertThatThrownBy(() -> authService.refresh(new RefreshRequest("logged-out-refresh"), null, null))
+                .isInstanceOf(UnauthorizedException.class);
+
+        verify(sessionSecurityGuard, never()).revokeAllSessionsImmediately(any());
+        verify(refreshTokenDao, never()).insert(any());
+    }
+
+    @Test
+    void refresh_rejectsExpiredToken_withoutRevokingOtherSessions() {
+        RefreshToken stored = refreshToken(3L, 1L);
+        stored.setExpiresAt(java.time.LocalDateTime.now().minusMinutes(1));
+        when(refreshTokenDao.selectByTokenHash(sha256("expired-refresh"))).thenReturn(Optional.of(stored));
+
+        assertThatThrownBy(() -> authService.refresh(new RefreshRequest("expired-refresh"), null, null))
+                .isInstanceOf(UnauthorizedException.class);
+
+        verify(sessionSecurityGuard, never()).revokeAllSessionsImmediately(any());
+        verify(refreshTokenDao, never()).revokeAllByUserId(any());
+        verify(userDao, never()).selectById(any());
+    }
+
+    @Test
+    void refresh_throwsUnauthorized_whenAccountNotYetVerified() {
+        User user = activeLocalUser();
+        user.setActive(false);
+        RefreshToken stored = refreshToken(3L, 1L);
+        when(refreshTokenDao.selectByTokenHash(sha256("raw-refresh"))).thenReturn(Optional.of(stored));
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.refresh(new RefreshRequest("raw-refresh"), null, null))
+                .isInstanceOf(UnauthorizedException.class);
+        verify(refreshTokenDao, never()).rotateById(any(), any(), any());
+        verify(refreshTokenDao, never()).insert(any());
+    }
+
+    @Test
+    void refresh_rejectsSecondConcurrentCall_whenTheTokenWasAlreadyClaimed() {
+        User user = activeLocalUser();
+        RefreshToken stored = refreshToken(3L, 1L);
+        when(refreshTokenDao.selectByTokenHash(sha256("raw-refresh"))).thenReturn(Optional.of(stored));
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        // Simulates another request winning the race and revoking this row first.
+        when(refreshTokenDao.rotateById(eq(3L), eq(1L), any())).thenReturn(0);
+
+        assertThatThrownBy(() -> authService.refresh(new RefreshRequest("raw-refresh"), null, null))
+                .isInstanceOf(UnauthorizedException.class);
+        verify(refreshTokenDao, never()).insert(any());
+    }
+
+    @Test
+    void refresh_issuesNewTokens_andClaimsTheOldOneAtomically_whenEverythingIsValid() {
+        User user = activeLocalUser();
+        RefreshToken stored = refreshToken(3L, 1L);
+        when(refreshTokenDao.selectByTokenHash(sha256("raw-refresh"))).thenReturn(Optional.of(stored));
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(refreshTokenDao.rotateById(eq(3L), eq(1L), any())).thenReturn(1);
+        when(jwtUtil.generateToken(any(), any(), anyLong())).thenReturn("access-token");
+
+        var response = authService.refresh(new RefreshRequest("raw-refresh"), null, null);
+
+        assertThat(response.accessToken()).isEqualTo("access-token");
+        verify(refreshTokenDao).rotateById(eq(3L), eq(1L), any());
+        verify(refreshTokenDao).insert(any());
     }
 
     @Test
@@ -424,6 +543,36 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.processOAuth2User("GOOGLE", "g-1", "a@b.com", "An"))
                 .isInstanceOf(OAuth2AuthenticationException.class);
         verify(userDao, never()).update(any());
+    }
+
+    @Test
+    void processOAuth2User_dropsRegistrantsPassword_whenLinkingToAnUnverifiedAccount() {
+        User pending = activeLocalUser();
+        pending.setActive(false);
+        pending.setVerificationToken(sha256("tok"));
+        pending.setVerificationTokenExpiresAt(LocalDateTime.now().plusHours(1));
+        when(userDao.selectByProviderAndProviderId("GOOGLE", "g-1")).thenReturn(Optional.empty());
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(pending));
+
+        User linked = authService.processOAuth2User("GOOGLE", "g-1", "a@b.com", "An");
+
+        assertThat(linked.getActive()).isTrue();
+        assertThat(linked.getPasswordHash()).isNull();
+        assertThat(linked.getVerificationToken()).isNull();
+        assertThat(linked.getProvider()).isEqualTo("GOOGLE");
+        verify(userDao).update(pending);
+    }
+
+    @Test
+    void processOAuth2User_keepsPassword_whenLinkingToAnAlreadyVerifiedAccount() {
+        User verified = activeLocalUser();
+        String passwordHash = verified.getPasswordHash();
+        when(userDao.selectByProviderAndProviderId("GOOGLE", "g-1")).thenReturn(Optional.empty());
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(verified));
+
+        User linked = authService.processOAuth2User("GOOGLE", "g-1", "a@b.com", "An");
+
+        assertThat(linked.getPasswordHash()).isEqualTo(passwordHash).isNotNull();
     }
 
     @Test
@@ -485,9 +634,9 @@ class AuthServiceTest {
     @Test
     void resetPassword_updatesPasswordAndClearsToken_whenTokenValid() {
         User user = activeLocalUser();
-        user.setResetPasswordToken("tok");
+        user.setResetPasswordToken(sha256("tok"));
         user.setResetPasswordTokenExpiresAt(LocalDateTime.now().plusHours(1));
-        when(userDao.selectByResetPasswordToken("tok")).thenReturn(Optional.of(user));
+        when(userDao.selectByResetPasswordToken(sha256("tok"))).thenReturn(Optional.of(user));
         when(passwordEncoder.encode("newpassword1")).thenReturn("new-hashed");
 
         authService.resetPassword(new ResetPasswordRequest("tok", "newpassword1"));
@@ -495,15 +644,48 @@ class AuthServiceTest {
         assertThat(user.getPasswordHash()).isEqualTo("new-hashed");
         assertThat(user.getResetPasswordToken()).isNull();
         verify(userDao).update(user);
+        verify(passwordResetTokenCache).evict(1L);
         verify(loginAttemptStore).reset("a@b.com");
+        verify(refreshTokenDao).selectActiveByUserId(1L);
+    }
+
+    @Test
+    void resetPassword_revokesEverySessionAndBlocksTheirAccessTokens() {
+        User user = activeLocalUser();
+        user.setResetPasswordToken(sha256("tok"));
+        user.setResetPasswordTokenExpiresAt(LocalDateTime.now().plusHours(1));
+        when(userDao.selectByResetPasswordToken(sha256("tok"))).thenReturn(Optional.of(user));
+        when(refreshTokenDao.selectActiveByUserId(1L)).thenReturn(List.of(refreshToken(2L, 1L)));
+
+        authService.resetPassword(new ResetPasswordRequest("tok", "newpassword1"));
+
+        verify(refreshTokenDao).revokeAllByUserId(1L);
+        verify(revokedSessionStore).markRevoked(eq(2L), anyLong());
+    }
+
+    @Test
+    void changePassword_revokesEveryOtherSession_butKeepsTheCurrentOne() {
+        User user = activeLocalUser();
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("current", "hashed")).thenReturn(true);
+        when(passwordEncoder.encode("newpassword1")).thenReturn("new-hashed");
+        when(refreshTokenDao.selectActiveByUserId(1L))
+                .thenReturn(List.of(refreshToken(2L, 1L), refreshToken(7L, 1L)));
+
+        authService.changePassword(1L, 2L, new ChangePasswordRequest("current", "newpassword1"));
+
+        assertThat(user.getPasswordHash()).isEqualTo("new-hashed");
+        verify(refreshTokenDao).revokeAllByUserIdExcept(1L, 2L);
+        verify(revokedSessionStore).markRevoked(eq(7L), anyLong());
+        verify(revokedSessionStore, never()).markRevoked(eq(2L), anyLong());
     }
 
     @Test
     void resetPassword_throwsBadRequest_whenTokenExpired() {
         User user = activeLocalUser();
-        user.setResetPasswordToken("tok");
+        user.setResetPasswordToken(sha256("tok"));
         user.setResetPasswordTokenExpiresAt(LocalDateTime.now().minusMinutes(1));
-        when(userDao.selectByResetPasswordToken("tok")).thenReturn(Optional.of(user));
+        when(userDao.selectByResetPasswordToken(sha256("tok"))).thenReturn(Optional.of(user));
 
         assertThatThrownBy(() -> authService.resetPassword(new ResetPasswordRequest("tok", "newpassword1")))
                 .isInstanceOf(BadRequestException.class);
@@ -516,7 +698,7 @@ class AuthServiceTest {
         when(userDao.selectById(1L)).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("wrong", "hashed")).thenReturn(false);
 
-        assertThatThrownBy(() -> authService.changePassword(1L, new ChangePasswordRequest("wrong", "newpassword1")))
+        assertThatThrownBy(() -> authService.changePassword(1L, 2L, new ChangePasswordRequest("wrong", "newpassword1")))
                 .isInstanceOf(UnauthorizedException.class);
     }
 
@@ -527,7 +709,7 @@ class AuthServiceTest {
         user.setProvider("GOOGLE");
         when(userDao.selectById(1L)).thenReturn(Optional.of(user));
 
-        assertThatThrownBy(() -> authService.changePassword(1L, new ChangePasswordRequest("x", "newpassword1")))
+        assertThatThrownBy(() -> authService.changePassword(1L, 2L, new ChangePasswordRequest("x", "newpassword1")))
                 .isInstanceOf(BadRequestException.class);
     }
 
@@ -556,6 +738,9 @@ class AuthServiceTest {
 
         verify(familyMembershipDao).delete(membership);
         verify(refreshTokenDao).deleteByUserId(5L);
+        // Same cleanup as account deletion — these rows reference the user and would block the delete.
+        verify(twoFactorRecoveryCodeDao).deleteByUserId(5L);
+        verify(familyInviteDao).deleteByInvitedByUserId(5L);
         verify(userDao).delete(member);
         assertMemberEventPublished(FamilyMemberEvent.MEMBER_REMOVED, 1L, 5L, "An");
     }
@@ -570,6 +755,7 @@ class AuthServiceTest {
         when(familyMembershipDao.selectByUserIdAndFamilyId(5L, 1L)).thenReturn(Optional.of(membership));
         when(userDao.selectById(5L)).thenReturn(Optional.of(member));
         when(familyMembershipDao.selectByUserId(5L)).thenReturn(List.of(other));
+        when(refreshTokenDao.selectActiveByUserId(5L)).thenReturn(List.of(refreshToken(8L, 5L)));
 
         authService.removeMember(1L, 1L, 5L);
 
@@ -578,6 +764,9 @@ class AuthServiceTest {
         assertThat(member.getFamilyId()).isEqualTo(2L);
         assertThat(member.getRole()).isEqualTo("OWNER");
         verify(userDao).update(member);
+        // Their live JWTs still say familyId=1 — blocked now, but not logged out (refresh tokens untouched).
+        verify(revokedSessionStore).markRevoked(eq(8L), anyLong());
+        verify(refreshTokenDao, never()).revokeAllByUserId(any());
     }
 
     @Test
@@ -687,7 +876,7 @@ class AuthServiceTest {
 
     @Test
     void acceptInvite_throwsBadRequest_whenTokenUnknown() {
-        when(familyInviteDao.selectByToken("bad")).thenReturn(Optional.empty());
+        when(familyInviteDao.selectByToken(sha256("bad"))).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.acceptInvite("bad", new AcceptInviteRequest("An", "password1")))
                 .isInstanceOf(BadRequestException.class);
@@ -697,7 +886,7 @@ class AuthServiceTest {
     void acceptInvite_throwsBadRequest_whenAlreadyAccepted() {
         FamilyInvite invite = validInvite();
         invite.setAcceptedAt(LocalDateTime.now());
-        when(familyInviteDao.selectByToken("tok")).thenReturn(Optional.of(invite));
+        when(familyInviteDao.selectByToken(sha256("tok"))).thenReturn(Optional.of(invite));
 
         assertThatThrownBy(() -> authService.acceptInvite("tok", new AcceptInviteRequest("An", "password1")))
                 .isInstanceOf(BadRequestException.class);
@@ -707,7 +896,7 @@ class AuthServiceTest {
     void acceptInvite_throwsBadRequest_whenExpired() {
         FamilyInvite invite = validInvite();
         invite.setExpiresAt(LocalDateTime.now().minusHours(1));
-        when(familyInviteDao.selectByToken("tok")).thenReturn(Optional.of(invite));
+        when(familyInviteDao.selectByToken(sha256("tok"))).thenReturn(Optional.of(invite));
 
         assertThatThrownBy(() -> authService.acceptInvite("tok", new AcceptInviteRequest("An", "password1")))
                 .isInstanceOf(BadRequestException.class);
@@ -716,7 +905,7 @@ class AuthServiceTest {
     @Test
     void acceptInvite_createsMemberUser_andMarksInviteAccepted_whenEmailHasNoAccountYet() {
         FamilyInvite invite = validInvite();
-        when(familyInviteDao.selectByToken("tok")).thenReturn(Optional.of(invite));
+        when(familyInviteDao.selectByToken(sha256("tok"))).thenReturn(Optional.of(invite));
         when(userDao.selectByEmail("invitee@b.com")).thenReturn(Optional.empty());
         when(passwordEncoder.encode("password1")).thenReturn("hashed");
 
@@ -736,7 +925,7 @@ class AuthServiceTest {
     @Test
     void acceptInvite_throwsBadRequest_whenNewAccountMissingDisplayNameOrPassword() {
         FamilyInvite invite = validInvite();
-        when(familyInviteDao.selectByToken("tok")).thenReturn(Optional.of(invite));
+        when(familyInviteDao.selectByToken(sha256("tok"))).thenReturn(Optional.of(invite));
         when(userDao.selectByEmail("invitee@b.com")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.acceptInvite("tok", new AcceptInviteRequest("", "password1")))
@@ -753,7 +942,7 @@ class AuthServiceTest {
         FamilyInvite invite = validInvite();
         User existing = activeLocalUser();
         existing.setId(30L);
-        when(familyInviteDao.selectByToken("tok")).thenReturn(Optional.of(invite));
+        when(familyInviteDao.selectByToken(sha256("tok"))).thenReturn(Optional.of(invite));
         when(userDao.selectByEmail("invitee@b.com")).thenReturn(Optional.of(existing));
         when(familyMembershipDao.selectByUserIdAndFamilyId(30L, invite.getFamilyId())).thenReturn(Optional.empty());
 
@@ -774,7 +963,7 @@ class AuthServiceTest {
         FamilyInvite invite = validInvite();
         User existing = activeLocalUser();
         existing.setId(30L);
-        when(familyInviteDao.selectByToken("tok")).thenReturn(Optional.of(invite));
+        when(familyInviteDao.selectByToken(sha256("tok"))).thenReturn(Optional.of(invite));
         when(userDao.selectByEmail("invitee@b.com")).thenReturn(Optional.of(existing));
         when(familyMembershipDao.selectByUserIdAndFamilyId(30L, invite.getFamilyId()))
                 .thenReturn(Optional.of(membership(30L, invite.getFamilyId(), "MEMBER")));
@@ -1173,6 +1362,8 @@ class AuthServiceTest {
         when(familyMembershipDao.selectByUserIdAndFamilyId(5L, 1L)).thenReturn(Optional.of(targetMembership));
         when(userDao.selectById(1L)).thenReturn(Optional.of(caller));
         when(userDao.selectById(5L)).thenReturn(Optional.of(target));
+        // The caller's other device, still holding an access token with role=OWNER.
+        when(refreshTokenDao.selectActiveByUserId(1L)).thenReturn(List.of(refreshToken(9L, 1L)));
 
         var response = authService.transferOwnership(1L, 1L, 7L, new TransferOwnershipRequest(5L), null, null);
 
@@ -1185,6 +1376,7 @@ class AuthServiceTest {
         verify(userDao).update(target);
         verify(userDao).update(caller);
         verify(revokedSessionStore).markRevoked(7L, 15 * 60 * 1000L);
+        verify(revokedSessionStore).markRevoked(9L, 15 * 60 * 1000L);
         assertThat(response.refreshToken()).isNotBlank();
     }
 
@@ -1273,6 +1465,7 @@ class AuthServiceTest {
     @Test
     void resendInvite_issuesNewTokenAndExtendsExpiry_thenPublishesEvent() {
         FamilyInvite invite = validInvite();
+        String oldTokenHash = invite.getToken();
         invite.setExpiresAt(LocalDateTime.now().minusHours(1));
         Family family = new Family();
         family.setId(1L);
@@ -1285,13 +1478,14 @@ class AuthServiceTest {
         var response = authService.resendInvite(1L, 1L, 1L);
 
         assertThat(response.message()).contains("invitee@b.com");
-        assertThat(invite.getToken()).isNotBlank().isNotEqualTo("tok");
+        // FAMILY_INVITES.token only ever holds the hash — the raw value only ever appears in the event.
+        assertThat(invite.getToken()).isNotBlank().isNotEqualTo(oldTokenHash);
         assertThat(invite.getExpiresAt()).isAfter(LocalDateTime.now().plusHours(71));
         verify(familyInviteDao).update(invite);
 
         ArgumentCaptor<FamilyInviteEvent> eventCaptor = ArgumentCaptor.forClass(FamilyInviteEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
-        assertThat(eventCaptor.getValue().token()).isEqualTo(invite.getToken());
+        assertThat(sha256(eventCaptor.getValue().token())).isEqualTo(invite.getToken());
         assertThat(eventCaptor.getValue().email()).isEqualTo("invitee@b.com");
         assertThat(eventCaptor.getValue().familyName()).isEqualTo("Nhà Nguyễn");
     }
@@ -1471,15 +1665,19 @@ class AuthServiceTest {
         assertThat(response.message()).contains("new@b.com");
         assertThat(user.getEmail()).isEqualTo("a@b.com");
         assertThat(user.getPendingEmail()).isEqualTo("new@b.com");
-        assertThat(user.getPendingEmailToken()).startsWith("ec.");
+        // USERS.pending_email_token only ever holds the hash — the raw ("ec."-prefixed) value only
+        // ever appears in the event published below.
+        assertThat(user.getPendingEmailToken()).isNotBlank();
         assertThat(user.getPendingEmailExpiresAt()).isAfter(LocalDateTime.now().plusHours(23));
         verify(userDao).update(user);
 
         ArgumentCaptor<UserVerificationEvent> captor = ArgumentCaptor.forClass(UserVerificationEvent.class);
         verify(eventPublisher).publishEvent(captor.capture());
         assertThat(captor.getValue().email()).isEqualTo("new@b.com");
-        assertThat(captor.getValue().verificationToken()).isEqualTo(user.getPendingEmailToken());
-        assertThat(authService.isEmailChangeToken(user.getPendingEmailToken())).isTrue();
+        String rawToken = captor.getValue().verificationToken();
+        assertThat(rawToken).startsWith("ec.");
+        assertThat(sha256(rawToken)).isEqualTo(user.getPendingEmailToken());
+        assertThat(authService.isEmailChangeToken(rawToken)).isTrue();
     }
 
     @Test
@@ -1560,7 +1758,7 @@ class AuthServiceTest {
     @Test
     void verifyEmailChange_swapsEmail_clearsPendingFields_andRevokesEverySession() {
         User user = userWithPendingEmail(LocalDateTime.now().plusHours(1));
-        when(userDao.selectByPendingEmailToken("ec.tok")).thenReturn(Optional.of(user));
+        when(userDao.selectByPendingEmailToken(sha256("ec.tok"))).thenReturn(Optional.of(user));
         when(userDao.selectByEmail("new@b.com")).thenReturn(Optional.empty());
         when(refreshTokenDao.selectActiveByUserId(1L)).thenReturn(List.of(refreshToken(2L, 1L)));
 
@@ -1577,7 +1775,7 @@ class AuthServiceTest {
 
     @Test
     void verifyEmailChange_throwsBadRequest_whenTokenUnknown() {
-        when(userDao.selectByPendingEmailToken("ec.bad")).thenReturn(Optional.empty());
+        when(userDao.selectByPendingEmailToken(sha256("ec.bad"))).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.verifyEmailChange("ec.bad")).isInstanceOf(BadRequestException.class);
     }
@@ -1585,7 +1783,7 @@ class AuthServiceTest {
     @Test
     void verifyEmailChange_throwsBadRequest_whenExpired() {
         User user = userWithPendingEmail(LocalDateTime.now().minusMinutes(1));
-        when(userDao.selectByPendingEmailToken("ec.tok")).thenReturn(Optional.of(user));
+        when(userDao.selectByPendingEmailToken(sha256("ec.tok"))).thenReturn(Optional.of(user));
 
         assertThatThrownBy(() -> authService.verifyEmailChange("ec.tok")).isInstanceOf(BadRequestException.class);
         assertThat(user.getEmail()).isEqualTo("a@b.com");
@@ -1597,7 +1795,7 @@ class AuthServiceTest {
         User user = userWithPendingEmail(LocalDateTime.now().plusHours(1));
         User other = activeLocalUser();
         other.setId(9L);
-        when(userDao.selectByPendingEmailToken("ec.tok")).thenReturn(Optional.of(user));
+        when(userDao.selectByPendingEmailToken(sha256("ec.tok"))).thenReturn(Optional.of(user));
         when(userDao.selectByEmail("new@b.com")).thenReturn(Optional.of(other));
 
         assertThatThrownBy(() -> authService.verifyEmailChange("ec.tok")).isInstanceOf(ConflictException.class);
@@ -1752,7 +1950,7 @@ class AuthServiceTest {
     private static User userWithPendingEmail(LocalDateTime expiresAt) {
         User user = activeLocalUser();
         user.setPendingEmail("new@b.com");
-        user.setPendingEmailToken("ec.tok");
+        user.setPendingEmailToken(sha256("ec.tok"));
         user.setPendingEmailExpiresAt(expiresAt);
         return user;
     }
@@ -1804,7 +2002,7 @@ class AuthServiceTest {
         invite.setId(1L);
         invite.setFamilyId(1L);
         invite.setEmail("invitee@b.com");
-        invite.setToken("tok");
+        invite.setToken(sha256("tok"));
         invite.setInvitedByUserId(10L);
         invite.setExpiresAt(LocalDateTime.now().plusHours(1));
         invite.setCreatedAt(LocalDateTime.now());
@@ -1831,7 +2029,7 @@ class AuthServiceTest {
         user.setActive(false);
         user.setLocked(false);
         user.setProvider("LOCAL");
-        user.setVerificationToken("old-token");
+        user.setVerificationToken(sha256("old-token"));
         user.setVerificationTokenExpiresAt(LocalDateTime.now().minusDays(3));
         return user;
     }
@@ -1851,7 +2049,7 @@ class AuthServiceTest {
         assertThat(response.message()).contains("Đăng ký thành công");
         assertThat(pending.getPasswordHash()).isEqualTo("new-hash");
         assertThat(pending.getDisplayName()).isEqualTo("New Name");
-        assertThat(pending.getVerificationToken()).isNotBlank().isNotEqualTo("old-token");
+        assertThat(pending.getVerificationToken()).isNotBlank().isNotEqualTo(sha256("old-token"));
         assertThat(pending.getVerificationTokenExpiresAt()).isAfter(LocalDateTime.now());
         assertThat(pending.getActive()).isFalse();
         assertThat(family.getName()).isEqualTo("New Family");
@@ -1862,7 +2060,7 @@ class AuthServiceTest {
 
         ArgumentCaptor<UserVerificationEvent> captor = ArgumentCaptor.forClass(UserVerificationEvent.class);
         verify(eventPublisher).publishEvent(captor.capture());
-        assertThat(captor.getValue().verificationToken()).isEqualTo(pending.getVerificationToken());
+        assertThat(sha256(captor.getValue().verificationToken())).isEqualTo(pending.getVerificationToken());
     }
 
     @Test
@@ -1875,7 +2073,7 @@ class AuthServiceTest {
 
         authService.register(new RegisterRequest("F", "a@b.com", "new-password1", "New Name"));
 
-        assertThat(pending.getVerificationToken()).isEqualTo("old-token");
+        assertThat(pending.getVerificationToken()).isEqualTo(sha256("old-token"));
         assertThat(pending.getPasswordHash()).isEqualTo("new-hash");
         verify(userDao).update(pending);
         verify(eventPublisher, never()).publishEvent(any(UserVerificationEvent.class));
@@ -1911,7 +2109,7 @@ class AuthServiceTest {
         var response = authService.resendVerification(new ResendVerificationRequest("a@b.com"));
 
         assertThat(response.message()).contains("Nếu tài khoản đang chờ xác thực");
-        assertThat(pending.getVerificationToken()).isNotEqualTo("old-token");
+        assertThat(pending.getVerificationToken()).isNotEqualTo(sha256("old-token"));
         verify(userDao).update(pending);
         verify(eventPublisher).publishEvent(any(UserVerificationEvent.class));
     }
@@ -1932,7 +2130,7 @@ class AuthServiceTest {
 
         assertThat(verifiedResult.message()).isEqualTo(unknown.message());
         assertThat(freshResult.message()).isEqualTo(unknown.message());
-        assertThat(fresh.getVerificationToken()).isEqualTo("old-token");
+        assertThat(fresh.getVerificationToken()).isEqualTo(sha256("old-token"));
         verify(eventPublisher, never()).publishEvent(any(UserVerificationEvent.class));
     }
 
@@ -1986,12 +2184,13 @@ class AuthServiceTest {
         verify(userDao, never()).delete(any());
     }
 
-    private User userWithResetToken(String token, LocalDateTime expiresAt) {
+    /** USERS.reset_password_token only ever holds the hash of rawToken — see PasswordResetTokenCache. */
+    private User userWithResetToken(String rawToken, LocalDateTime expiresAt) {
         User user = new User();
         user.setId(5L);
         user.setEmail("a@b.com");
         user.setDisplayName("An");
-        user.setResetPasswordToken(token);
+        user.setResetPasswordToken(sha256(rawToken));
         user.setResetPasswordTokenExpiresAt(expiresAt);
         return user;
     }
@@ -2000,14 +2199,30 @@ class AuthServiceTest {
     void forgotPassword_reusesLiveToken_soTheLinkAlreadyEmailedKeepsWorking() {
         User user = userWithResetToken("live-token", LocalDateTime.now().plusMinutes(30));
         when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(user));
+        when(passwordResetTokenCache.get(5L)).thenReturn(Optional.of("live-token"));
 
         authService.forgotPassword(new ForgotPasswordRequest("a@b.com"));
 
-        assertThat(user.getResetPasswordToken()).isEqualTo("live-token");
+        assertThat(user.getResetPasswordToken()).isEqualTo(sha256("live-token"));
         verify(userDao, never()).update(any());
+        verify(passwordResetTokenCache, never()).put(any(), any(), any());
         ArgumentCaptor<PasswordResetEvent> captor = ArgumentCaptor.forClass(PasswordResetEvent.class);
         verify(eventPublisher).publishEvent(captor.capture());
         assertThat(captor.getValue().resetToken()).isEqualTo("live-token");
+    }
+
+    @Test
+    void forgotPassword_regeneratesToken_whenLiveButRawValueMissingFromCache() {
+        User user = userWithResetToken("live-token", LocalDateTime.now().plusMinutes(30));
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(user));
+        when(passwordResetTokenCache.get(5L)).thenReturn(Optional.empty());
+
+        authService.forgotPassword(new ForgotPasswordRequest("a@b.com"));
+
+        assertThat(user.getResetPasswordToken()).isNotBlank().isNotEqualTo(sha256("live-token"));
+        verify(userDao).update(user);
+        verify(passwordResetTokenCache).put(eq(5L), any(), any());
+        verify(eventPublisher).publishEvent(any(PasswordResetEvent.class));
     }
 
     @Test
@@ -2018,8 +2233,9 @@ class AuthServiceTest {
         var response = authService.forgotPassword(new ForgotPasswordRequest("a@b.com"));
 
         assertThat(response.message()).contains("Nếu email tồn tại");
-        assertThat(user.getResetPasswordToken()).isEqualTo("fresh-token");
+        assertThat(user.getResetPasswordToken()).isEqualTo(sha256("fresh-token"));
         verify(userDao, never()).update(any());
+        verify(passwordResetTokenCache, never()).get(any());
         verify(eventPublisher, never()).publishEvent(any(PasswordResetEvent.class));
     }
 
@@ -2030,9 +2246,25 @@ class AuthServiceTest {
 
         authService.forgotPassword(new ForgotPasswordRequest("a@b.com"));
 
-        assertThat(user.getResetPasswordToken()).isNotBlank().isNotEqualTo("old-token");
+        assertThat(user.getResetPasswordToken()).isNotBlank().isNotEqualTo(sha256("old-token"));
         assertThat(user.getResetPasswordTokenExpiresAt()).isAfter(LocalDateTime.now());
         verify(userDao).update(user);
+        verify(passwordResetTokenCache, never()).get(any());
+        verify(passwordResetTokenCache).put(eq(5L), any(), any());
         verify(eventPublisher).publishEvent(any(PasswordResetEvent.class));
+    }
+
+    @Test
+    void forgotPassword_sendsNothing_whenAnotherResetEmailWentOutWithinTheCooldown() {
+        // Live token minted 30 minutes ago (so the expiry-based check passes) but the slot is already taken.
+        User user = userWithResetToken("live-token", LocalDateTime.now().plusMinutes(30));
+        when(userDao.selectByEmail("a@b.com")).thenReturn(Optional.of(user));
+        when(passwordResetTokenCache.tryAcquireEmailSlot(eq(5L), any())).thenReturn(false);
+
+        var response = authService.forgotPassword(new ForgotPasswordRequest("a@b.com"));
+
+        assertThat(response.message()).contains("Nếu email tồn tại");
+        verify(userDao, never()).update(any());
+        verify(eventPublisher, never()).publishEvent(any(PasswordResetEvent.class));
     }
 }

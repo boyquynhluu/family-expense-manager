@@ -10,6 +10,7 @@ import { useAuth } from "../hooks/useAuth";
 import { PAGE_SIZE } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
 import { formatCurrency } from "../utils/format";
+import { LIMITS } from "../utils/inputLimits";
 
 const emptyForm = {
   walletId: "",
@@ -104,7 +105,7 @@ export default function Transactions() {
   }
 
   useEffect(() => setSelectedIds(new Set()), [filter, page]);
-  useEffect(load, [filter, page]);
+  useEffect(load, [filter, page, t]);
 
   function loadWalletsAndCategories() {
     client.get("/expenses/wallets").then((res) => {
@@ -475,6 +476,7 @@ export default function Transactions() {
               <input
                 placeholder={t("transactions:notePlaceholder")}
                 value={form.note}
+                maxLength={LIMITS.transactionNote}
                 onChange={(e) => updateField("note", e.target.value)}
               />
             </label>
@@ -597,6 +599,7 @@ export default function Transactions() {
               type="search"
               placeholder={t("transactions:searchPlaceholder")}
               value={filter.q}
+              maxLength={LIMITS.search}
               onChange={(e) => updateFilter("q", e.target.value)}
             />
           </label>

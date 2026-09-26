@@ -5,6 +5,7 @@ import { EditIcon, TrashIcon } from "../components/AppIcons";
 import SeedDefaultsButton from "../components/SeedDefaultsButton";
 import { confirmDialog } from "../utils/confirm";
 import { useAuth } from "../hooks/useAuth";
+import { LIMITS } from "../utils/inputLimits";
 
 export default function Categories() {
   const { t } = useTranslation(["common", "categories"]);
@@ -89,6 +90,7 @@ export default function Categories() {
               <input
                 placeholder={t("categories:namePlaceholder")}
                 value={name}
+                maxLength={LIMITS.categoryName}
                 onChange={(e) => setName(e.target.value)}
                 required
               />
@@ -102,7 +104,7 @@ export default function Categories() {
             </label>
             <label className="field">
               {t("categories:iconLabel")}
-              <input placeholder={t("categories:iconPlaceholder")} value={icon} onChange={(e) => setIcon(e.target.value)} />
+              <input placeholder={t("categories:iconPlaceholder")} value={icon} maxLength={LIMITS.categoryIcon} onChange={(e) => setIcon(e.target.value)} />
             </label>
             <label className="field">
               {t("categories:colorLabel")}

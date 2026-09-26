@@ -28,6 +28,10 @@ public interface WalletDao {
     @Select
     Optional<Wallet> selectById(Long id);
 
+    /** Same row as {@link #selectById}, locked until the surrounding transaction ends (serialises balance checks). */
+    @Select
+    Optional<Wallet> selectByIdForUpdate(Long id);
+
     @Select
     long countDeletedByFamilyId(Long familyId);
 

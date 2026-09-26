@@ -70,6 +70,8 @@ import com.family.expensemanager.auth.dto.TwoFactorSetupResponse;
 import com.family.expensemanager.auth.dto.UpdateProfileRequest;
 import com.family.expensemanager.auth.dto.UserProfileResponse;
 import com.family.expensemanager.auth.security.LoginAttemptStore;
+import com.family.expensemanager.auth.security.PasswordResetTokenCache;
+import com.family.expensemanager.auth.security.SessionSecurityGuard;
 import com.family.expensemanager.auth.security.TotpSecretCipher;
 import com.family.expensemanager.auth.security.TotpService;
 import com.family.expensemanager.auth.security.TwoFactorChallengeStore;
@@ -102,11 +104,15 @@ public class AuthService {
     private static final int MAX_PAGE_SIZE = 100;
 
     private static final int RECOVERY_CODE_COUNT = 8;
+    /** Thread-safe and expensive to seed — one shared instance instead of a new one per token. */
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     /** A verification email is not re-sent (and its token not rotated) while the previous one is younger than this. */
     private static final long VERIFICATION_RESEND_COOLDOWN_SECONDS = 60;
     /** Same idea for the password reset email: no second email (and the live token is reused) within this window. */
     private static final long RESET_EMAIL_COOLDOWN_SECONDS = 60;
+    /** A rotated refresh token replayed within this window is a tab race, not theft — see isReplayOfRotatedToken. */
+    private static final long ROTATION_REUSE_GRACE_SECONDS = 60;
     /** Lets the shared /verify link (built by notification-service) tell an e-mail change token from a registration token; base64url never contains '.'. */
     private static final String EMAIL_CHANGE_TOKEN_PREFIX = "ec.";
     public static final String OAUTH2_ACCOUNT_LOCKED_ERROR = "account_locked";
@@ -123,6 +129,8 @@ public class AuthService {
     private final TotpService totpService;
     private final TwoFactorChallengeStore twoFactorChallengeStore;
     private final LoginAttemptStore loginAttemptStore;
+    private final SessionSecurityGuard sessionSecurityGuard;
+    private final PasswordResetTokenCache passwordResetTokenCache;
     private final TotpSecretCipher totpSecretCipher;
     private final Messages messages;
     private final ApplicationEventPublisher eventPublisher;
@@ -144,6 +152,8 @@ public class AuthService {
                         TotpService totpService,
                         TwoFactorChallengeStore twoFactorChallengeStore,
                         LoginAttemptStore loginAttemptStore,
+                        SessionSecurityGuard sessionSecurityGuard,
+                        PasswordResetTokenCache passwordResetTokenCache,
                         TotpSecretCipher totpSecretCipher,
                         Messages messages,
                         ApplicationEventPublisher eventPublisher,
@@ -164,6 +174,8 @@ public class AuthService {
         this.totpService = totpService;
         this.twoFactorChallengeStore = twoFactorChallengeStore;
         this.loginAttemptStore = loginAttemptStore;
+        this.sessionSecurityGuard = sessionSecurityGuard;
+        this.passwordResetTokenCache = passwordResetTokenCache;
         this.totpSecretCipher = totpSecretCipher;
         this.messages = messages;
         this.eventPublisher = eventPublisher;
@@ -175,9 +187,8 @@ public class AuthService {
     }
 
     /**
-     * Register User
-     *
-     * @param request
+     * Local sign-up: creates the family, its OWNER (inactive until the emailed link is opened) and the
+     * membership. Re-registering an email that was never verified takes that pending account over instead.
      */
     public MessageResponse register(RegisterRequest request) {
         log.info("register - start, email={}", request.email());
@@ -202,7 +213,7 @@ public class AuthService {
             eventPublisher.publishEvent(new UserVerificationEvent(
                     user.getId(), user.getEmail(), user.getDisplayName(), verificationToken, Instant.now()));
 
-                    publishNewUserRegistered(user, family.getName(), NewUserRegisteredEvent.SOURCE_LOCAL, false);
+            publishNewUserRegistered(user, family.getName(), NewUserRegisteredEvent.SOURCE_LOCAL, false);
             return new MessageResponse(messages.get("auth.registerSuccess"));
         } catch (ApiException e) {
             // Business errors (e.g. 409 email already registered) keep their own status and message.
@@ -261,7 +272,7 @@ public class AuthService {
             return;
         }
         String verificationToken = generateOpaqueToken();
-        user.setVerificationToken(verificationToken);
+        user.setVerificationToken(sha256(verificationToken));
         user.setVerificationTokenExpiresAt(now.plus(verificationTokenTtl));
         userDao.update(user);
         eventPublisher.publishEvent(new UserVerificationEvent(
@@ -271,7 +282,7 @@ public class AuthService {
     public void verifyEmail(String token) {
         try {
             log.info("verifyEmail - start");
-            User user = userDao.selectByVerificationToken(token)
+            User user = userDao.selectByVerificationToken(sha256(token))
                     .orElseThrow(() -> logged(log, new BadRequestException("Token xác thực không hợp lệ")));
 
             if (user.getVerificationTokenExpiresAt() == null
@@ -304,8 +315,10 @@ public class AuthService {
             }
 
             if (user.getPasswordHash() == null) {
-                throw logged(log, new UnauthorizedException(
-                        "Tài khoản này được đăng ký qua " + user.getProvider() + ". Vui lòng đăng nhập bằng phương thức đó."));
+                // Provider-only account (Google/Facebook): answer exactly like a wrong password — naming the
+                // provider would tell anyone probing this form that the email has an account.
+                loginAttemptStore.recordFailure(email);
+                throw logged(log, new UnauthorizedException(messages.get("auth.badCredentials")));
             }
 
             if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
@@ -439,16 +452,36 @@ public class AuthService {
             RefreshToken stored = refreshTokenDao.selectByTokenHash(tokenHash)
                     .orElseThrow(() -> logged(log, new UnauthorizedException("Refresh token không hợp lệ")));
 
-            if (Boolean.TRUE.equals(stored.getRevoked()) || stored.getExpiresAt().isBefore(LocalDateTime.now())) {
+            if (Boolean.TRUE.equals(stored.getRevoked())) {
+                if (isReplayOfRotatedToken(stored)) {
+                    // Reuse of a token /refresh already rotated away, well after that rotation, is the
+                    // classic sign it was stolen: revoke every session so the real owner has to log in again.
+                    log.warn("Phát hiện dùng lại refresh token đã bị xoay vòng, userId={}, refreshTokenId={}",
+                            stored.getUserId(), stored.getId());
+                    // Via a separate bean/transaction (SessionSecurityGuard), not refreshTokenDao directly:
+                    // this method is about to throw, and its own @Transactional (class-level) would roll
+                    // that revoke back along with everything else — the whole point here is that it must not.
+                    sessionSecurityGuard.revokeAllSessionsImmediately(stored.getUserId());
+                }
+                throw logged(log, new UnauthorizedException("Refresh token đã hết hạn hoặc bị thu hồi"));
+            }
+            if (stored.getExpiresAt().isBefore(LocalDateTime.now())) {
                 throw logged(log, new UnauthorizedException("Refresh token đã hết hạn hoặc bị thu hồi"));
             }
 
             User user = userDao.selectById(stored.getUserId())
                     .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không còn tồn tại")));
             requireNotLocked(user);
+            if (!Boolean.TRUE.equals(user.getActive())) {
+                throw logged(log, new UnauthorizedException(messages.get("auth.notVerified")));
+            }
 
-            stored.setRevoked(true);
-            refreshTokenDao.update(stored);
+            // Atomic claim: revoke this row only if it's still active (same condition the DB checks),
+            // so two concurrent refresh calls presenting the same token can't both pass and each mint
+            // a valid session — only the first one to win the race gets new tokens.
+            if (refreshTokenDao.rotateById(stored.getId(), stored.getUserId(), LocalDateTime.now()) == 0) {
+                throw logged(log, new UnauthorizedException("Refresh token đã hết hạn hoặc bị thu hồi"));
+            }
 
             return issueTokens(user, deviceInfo, ipAddress);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
@@ -456,6 +489,17 @@ public class AuthService {
         } catch (Exception e) {
             throw ServiceException.unexpected("AuthService.refresh", e);
         }
+    }
+
+    /**
+     * Only a token that /refresh rotated away counts as a theft signal — one revoked by logout, "log out this
+     * device" or an admin lock has {@code rotatedAt == null} and is simply rejected. Within
+     * {@link #ROTATION_REUSE_GRACE_SECONDS} of the rotation the replay is treated as benign too: two browser
+     * tabs sharing one refresh token (localStorage) can both try to refresh at the same moment.
+     */
+    private boolean isReplayOfRotatedToken(RefreshToken stored) {
+        return stored.getRotatedAt() != null
+                && stored.getRotatedAt().isBefore(LocalDateTime.now().minusSeconds(ROTATION_REUSE_GRACE_SECONDS));
     }
 
     /**
@@ -470,7 +514,6 @@ public class AuthService {
                 LocalDateTime expiresAt = user.getResetPasswordTokenExpiresAt();
                 boolean hasLiveToken = user.getResetPasswordToken() != null && expiresAt != null && expiresAt.isAfter(now);
 
-                String resetToken;
                 if (hasLiveToken) {
                     // Keep the token that was already emailed valid instead of overwriting it, and don't
                     // send another email while the previous one is still fresh.
@@ -479,12 +522,26 @@ public class AuthService {
                     if (sentRecently) {
                         return;
                     }
-                    resetToken = user.getResetPasswordToken();
-                } else {
+                }
+                // The check above only covers the first minute after a token is minted (it's derived from
+                // that token's expiry); this per-user slot caps EVERY later resend of the same live token
+                // too, so the endpoint can't be used to flood someone's mailbox.
+                if (!passwordResetTokenCache.tryAcquireEmailSlot(
+                        user.getId(), Duration.ofSeconds(RESET_EMAIL_COOLDOWN_SECONDS))) {
+                    return;
+                }
+
+                // USERS.reset_password_token only ever holds the hash (like every other bearer token
+                // here), so resending the SAME link needs the raw value recovered from
+                // PasswordResetTokenCache — a cache miss just mints a new token below, same as an
+                // actually-expired one.
+                String resetToken = hasLiveToken ? passwordResetTokenCache.get(user.getId()).orElse(null) : null;
+                if (resetToken == null) {
                     resetToken = generateOpaqueToken();
-                    user.setResetPasswordToken(resetToken);
+                    user.setResetPasswordToken(sha256(resetToken));
                     user.setResetPasswordTokenExpiresAt(now.plus(resetPasswordTokenTtl));
                     userDao.update(user);
+                    passwordResetTokenCache.put(user.getId(), resetToken, resetPasswordTokenTtl);
                 }
 
                 eventPublisher.publishEvent(new PasswordResetEvent(
@@ -501,7 +558,7 @@ public class AuthService {
     public void resetPassword(ResetPasswordRequest request) {
         try {
             log.info("resetPassword - start");
-            User user = userDao.selectByResetPasswordToken(request.token())
+            User user = userDao.selectByResetPasswordToken(sha256(request.token()))
                     .orElseThrow(() -> logged(log, new BadRequestException("Token đặt lại mật khẩu không hợp lệ")));
 
             if (user.getResetPasswordTokenExpiresAt() == null
@@ -513,7 +570,10 @@ public class AuthService {
             user.setResetPasswordToken(null);
             user.setResetPasswordTokenExpiresAt(null);
             userDao.update(user);
+            passwordResetTokenCache.evict(user.getId());
             loginAttemptStore.reset(user.getEmail());
+            // A reset usually means the old password leaked — whoever used it must not keep a live session.
+            revokeAllSessions(user.getId());
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
             throw e;
         } catch (Exception e) {
@@ -550,7 +610,8 @@ public class AuthService {
         }
     }
 
-    public void changePassword(Long userId, ChangePasswordRequest request) {
+    /** Every other session is logged out; the one making this call ({@code currentSessionId}) stays signed in. */
+    public void changePassword(Long userId, Long currentSessionId, ChangePasswordRequest request) {
         try {
             log.info("changePassword - start, userId={}", userId);
             User user = userDao.selectById(userId)
@@ -566,6 +627,7 @@ public class AuthService {
 
             user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
             userDao.update(user);
+            revokeAllOtherSessions(userId, currentSessionId);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
             throw e;
         } catch (Exception e) {
@@ -613,7 +675,9 @@ public class AuthService {
 
             String token = EMAIL_CHANGE_TOKEN_PREFIX + generateOpaqueToken();
             user.setPendingEmail(newEmail);
-            user.setPendingEmailToken(token);
+            // isEmailChangeToken(...) below dispatches on the RAW token from the request, before any DB
+            // lookup, so hashing what's stored here doesn't affect that — only the DB column is hashed.
+            user.setPendingEmailToken(sha256(token));
             user.setPendingEmailExpiresAt(LocalDateTime.now().plus(verificationTokenTtl));
             userDao.update(user);
 
@@ -629,20 +693,14 @@ public class AuthService {
     }
 
     public boolean isEmailChangeToken(String token) {
-        try {
-            return token != null && token.startsWith(EMAIL_CHANGE_TOKEN_PREFIX);
-        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
-            throw e;
-        } catch (Exception e) {
-            throw ServiceException.unexpected("AuthService.isEmailChangeToken", e);
-        }
+        return token != null && token.startsWith(EMAIL_CHANGE_TOKEN_PREFIX);
     }
 
     /** Public (the link may be opened without being logged in), so every session of the account is revoked afterwards. */
     public void verifyEmailChange(String token) {
         try {
             log.info("verifyEmailChange - start");
-            User user = userDao.selectByPendingEmailToken(token)
+            User user = userDao.selectByPendingEmailToken(sha256(token))
                     .orElseThrow(() -> logged(log, new BadRequestException("Link đổi email không hợp lệ")));
 
             if (user.getPendingEmail() == null || user.getPendingEmailExpiresAt() == null
@@ -872,7 +930,7 @@ public class AuthService {
 
     private String generateRecoveryCode() {
         byte[] bytes = new byte[6];
-        new SecureRandom().nextBytes(bytes);
+        SECURE_RANDOM.nextBytes(bytes);
         return HexFormat.of().formatHex(bytes);
     }
 
@@ -925,9 +983,9 @@ public class AuthService {
             List<FamilyMembership> remaining = familyMembershipDao.selectByUserId(targetUserId);
             if (remaining.isEmpty()) {
                 // No families left at all — an account with none is meaningless here, so
-                // remove it entirely (matches this app's pre-multi-family behavior).
-                refreshTokenDao.deleteByUserId(targetUserId);
-                userDao.delete(target);
+                // remove it entirely (matches this app's pre-multi-family behavior). Same cleanup
+                // as account deletion: sessions, recovery codes and sent invites reference the user.
+                removeUserAndOwnedData(target, List.of());
             } else if (target.getFamilyId().equals(familyId)) {
                 // Their currently-active family was the one they just lost — fall back to
                 // another membership so USERS.family_id/role (what every JWT is minted
@@ -937,6 +995,9 @@ public class AuthService {
                 target.setFamilyId(fallback.getFamilyId());
                 target.setRole(fallback.getRole());
                 userDao.update(target);
+                // Their live access tokens still carry this familyId — block them now instead of
+                // letting them keep acting on this family until they expire.
+                blockLiveAccessTokens(targetUserId);
             }
             publishMemberEvent(FamilyMemberEvent.MEMBER_REMOVED, familyId, targetUserId, target.getDisplayName());
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
@@ -1052,6 +1113,9 @@ public class AuthService {
             }
 
             logout(callerUserId, currentSessionId);
+            // The caller's OTHER devices still hold access tokens with role=OWNER — block those too; they
+            // pick up the new MEMBER role on their next /refresh.
+            blockLiveAccessTokens(callerUserId);
             return issueTokens(caller, deviceInfo, ipAddress);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
             throw e;
@@ -1079,10 +1143,10 @@ public class AuthService {
             invite.setEmail(request.email());
             invite.setInvitedByUserId(inviterUserId);
             invite.setCreatedAt(LocalDateTime.now());
-            renewInviteToken(invite);
+            String rawToken = renewInviteToken(invite);
             familyInviteDao.insert(invite);
 
-            publishInviteEvent(family, inviter, invite);
+            publishInviteEvent(family, inviter, invite, rawToken);
 
             return new MessageResponse("Đã gửi lời mời đến " + request.email());
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
@@ -1092,15 +1156,18 @@ public class AuthService {
         }
     }
 
-    private void renewInviteToken(FamilyInvite invite) {
-        invite.setToken(generateOpaqueToken());
+    /** FAMILY_INVITES.token only ever holds the hash, so the raw value has to be returned here to email. */
+    private String renewInviteToken(FamilyInvite invite) {
+        String rawToken = generateOpaqueToken();
+        invite.setToken(sha256(rawToken));
         invite.setExpiresAt(LocalDateTime.now().plus(inviteTokenTtl));
+        return rawToken;
     }
 
-    private void publishInviteEvent(Family family, User inviter, FamilyInvite invite) {
+    private void publishInviteEvent(Family family, User inviter, FamilyInvite invite, String rawToken) {
         eventPublisher.publishEvent(new FamilyInviteEvent(
                 family.getId(), family.getName(), invite.getEmail(), inviter.getDisplayName(),
-                invite.getToken(), Instant.now()));
+                rawToken, Instant.now()));
     }
 
     @PreAuthorize("hasRole('OWNER')")
@@ -1150,9 +1217,9 @@ public class AuthService {
             User caller = userDao.selectById(callerUserId)
                     .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không tồn tại")));
 
-            renewInviteToken(invite);
+            String rawToken = renewInviteToken(invite);
             familyInviteDao.update(invite);
-            publishInviteEvent(family, caller, invite);
+            publishInviteEvent(family, caller, invite, rawToken);
 
             return new MessageResponse("Đã gửi lại lời mời đến " + invite.getEmail());
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
@@ -1236,7 +1303,7 @@ public class AuthService {
     }
 
     private FamilyInvite requireValidInvite(String token) {
-        FamilyInvite invite = familyInviteDao.selectByToken(token)
+        FamilyInvite invite = familyInviteDao.selectByToken(sha256(token))
                 .orElseThrow(() -> logged(log, new BadRequestException("Lời mời không hợp lệ")));
         if (invite.getAcceptedAt() != null) {
             throw logged(log, new BadRequestException("Lời mời này đã được sử dụng"));
@@ -1271,6 +1338,16 @@ public class AuthService {
             User existingByEmail = userDao.selectByEmail(email).orElse(null);
             if (existingByEmail != null) {
                 requireNotLockedForOAuth2(existingByEmail);
+                if (!Boolean.TRUE.equals(existingByEmail.getActive())) {
+                    // Nobody ever proved they own this mailbox, so whoever registered it may not be the person
+                    // now signing in with the provider (pre-account-takeover): drop that password and pending
+                    // verification so the registrant can't log in to the account the real owner now activates.
+                    log.warn("processOAuth2User - liên kết vào tài khoản chưa xác thực, xoá mật khẩu cũ, userId={}",
+                            existingByEmail.getId());
+                    existingByEmail.setPasswordHash(null);
+                    existingByEmail.setVerificationToken(null);
+                    existingByEmail.setVerificationTokenExpiresAt(null);
+                }
                 // Link this provider to the account already registered with that (verified) email.
                 existingByEmail.setProvider(provider);
                 existingByEmail.setProviderId(providerId);
@@ -1298,7 +1375,8 @@ public class AuthService {
             user.setLocked(Boolean.FALSE);
             userDao.insert(user);
             addMembership(user.getId(), family.getId(), ROLE_OWNER);
-            publishNewUserRegistered(user, family.getName(), NewUserRegisteredEvent.SOURCE_GOOGLE, true);
+            // provider is "GOOGLE" / "FACEBOOK" — the same values as NewUserRegisteredEvent.SOURCE_*.
+            publishNewUserRegistered(user, family.getName(), provider, true);
             return user;
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
             throw e;
@@ -1384,14 +1462,9 @@ public class AuthService {
         familyMembershipDao.insert(membership);
     }
 
+    /** The three-argument overload already does its own exception translation. */
     public AuthResponse issueTokens(User user) {
-        try {
-            return issueTokens(user, null, null);
-        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
-            throw e;
-        } catch (Exception e) {
-            throw ServiceException.unexpected("AuthService.issueTokens", e);
-        }
+        return issueTokens(user, null, null);
     }
 
     /**
@@ -1520,6 +1593,16 @@ public class AuthService {
         }
     }
 
+    /**
+     * Blocks every access token already issued to this user (their claims — familyId/role — are now stale)
+     * WITHOUT revoking the refresh tokens: each client gets a 401, refreshes, and receives a JWT minted from
+     * the current USERS row. Unlike {@link #revokeAllSessions}, nobody is logged out.
+     */
+    private void blockLiveAccessTokens(Long userId) {
+        refreshTokenDao.selectActiveByUserId(userId)
+                .forEach(t -> revokedSessionStore.markRevoked(t.getId(), accessTokenTtlMillis));
+    }
+
     private String truncate(String value, int maxLength) {
         if (value == null) {
             return null;
@@ -1528,14 +1611,12 @@ public class AuthService {
     }
 
     private String generateOpaqueToken() {
-        log.info("generateOpaqueToken - start");
         byte[] bytes = new byte[32];
-        new SecureRandom().nextBytes(bytes);
+        SECURE_RANDOM.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     private String sha256(String value) {
-        log.info("sha256 - start");
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
@@ -1545,14 +1626,7 @@ public class AuthService {
         }
     }
 
-    /**
-     * Register User
-     *
-     * @param family
-     * @param request
-     * @param verificationToken
-     * @return user
-     */
+    /** Inserts the new, not-yet-verified OWNER; {@code verificationToken} is the raw value that goes into the email. */
     private User registerUser(Family family, RegisterRequest request, String verificationToken) {
         User user = new User();
         user.setFamilyId(family.getId());
@@ -1565,18 +1639,14 @@ public class AuthService {
         user.setIsSystemAdmin(Boolean.FALSE);
         user.setTotpEnabled(Boolean.FALSE);
         user.setLocked(Boolean.FALSE);
-        user.setVerificationToken(verificationToken);
+        // USERS.verification_token only ever holds the hash — verificationToken (the raw value) only
+        // needs to survive long enough to go into the email link, published by the caller.
+        user.setVerificationToken(sha256(verificationToken));
         user.setVerificationTokenExpiresAt(LocalDateTime.now().plus(verificationTokenTtl));
         userDao.insert(user);
         return user;
     }
 
-    /**
-     * Register Family
-     *
-     * @param request
-     * @return family
-     */
     private Family registerFamily(RegisterRequest request) {
         Family family = new Family();
         family.setName(request.familyName());

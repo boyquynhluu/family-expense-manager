@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { EyeIcon, EyeOffIcon, HomeIcon, KeyIcon, MailIcon, UserIcon } from "../components/AuthIcons";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuth } from "../hooks/useAuth";
+import { LIMITS } from "../utils/inputLimits";
 
 export default function Register() {
   const { t } = useTranslation("register");
@@ -53,6 +54,7 @@ export default function Register() {
             </span>
             <input
               value={familyName}
+              maxLength={LIMITS.familyName}
               onChange={(e) => setFamilyName(e.target.value)}
               placeholder={t("familyNamePlaceholder")}
               aria-label={t("familyNamePlaceholder")}
@@ -66,6 +68,7 @@ export default function Register() {
             </span>
             <input
               value={displayName}
+              maxLength={LIMITS.displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder={t("displayNamePlaceholder")}
               aria-label={t("displayNamePlaceholder")}
@@ -80,6 +83,7 @@ export default function Register() {
             <input
               type="email"
               value={email}
+              maxLength={LIMITS.email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder={t("emailPlaceholder")}
               aria-label="Email"
@@ -94,6 +98,8 @@ export default function Register() {
             <input
               type={showPassword ? "text" : "password"}
               value={password}
+              minLength={LIMITS.newPasswordMin}
+              maxLength={LIMITS.newPasswordMax}
               onChange={(e) => setPassword(e.target.value)}
               placeholder={t("passwordPlaceholder")}
               aria-label={t("passwordLabel")}

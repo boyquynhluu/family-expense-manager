@@ -1,5 +1,6 @@
 package com.family.expensemanager.expense.service;
 
+import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -7,6 +8,7 @@ import java.util.List;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,8 +23,6 @@ import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.domain.entity.WalletTransfer;
 import com.family.expensemanager.expense.dto.CreateWalletTransferRequest;
 import com.family.expensemanager.expense.dto.WalletTransferResponse;
-import java.io.UncheckedIOException;
-import org.springframework.security.core.AuthenticationException;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -118,6 +118,8 @@ public class WalletTransferService {
         }
         // Balance is checked against the SOURCE wallet (you can't send more than it holds), not the
         // destination — and must include the wallet's initialBalance, not just its transaction history.
+        // Locked first, so a concurrent transfer out of the same wallet waits until this one commits.
+        walletService.lockForUpdate(from.getId());
         BigDecimal fromBalance = walletService.currentBalanceOf(from);
         if (existing != null) {
             if (existing.getFromWalletId().equals(from.getId())) {

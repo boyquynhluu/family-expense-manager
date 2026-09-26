@@ -72,7 +72,7 @@ public class ExcelReportGenerator {
         } else if (value instanceof Number number) {
             cell.setCellValue(number.doubleValue());
         } else {
-            cell.setCellValue(value.toString());
+            cell.setCellValue(FormulaInjectionGuard.sanitize(value.toString()));
         }
     }
 }

@@ -22,5 +22,6 @@ public record NewUserRegisteredEvent(
 
     public static final String SOURCE_LOCAL = "LOCAL";
     public static final String SOURCE_GOOGLE = "GOOGLE";
+    public static final String SOURCE_FACEBOOK = "FACEBOOK";
     public static final String SOURCE_INVITE = "INVITE";
 }

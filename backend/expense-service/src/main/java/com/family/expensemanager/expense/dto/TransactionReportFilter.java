@@ -12,8 +12,13 @@ public record TransactionReportFilter(
         String q, BigDecimal minAmount, BigDecimal maxAmount) {
 
     private static final char LIKE_ESCAPE = '!';
+    /** Same cap as the search box's maxLength on the frontend (LIMITS.search). */
+    private static final int MAX_QUERY_LENGTH = 100;
 
     public void validate() {
+        if (q != null && q.length() > MAX_QUERY_LENGTH) {
+            throw new BadRequestException("Từ khoá tìm kiếm tối đa " + MAX_QUERY_LENGTH + " ký tự");
+        }
         if (minAmount != null && maxAmount != null && minAmount.compareTo(maxAmount) > 0) {
             throw new BadRequestException("Số tiền tối thiểu không được lớn hơn số tiền tối đa");
         }

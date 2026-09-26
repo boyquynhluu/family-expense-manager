@@ -23,19 +23,29 @@ client.interceptors.request.use((config) => {
 
 let refreshPromise = null;
 
+// The refresh token lives in localStorage/sessionStorage, shared by every tab, and the backend
+// rotates it on each /auth/refresh — so two tabs must never refresh with the same token at once.
+// Web Locks serialise that across tabs where supported (the backend also tolerates a short race).
+function withCrossTabLock(fn) {
+  return navigator.locks ? navigator.locks.request("auth-refresh", fn) : fn();
+}
+
 function refreshAccessToken() {
   if (!refreshPromise) {
-    const refreshToken = getRefreshToken();
-    refreshPromise = axios
-      .post(`${API_BASE_URL}/auth/refresh`, { refreshToken })
-      .then((res) => {
-        const { accessToken, refreshToken: newRefreshToken } = res.data.data;
-        saveTokens(accessToken, newRefreshToken);
-        return accessToken;
-      })
-      .finally(() => {
-        refreshPromise = null;
-      });
+    const staleRefreshToken = getRefreshToken();
+    refreshPromise = withCrossTabLock(async () => {
+      // Another tab may have already rotated the token while this one waited for the lock.
+      const currentRefreshToken = getRefreshToken();
+      if (currentRefreshToken && currentRefreshToken !== staleRefreshToken) {
+        return getAccessToken();
+      }
+      const res = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken: currentRefreshToken });
+      const { accessToken, refreshToken: newRefreshToken } = res.data.data;
+      saveTokens(accessToken, newRefreshToken);
+      return accessToken;
+    }).finally(() => {
+      refreshPromise = null;
+    });
   }
   return refreshPromise;
 }
@@ -49,7 +59,11 @@ client.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true;
       try {
-        const newAccessToken = await refreshAccessToken();
+        // If another tab already refreshed, the stored access token is newer than the one this request sent.
+        const storedAccessToken = getAccessToken();
+        const sentAccessToken = originalRequest.headers?.Authorization?.replace(/^Bearer /, "");
+        const newAccessToken =
+          storedAccessToken && storedAccessToken !== sentAccessToken ? storedAccessToken : await refreshAccessToken();
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         return client(originalRequest);
       } catch (refreshError) {

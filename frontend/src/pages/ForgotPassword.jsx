@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { MailIcon } from "../components/AuthIcons";
 import LanguageSwitcher from "../components/LanguageSwitcher";
+import { LIMITS } from "../utils/inputLimits";
 
 export default function ForgotPassword() {
   const { t } = useTranslation("forgotPassword");
@@ -49,6 +50,7 @@ export default function ForgotPassword() {
                 <input
                   type="email"
                   value={email}
+                  maxLength={LIMITS.email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder={t("emailPlaceholder")}
                   aria-label="Email"

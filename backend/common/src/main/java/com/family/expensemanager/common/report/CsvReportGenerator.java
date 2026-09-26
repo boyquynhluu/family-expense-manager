@@ -57,6 +57,6 @@ public class CsvReportGenerator {
         if (value instanceof BigDecimal decimal) {
             return decimal.toPlainString();
         }
-        return value.toString();
+        return FormulaInjectionGuard.sanitize(value.toString());
     }
 }

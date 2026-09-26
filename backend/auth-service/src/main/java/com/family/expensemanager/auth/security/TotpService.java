@@ -1,6 +1,9 @@
 package com.family.expensemanager.auth.security;
 
+import java.io.ByteArrayOutputStream;
+import java.net.URLEncoder;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Locale;
 import java.util.Optional;
@@ -25,7 +28,7 @@ public class TotpService {
     private static final int TIME_STEP_SECONDS = 30;
     /** How many steps before/after "now" still count as valid, to tolerate clock drift between server and phone. */
     private static final int ALLOWED_STEP_DRIFT = 1;
-    private static final char[] BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".toCharArray();
+    private static final String BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -41,10 +44,6 @@ public class TotpService {
                 + "?secret=" + secret
                 + "&issuer=" + urlEncode(ISSUER)
                 + "&algorithm=SHA1&digits=" + CODE_DIGITS + "&period=" + TIME_STEP_SECONDS;
-    }
-
-    public boolean verifyCode(String secret, String code) {
-        return matchStep(secret, code).isPresent();
     }
 
     /** The time step the code was generated for (within the allowed drift), so callers can reject a replay of the same step. */
@@ -91,13 +90,13 @@ public class TotpService {
             bitsLeft += 8;
             while (bitsLeft >= 5) {
                 int index = (buffer >> (bitsLeft - 5)) & 0x1F;
-                result.append(BASE32_ALPHABET[index]);
+                result.append(BASE32_ALPHABET.charAt(index));
                 bitsLeft -= 5;
             }
         }
         if (bitsLeft > 0) {
             int index = (buffer << (5 - bitsLeft)) & 0x1F;
-            result.append(BASE32_ALPHABET[index]);
+            result.append(BASE32_ALPHABET.charAt(index));
         }
         return result.toString();
     }
@@ -106,9 +105,9 @@ public class TotpService {
         String clean = encoded.trim().toUpperCase(Locale.ROOT);
         int bitsLeft = 0;
         int buffer = 0;
-        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
         for (char c : clean.toCharArray()) {
-            int index = new String(BASE32_ALPHABET).indexOf(c);
+            int index = BASE32_ALPHABET.indexOf(c);
             if (index < 0) {
                 continue;
             }
@@ -123,6 +122,6 @@ public class TotpService {
     }
 
     private String urlEncode(String value) {
-        return java.net.URLEncoder.encode(value, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 }

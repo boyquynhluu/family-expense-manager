@@ -154,7 +154,7 @@ public class AuthController {
     @PutMapping("/me/password")
     public ApiResponse<MessageResponse> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         log.info("changePassword - start");
-        authService.changePassword(CurrentUser.userId(), request);
+        authService.changePassword(CurrentUser.userId(), CurrentUser.sessionId(), request);
         return ApiResponse.ok(new MessageResponse("Đổi mật khẩu thành công."));
     }
 

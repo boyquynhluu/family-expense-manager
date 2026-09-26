@@ -53,7 +53,7 @@ export default function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, [yearMonth]);
+  }, [yearMonth, t]);
 
   // Wallets/categories aren't month-scoped on the backend, so they're loaded once.
   useEffect(() => {

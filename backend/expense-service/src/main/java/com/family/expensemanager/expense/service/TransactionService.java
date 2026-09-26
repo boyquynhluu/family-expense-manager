@@ -17,17 +17,20 @@ import com.family.expensemanager.expense.dto.ReceiptFile;
 import com.family.expensemanager.expense.dto.TransactionReportFilter;
 import com.family.expensemanager.expense.dto.TransactionRequest;
 import com.family.expensemanager.expense.dto.TransactionResponse;
-import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -277,7 +280,13 @@ public class TransactionService {
             if (file.isEmpty()) {
                 throw logged(log, new BadRequestException("File ảnh trống"));
             }
-            if (!ALLOWED_RECEIPT_CONTENT_TYPES.contains(file.getContentType())) {
+            // Content-Type and the original filename are both attacker-controlled — sniff the real
+            // format from the file's own magic bytes instead of trusting either one.
+            String sniffedType;
+            try (InputStream in = file.getInputStream()) {
+                sniffedType = ImageMagicBytes.detect(in.readNBytes(16));
+            }
+            if (sniffedType == null || !ALLOWED_RECEIPT_CONTENT_TYPES.contains(sniffedType)) {
                 throw logged(log, new BadRequestException("Chỉ chấp nhận ảnh JPEG, PNG hoặc WEBP"));
             }
             Transaction transaction = requireOwnedByFamily(transactionId, familyId);
@@ -286,19 +295,20 @@ public class TransactionService {
 
             String newPath;
             try {
-                newPath = receiptStorageService.save(familyId, transactionId, file);
+                newPath = receiptStorageService.save(familyId, transactionId, file, sniffedType);
             } catch (IOException e) {
                 throw new UncheckedIOException("Không lưu được ảnh hoá đơn", e);
             }
+            // The file is already on disk but the row pointing to it isn't committed yet: if the
+            // transaction rolls back, the new file is an orphan (remove it) and the old one is still
+            // the live receipt (keep it). Only once committed is the old file safe to delete.
+            afterRollback(() -> receiptStorageService.delete(newPath));
             transaction.setReceiptPath(newPath);
-            transaction.setReceiptContentType(file.getContentType());
+            transaction.setReceiptContentType(sniffedType);
             transactionDao.update(transaction);
 
-            // Only remove the old file once the new one — and the DB row pointing to it —
-            // are both committed, so a mid-upload failure never leaves a transaction with
-            // no receipt at all.
             if (oldPath != null) {
-                receiptStorageService.delete(oldPath);
+                afterCommit(() -> receiptStorageService.delete(oldPath));
             }
             return TransactionResponse.from(transaction);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
@@ -340,7 +350,8 @@ public class TransactionService {
             transaction.setReceiptPath(null);
             transaction.setReceiptContentType(null);
             transactionDao.update(transaction);
-            receiptStorageService.delete(path);
+            // A rollback would leave the row still pointing at this file — so only delete it once committed.
+            afterCommit(() -> receiptStorageService.delete(path));
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
             throw e;
         } catch (Exception e) {
@@ -410,9 +421,48 @@ public class TransactionService {
         return transaction;
     }
 
+    /**
+     * Evicts now AND again after commit: between the two, a concurrent read could still see the old,
+     * uncommitted-over rows and put them back in the cache, which the second eviction clears.
+     */
     private void evictCaches(Long familyId, String periodMonth) {
         log.info("evictCaches - start, familyId={}, periodMonth={}", familyId, periodMonth);
-        String key = familyId + ":" + periodMonth;
+        evictCacheKeys(familyId + ":" + periodMonth);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            afterCommit(() -> evictCacheKeys(familyId + ":" + periodMonth));
+        }
+    }
+
+    /** Runs {@code action} once the surrounding transaction commits, or right away if there is none. */
+    private static void afterCommit(Runnable action) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            action.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                action.run();
+            }
+        });
+    }
+
+    /** Runs {@code action} only if the surrounding transaction rolls back (never without a transaction). */
+    private static void afterRollback(Runnable action) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_ROLLED_BACK) {
+                    action.run();
+                }
+            }
+        });
+    }
+
+    private void evictCacheKeys(String key) {
         Cache summaryCache = cacheManager.getCache("expense:summary");
         Cache reportCache = cacheManager.getCache("expense:report:category");
         Cache walletCategoryCache = cacheManager.getCache("expense:report:wallet-category");
@@ -428,7 +478,6 @@ public class TransactionService {
     }
 
     private String periodMonthOf(LocalDateTime occurredAt) {
-        log.info("periodMonthOf - start");
         return occurredAt.toLocalDate().toString().substring(0, 7);
     }
 }

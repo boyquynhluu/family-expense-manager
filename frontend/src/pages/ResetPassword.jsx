@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { EyeIcon, EyeOffIcon, KeyIcon } from "../components/AuthIcons";
 import LanguageSwitcher from "../components/LanguageSwitcher";
+import { LIMITS } from "../utils/inputLimits";
 
 export default function ResetPassword() {
   const { t } = useTranslation("resetPassword");
@@ -50,6 +51,8 @@ export default function ResetPassword() {
                 <input
                   type={showPassword ? "text" : "password"}
                   value={newPassword}
+                  minLength={LIMITS.newPasswordMin}
+                  maxLength={LIMITS.newPasswordMax}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder={t("newPasswordPlaceholder")}
                   aria-label={t("newPasswordLabel")}
