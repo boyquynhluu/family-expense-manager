@@ -1,5 +1,7 @@
 package com.family.expensemanager.expense.service;
 
+import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
+
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -12,6 +14,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.family.expensemanager.common.currency.CurrencyUtil;
 import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.event.ExpenseEvent;
 import com.family.expensemanager.common.exception.ApiException;
@@ -26,8 +29,6 @@ import com.family.expensemanager.expense.dto.WalletTransferResponse;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
-import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
 
 /**
  * Moves money between two wallets of the same family. A transfer is neither income nor expense, so it
@@ -143,7 +144,7 @@ public class WalletTransferService {
             }
         }
         if (request.amount().compareTo(fromBalance) > 0) {
-            throw logged(log, new BadRequestException("Số tiền chuyển phải <= số dư hiện tại của ví nguồn: " + fromBalance));
+            throw logged(log, new BadRequestException("Số tiền chuyển phải <= số dư hiện tại của ví nguồn: " + CurrencyUtil.formatCurrency(fromBalance)));
         }
         return new Wallet[] {from, to};
     }

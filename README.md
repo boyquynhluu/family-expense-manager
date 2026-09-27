@@ -691,6 +691,8 @@ stateDiagram-v2
 
 Quyền xoá và khôi phục: ví và danh mục chỉ OWNER; giao dịch thì người tạo hoặc OWNER. Khoản chuyển giữa các ví bị xoá cứng, không đi qua thùng rác. Ví đã có lịch sử chuyển thì không xoá được.
 
+**TODO — chưa làm, đang PENDING (không cấp thiết, quy mô project còn nhỏ nên chưa cần):** dòng vào thùng rác (`deleted_at IS NOT NULL`) không có job nào purge vĩnh viễn — tồn tại mãi trong DB, không có hạn tự động xoá hẳn. Việc này chỉ tăng dung lượng DB rất chậm theo thời gian, không ảnh hưởng chức năng hiện tại. Nếu làm: cần chốt trước số ngày giữ trong thùng rác (ví dụ 30 ngày) rồi purge vĩnh viễn bằng 1 job `@Scheduled`; với riêng Transaction có ảnh hoá đơn, job đó phải gọi thêm `receiptStorageService.delete(receiptPath)` trước khi xoá DB row, tránh để lại file mồ côi trên storage (hiện `TransactionDao.delete()` — xoá cứng — đã có sẵn nhưng chưa được service nào gọi tới).
+
 ### Mục 11 — Integration test chạm DB thật
 
 ```mermaid
@@ -1100,3 +1102,7 @@ Tức là hệ thống **chưa chạy trên VPS nào** — backend đang chạy 
 - [ ] Ghim version cụ thể cho `grafana/grafana`, `prom/prometheus`, `grafana/loki` (đang dùng `:latest`, không tái lập được).
 - [ ] Chặn `/actuator/**` của `api-gateway` ở tầng reverse proxy/firewall, chỉ cho phép truy cập nội bộ — hiện `/actuator/health` và `/actuator/prometheus` public không cần đăng nhập trên cổng 8080 publish ra ngoài.
 - [ ] CI/CD deploy tự động lên VPS (hiện chỉ có CI build/test — `backend-ci.yml`, `frontend-ci.yml` — chưa có bước SSH/push image + `docker compose pull && up -d` trên VPS; deploy đang hoàn toàn thủ công).
+
+**Không cấp thiết, có thể làm sau (housekeeping, tích rác rất chậm ở quy mô project hiện tại):**
+- [ ] Job dọn định kỳ bảng `IDEMPOTENCY_KEYS` (expense-service) — mỗi request tạo giao dịch/chuyển ví có gửi `Idempotency-Key` sẽ ghi 1 dòng, không có gì xoá sau khi đã dùng xong; nên purge các dòng cũ hơn vài ngày (dòng chỉ cần sống lâu hơn `IN_FLIGHT_TIMEOUT` 1 phút trong `IdempotencyGuard` một chút, không cần giữ lâu).
+- [ ] Job dọn `REFRESH_TOKENS` và `FAMILY_INVITES` đã hết hạn (auth-service) — hiện chỉ bị xoá khi có hành động cụ thể (logout, đổi mật khẩu, xoá lời mời...), token/invite hết hạn nhưng chưa ai đụng tới sẽ nằm lại trong DB vô hạn.

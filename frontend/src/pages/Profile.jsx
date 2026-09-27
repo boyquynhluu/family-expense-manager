@@ -145,6 +145,8 @@ export default function Profile() {
   const [newPassword, setNewPassword] = useState("");
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showEmailCredential, setShowEmailCredential] = useState(false);
+  const [showDeleteCredential, setShowDeleteCredential] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
 
@@ -453,21 +455,31 @@ export default function Profile() {
     return hasPassword ? { password: value } : { code: value };
   }
 
-  function renderCredentialField(value, onChange) {
+  function renderCredentialField(value, onChange, showValue, setShowValue) {
     return hasPassword ? (
       <label className="field">
         <span>
           {t("currentPasswordLabel")}
           <span className="required-mark" aria-hidden="true"> *</span>
         </span>
-        <input
-          type="password"
-          value={value}
-          maxLength={LIMITS.password}
-          onChange={(e) => onChange(e.target.value)}
-          autoComplete="current-password"
-          required
-        />
+        <div className="password-field-wrapper">
+          <input
+            type={showValue ? "text" : "password"}
+            value={value}
+            maxLength={LIMITS.password}
+            onChange={(e) => onChange(e.target.value)}
+            autoComplete="current-password"
+            required
+          />
+          <button
+            type="button"
+            className="password-toggle-btn"
+            onClick={() => setShowValue((v) => !v)}
+            aria-label={showValue ? t("hidePassword") : t("showPassword")}
+          >
+            {showValue ? <EyeOffIcon /> : <EyeIcon />}
+          </button>
+        </div>
       </label>
     ) : (
       <label className="field">
@@ -617,7 +629,7 @@ export default function Profile() {
                 required
               />
             </label>
-            {renderCredentialField(emailCredential, setEmailCredential)}
+            {renderCredentialField(emailCredential, setEmailCredential, showEmailCredential, setShowEmailCredential)}
             <button type="submit" disabled={changingEmail}>
               {changingEmail ? t("sendingChangeEmail") : t("changeEmailButton")}
             </button>
@@ -866,7 +878,7 @@ export default function Profile() {
           <p className="empty-state">{t("reauthNeedsTwoFactor", { provider: profile.provider })}</p>
         ) : (
           <form className="inline-form" onSubmit={handleDeleteAccount}>
-            {renderCredentialField(deleteCredential, setDeleteCredential)}
+            {renderCredentialField(deleteCredential, setDeleteCredential, showDeleteCredential, setShowDeleteCredential)}
             <button type="submit" disabled={deletingAccount} style={{ background: "#dc2626" }}>
               {deletingAccount ? t("deletingAccountLoading") : t("deleteAccountButton")}
             </button>
