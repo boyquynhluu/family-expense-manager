@@ -22,13 +22,33 @@ function previousYearMonth() {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function statusOf(spent, limit) {
+// Same rule as the budget e-mails (expense-service TransactionService#publishBudgetCrossing): only
+// spending strictly MORE than the limit is "over budget" — exactly the limit has reached it, not exceeded it.
+// Compared in whole cents (amounts are DECIMAL(18, 2)): the overall budget's spend is a client-side sum of
+// per-category totals, and float addition can land a hair above the limit (0.1 + 0.2 = 0.30000000000000004).
+function toCents(amount) {
+  return Math.round(Number(amount) * 100);
+}
+
+function statusOf(spentAmount, limitAmount) {
+  const spent = toCents(spentAmount);
+  const limit = toCents(limitAmount);
   if (limit <= 0) return "safe";
-  const percent = (spent / limit) * 100;
-  if (percent >= 100) return "danger";
-  if (percent >= 80) return "warning";
+  if (spent > limit) return "danger";
+  if (spent === limit) return "reached";
+  if (spent * 10 >= limit * 8) return "warning";
   return "safe";
 }
+
+const STATUS_LABEL_KEYS = {
+  danger: "budgets:statusDanger",
+  reached: "budgets:statusReached",
+  warning: "budgets:statusWarning",
+  safe: "budgets:statusSafe",
+};
+
+// "Reached" shares the amber warning look; only an actual overspend turns red.
+const STATUS_STYLE = { danger: "danger", reached: "warning", warning: "warning", safe: "safe" };
 
 export default function Budgets() {
   const { t } = useTranslation(["common", "budgets"]);
@@ -249,13 +269,9 @@ export default function Budgets() {
                       <span className="budget-month">{b.periodMonth}</span>
                     </span>
                     <span className="category-row-amount">
-                      <span className={`badge budget-badge-${status}`}>
+                      <span className={`badge budget-badge-${STATUS_STYLE[status]}`}>
                         {status === "danger" && <AlertIcon />}
-                        {status === "danger"
-                          ? t("budgets:statusDanger")
-                          : status === "warning"
-                            ? t("budgets:statusWarning")
-                            : t("budgets:statusSafe")}
+                        {t(STATUS_LABEL_KEYS[status])}
                       </span>
                       {formatCurrency(spent)} / {formatCurrency(b.limitAmount)}
                       {isOwner && (
@@ -282,7 +298,7 @@ export default function Budgets() {
                   </div>
                   <div className="category-bar-track">
                     <div
-                      className={`category-bar-fill budget-bar-${status}`}
+                      className={`category-bar-fill budget-bar-${STATUS_STYLE[status]}`}
                       style={{ width: `${Math.min(percent, 100)}%` }}
                     />
                   </div>

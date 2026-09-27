@@ -11,6 +11,7 @@
   "listTitle": "Danh sách ngân sách",
   "noBudgets": "Chưa có ngân sách nào",
   "statusDanger": "Vượt ngân sách",
+  "statusReached": "Đã đạt hạn mức",
   "statusWarning": "Gần đạt hạn mức",
   "statusSafe": "An toàn",
   "saveFailed": "Lưu ngân sách thất bại",

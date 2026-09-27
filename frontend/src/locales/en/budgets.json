@@ -11,6 +11,7 @@
   "listTitle": "Budget list",
   "noBudgets": "No budgets yet",
   "statusDanger": "Over budget",
+  "statusReached": "Limit reached",
   "statusWarning": "Nearing limit",
   "statusSafe": "Safe",
   "saveFailed": "Failed to save budget",

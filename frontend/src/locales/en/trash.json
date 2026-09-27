@@ -1,6 +1,6 @@
 {
   "title": "Trash",
-  "subtitle": "Deleted wallets, categories, and transactions — restore them if you deleted something by mistake (README \"10. Deletion is permanent\")",
+  "subtitle": "Deleted wallets, categories, and transactions — restore them if you deleted something by mistake",
   "restoreSuccess": "Restored",
   "restoreFailed": "Failed to restore",
   "walletsTitle": "Deleted wallets",
