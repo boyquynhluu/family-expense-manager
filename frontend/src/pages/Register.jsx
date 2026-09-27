@@ -103,7 +103,6 @@ export default function Register() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder={t("passwordPlaceholder")}
               aria-label={t("passwordLabel")}
-              minLength={8}
               required
             />
             <button

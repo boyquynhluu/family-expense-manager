@@ -6,6 +6,7 @@ import org.seasar.doma.GeneratedValue;
 import org.seasar.doma.GenerationType;
 import org.seasar.doma.Id;
 import org.seasar.doma.Table;
+import org.seasar.doma.Version;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -50,6 +51,10 @@ public class Transaction {
 
     @Column(name = "created_by_name")
     private String createdByName;
+
+    /** Optimistic locking — see V10 migration. Doma checks/increments this on every UPDATE automatically. */
+    @Version
+    private Integer version;
 
     public Long getId() {
         return id;
@@ -153,5 +158,13 @@ public class Transaction {
 
     public void setCreatedByName(String createdByName) {
         this.createdByName = createdByName;
+    }
+
+    public Integer getVersion() {
+        return version;
+    }
+
+    public void setVersion(Integer version) {
+        this.version = version;
     }
 }

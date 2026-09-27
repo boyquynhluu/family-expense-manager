@@ -144,6 +144,33 @@ Các topic khác (khai báo dưới `kafka.topic.*` trong `application.yml`): `u
 
 **Lưu ý khi sửa `infra/docker-compose.yml`:** container `kafka` (image `apache/kafka`, KRaft mode) bắt buộc phải set `KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092` — mặc định image tự advertise `localhost:9092`, chỉ đúng cho client chạy trong chính container đó. Nếu thiếu, `expense-service`/`notification-service` connect được bước bootstrap ban đầu (metadata) nhưng produce/consume thật sự sẽ fail liên tục với `Connection to node ... (localhost/127.0.0.1:9092) could not be established` — publish Kafka coi như im lặng không hoạt động, không thấy lỗi ở tầng HTTP vì `KafkaTemplate.send()` là async fire-and-forget.
 
+### Chịu lỗi khi Kafka gặp sự cố
+
+Hành động nghiệp vụ chính (đăng ký, tạo giao dịch, chuyển ví...) **luôn thành công độc lập với Kafka**, vì mọi publisher chỉ publish `AFTER_COMMIT` (DB đã ghi xong) và `KafkaTemplate.send()` là async — client luôn nhận response thành công bất kể Kafka có publish được hay không. Điều **có thể mất** khi Kafka lỗi là các side-effect thuần Kafka: email xác thực/đặt lại mật khẩu/mời thành viên, thông báo trong app, email cảnh báo ngân sách/chuyển tiền.
+
+- **Producer** (`KafkaSendLogging`, dùng trong cả 6 publisher ở `auth-service`/`expense-service`): trước đây kết quả `send()` bị bỏ qua hoàn toàn — publish lỗi thì mất event, không một dòng log. Giờ mọi lỗi publish được `log.error(...)` kèm topic/key/event — không tự retry thêm (kafka-clients hiện đại đã tự retry nội bộ, giới hạn bởi `delivery.timeout.ms`, đủ chịu được gián đoạn ngắn), chỉ để lỗi thật sự (Kafka chết lâu) không còn im lặng.
+- **Consumer** (6 listener trong `notification-service`): mỗi `@KafkaListener` giờ có thêm `@RetryableTopic` — xử lý lỗi (lỗi DB, bug...) được thử lại 3 lần với backoff tăng dần trên topic retry riêng (`<topic>-retry-0`, `-retry-1`...), hết lượt vẫn lỗi thì rơi vào topic `<topic>-dlt` (tự tạo) thay vì mất hẳn sau khi log — có thể xem lại/replay bằng tay từ đó.
+
+**TODO — chưa làm, đang PENDING (đã chốt thiết kế, chưa code vì đổi nhiều file):** hai điều trên chỉ giúp **biết** khi mất và **không mất khi lỗi xử lý ở consumer** — chúng không giúp email **tự động gửi lại** khi Kafka thật sự publish thất bại lúc `send()` (ví dụ Kafka chết đúng lúc user bấm "quên mật khẩu"). Với các email quan trọng (xác thực tài khoản, đặt lại mật khẩu), thiết kế đã thống nhất — kiểu Transactional Outbox nhưng chỉ ghi outbox ở nhánh lỗi (không phải ghi trước cho mọi lần publish):
+
+```
+Commit DB xong (AFTER_COMMIT, như hiện tại)
+        ↓
+Gọi kafkaTemplate.send(...).get(timeout=5s)  ← đổi từ async thuần sang chờ kết quả có timeout
+        ↓
+   Thành công → xong, không ghi gì thêm (như hiện tại, không đổi độ trễ đáng kể)
+   Thất bại   → ghi 1 dòng vào bảng OUTBOX (topic, key, payload, số lần thử) — transaction riêng,
+                vì business write đã commit từ trước rồi
+                        ↓
+        Job quét chu kỳ dài (1–5 phút, chỉ đụng khi có dòng pending — DB gần như không tải thêm)
+                        ↓
+                Gửi lại → thành công thì xoá dòng, thất bại thì để lại chờ vòng sau
+```
+
+Đánh đổi đã biết trước, chấp nhận được với quy mô project: request phải chờ Kafka ack tối đa 5s ở nhánh lỗi (trước đây không chờ gì); và vẫn còn một khoảng hở rất hẹp nếu app crash đúng lúc giữa "gửi Kafka thất bại" và "ghi outbox" (event đó vẫn mất, như hiện tại) — vì outbox không còn nằm chung transaction với business write nữa (lúc ghi outbox thì transaction chính đã commit xong).
+
+Việc còn lại khi làm: 1 bảng `OUTBOX_EVENTS` + migration, đổi cả 6 publisher (`auth-service`/`expense-service`) từ fire-and-forget sang mẫu trên, 1 job `@Scheduled` quét/gửi lại, test cho job. Cần chốt trước: chỉ 2 email quan trọng hay áp dụng cả 6 loại event.
+
 ## Redis
 
 - **Cache** 2 endpoint tổng hợp tốn chi phí: `GET /api/expenses/summary` và `GET /api/expenses/reports/category`, key `expense:summary:{familyId}:{yearMonth}` / `expense:report:category:{familyId}:{yearMonth}`, TTL 10 phút, evict chính xác khi có giao dịch mới trong tháng đó. Các endpoint báo cáo mới (mục 21) cố ý không cache.

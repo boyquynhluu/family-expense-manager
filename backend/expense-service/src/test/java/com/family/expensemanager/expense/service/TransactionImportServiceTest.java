@@ -65,7 +65,7 @@ class TransactionImportServiceTest {
         assertThat(result.errors()).isEmpty();
 
         ArgumentCaptor<TransactionRequest> captor = ArgumentCaptor.forClass(TransactionRequest.class);
-        verify(transactionService).create(eq(1L), eq(100L), eq("a@b.com"), eq("An"), captor.capture());
+        verify(transactionService).create(eq(1L), eq(100L), eq("a@b.com"), eq("An"), captor.capture(), any());
         assertThat(captor.getValue().walletId()).isEqualTo(10L);
         assertThat(captor.getValue().categoryId()).isEqualTo(20L);
         assertThat(captor.getValue().type()).isEqualTo("EXPENSE");
@@ -87,7 +87,7 @@ class TransactionImportServiceTest {
         assertThat(result.importedCount()).isZero();
         assertThat(result.errors()).hasSize(1);
         assertThat(result.errors().get(0).rowNumber()).isEqualTo(2);
-        verify(transactionService, never()).create(any(), any(), any(), any(), any());
+        verify(transactionService, never()).create(any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -163,9 +163,9 @@ class TransactionImportServiceTest {
         assertThat(result.errors()).hasSize(1);
         assertThat(result.errors().get(0).rowNumber()).isEqualTo(2);
         verify(transactionService, never()).create(eq(1L), eq(100L), eq("a@b.com"), eq("An"),
-                argThat(r -> r.amount().compareTo(BigDecimal.valueOf(50000)) == 0));
+                argThat(r -> r.amount().compareTo(BigDecimal.valueOf(50000)) == 0), any());
         verify(transactionService).create(eq(1L), eq(100L), eq("a@b.com"), eq("An"),
-                argThat(r -> r.amount().compareTo(BigDecimal.valueOf(30000)) == 0));
+                argThat(r -> r.amount().compareTo(BigDecimal.valueOf(30000)) == 0), any());
     }
 
     @Test
@@ -229,7 +229,7 @@ class TransactionImportServiceTest {
         assertThat(result.importedCount()).isEqualTo(1);
         assertThat(result.errors()).isEmpty();
         ArgumentCaptor<TransactionRequest> captor = ArgumentCaptor.forClass(TransactionRequest.class);
-        verify(transactionService).create(eq(1L), eq(100L), eq("a@b.com"), eq("An"), captor.capture());
+        verify(transactionService).create(eq(1L), eq(100L), eq("a@b.com"), eq("An"), captor.capture(), any());
         assertThat(captor.getValue().occurredAt()).isEqualTo(LocalDate.of(2026, 1, 5).atStartOfDay());
     }
 

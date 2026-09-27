@@ -32,6 +32,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import org.seasar.doma.jdbc.OptimisticLockException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -58,6 +59,8 @@ public class TransactionService {
     private static final int MAX_CREATOR_NAME_LENGTH = 100;
     private static final Set<String> ALLOWED_RECEIPT_CONTENT_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
 
+    private static final String IDEMPOTENCY_SCOPE = "CREATE_TRANSACTION";
+
     private final TransactionDao transactionDao;
     private final BudgetDao budgetDao;
     private final WalletService walletService;
@@ -65,8 +68,20 @@ public class TransactionService {
     private final ApplicationEventPublisher eventPublisher;
     private final CacheManager cacheManager;
     private final ReceiptStorageService receiptStorageService;
+    private final IdempotencyGuard idempotencyGuard;
 
-    public TransactionResponse create(
+    /**
+     * @param idempotencyKey optional {@code Idempotency-Key} request header (see {@link IdempotencyGuard}) —
+     *                        a retry with the same key returns the same {@link TransactionResponse} instead
+     *                        of creating a second transaction; null/blank opts out, same as before this existed.
+     */
+    public TransactionResponse create(Long familyId, Long userId, String userEmail, String userDisplayName,
+                                       TransactionRequest request, String idempotencyKey) {
+        return idempotencyGuard.runOnce(familyId, IDEMPOTENCY_SCOPE, idempotencyKey, TransactionResponse.class,
+                () -> doCreate(familyId, userId, userEmail, userDisplayName, request));
+    }
+
+    private TransactionResponse doCreate(
             Long familyId, Long userId, String userEmail, String userDisplayName, TransactionRequest request) {
         try {
             log.info("create - start, familyId={}, userId={}", familyId, userId);
@@ -102,10 +117,11 @@ public class TransactionService {
             }
 
             return TransactionResponse.from(transaction);
-        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
+                | OptimisticLockException e) {
             throw e;
         } catch (Exception e) {
-            throw ServiceException.unexpected("TransactionService.create", e);
+            throw ServiceException.unexpected("TransactionService.doCreate", e);
         }
     }
 
@@ -124,7 +140,7 @@ public class TransactionService {
             if (size < 1 || size > MAX_PAGE_SIZE) {
                 throw logged(log, new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE));
             }
-            filter.validate();
+            validateFilter(filter);
             String notePattern = filter.noteLikePattern();
             long totalElements = transactionDao.countByFamilyIdFiltered(
                     familyId, filter.walletId(), filter.categoryId(), filter.type(), filter.fromDate(), filter.toDate(),
@@ -134,10 +150,22 @@ public class TransactionService {
                             filter.toDate(), notePattern, filter.minAmount(), filter.maxAmount(), size, page * size)
                     .stream().map(TransactionResponse::from).toList();
             return PageResponse.of(content, page, size, totalElements);
-        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
+                | OptimisticLockException e) {
             throw e;
         } catch (Exception e) {
             throw ServiceException.unexpected("TransactionService.listByFamilyPaged", e);
+        }
+    }
+
+    private void validateFilter(TransactionReportFilter filter) {
+        if (filter.q() != null && filter.q().length() > TransactionReportFilter.MAX_QUERY_LENGTH) {
+            throw logged(log, new BadRequestException(
+                    "Từ khoá tìm kiếm tối đa " + TransactionReportFilter.MAX_QUERY_LENGTH + " ký tự"));
+        }
+        if (filter.minAmount() != null && filter.maxAmount() != null
+                && filter.minAmount().compareTo(filter.maxAmount()) > 0) {
+            throw logged(log, new BadRequestException("Số tiền tối thiểu không được lớn hơn số tiền tối đa"));
         }
     }
 
@@ -145,7 +173,8 @@ public class TransactionService {
         try {
             log.info("get - start, familyId={}, transactionId={}", familyId, transactionId);
             return TransactionResponse.from(requireOwnedByFamily(transactionId, familyId));
-        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
+                | OptimisticLockException e) {
             throw e;
         } catch (Exception e) {
             throw ServiceException.unexpected("TransactionService.get", e);
@@ -178,7 +207,8 @@ public class TransactionService {
             }
 
             return TransactionResponse.from(transaction);
-        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
+                | OptimisticLockException e) {
             throw e;
         } catch (Exception e) {
             throw ServiceException.unexpected("TransactionService.update", e);
@@ -198,7 +228,8 @@ public class TransactionService {
             transaction.setDeletedAt(LocalDateTime.now());
             transactionDao.update(transaction);
             evictCaches(familyId, periodMonthOf(transaction.getOccurredAt()));
-        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
+                | OptimisticLockException e) {
             throw e;
         } catch (Exception e) {
             throw ServiceException.unexpected("TransactionService.delete", e);
@@ -228,7 +259,8 @@ public class TransactionService {
                 }
             }
             return new BulkDeleteResult(deleted, skipped, forbidden);
-        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
+                | OptimisticLockException e) {
             throw e;
         } catch (Exception e) {
             throw ServiceException.unexpected("TransactionService.bulkDelete", e);
@@ -248,7 +280,8 @@ public class TransactionService {
             List<TransactionResponse> content = transactionDao.selectDeletedByFamilyIdPaged(familyId, size, page * size)
                     .stream().map(TransactionResponse::from).toList();
             return PageResponse.of(content, page, size, totalElements);
-        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
+                | OptimisticLockException e) {
             throw e;
         } catch (Exception e) {
             throw ServiceException.unexpected("TransactionService.listDeletedPaged", e);
@@ -266,7 +299,8 @@ public class TransactionService {
                 throw logged(log, new NotFoundException("Giao dịch đã xoá không tồn tại: " + transactionId));
             }
             evictCaches(familyId, periodMonthOf(deleted.getOccurredAt()));
-        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
+                | OptimisticLockException e) {
             throw e;
         } catch (Exception e) {
             throw ServiceException.unexpected("TransactionService.restore", e);
@@ -311,7 +345,8 @@ public class TransactionService {
                 afterCommit(() -> receiptStorageService.delete(oldPath));
             }
             return TransactionResponse.from(transaction);
-        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
+                | OptimisticLockException e) {
             throw e;
         } catch (Exception e) {
             throw ServiceException.unexpected("TransactionService.uploadReceipt", e);
@@ -331,7 +366,8 @@ public class TransactionService {
             } catch (IOException e) {
                 throw new UncheckedIOException("Không đọc được ảnh hoá đơn", e);
             }
-        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
+                | OptimisticLockException e) {
             throw e;
         } catch (Exception e) {
             throw ServiceException.unexpected("TransactionService.getReceipt", e);
@@ -352,7 +388,8 @@ public class TransactionService {
             transactionDao.update(transaction);
             // A rollback would leave the row still pointing at this file — so only delete it once committed.
             afterCommit(() -> receiptStorageService.delete(path));
-        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
+                | OptimisticLockException e) {
             throw e;
         } catch (Exception e) {
             throw ServiceException.unexpected("TransactionService.deleteReceipt", e);

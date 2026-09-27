@@ -107,7 +107,6 @@ export default function AcceptInvite() {
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder={t("passwordPlaceholder")}
                       aria-label={t("passwordLabel")}
-                      minLength={8}
                     />
                     <button
                       type="button"

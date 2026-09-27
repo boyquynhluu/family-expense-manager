@@ -12,6 +12,7 @@ import com.family.expensemanager.expense.dto.CopyBudgetsRequest;
 import com.family.expensemanager.expense.dto.CopyBudgetsResponse;
 import com.family.expensemanager.expense.dto.CreateBudgetRequest;
 import java.io.UncheckedIOException;
+import org.seasar.doma.jdbc.OptimisticLockException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -53,7 +54,8 @@ public class BudgetService {
             budget.setLimitAmount(request.limitAmount());
             budgetDao.insert(budget);
             return BudgetResponse.from(budget);
-        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
+                | OptimisticLockException e) {
             throw e;
         } catch (Exception e) {
             throw ServiceException.unexpected("BudgetService.create", e);
@@ -74,7 +76,8 @@ public class BudgetService {
                     .map(BudgetResponse::from)
                     .toList();
             return PageResponse.of(content, page, size, totalElements);
-        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
+                | OptimisticLockException e) {
             throw e;
         } catch (Exception e) {
             throw ServiceException.unexpected("BudgetService.listByFamilyPaged", e);
@@ -92,7 +95,8 @@ public class BudgetService {
             budget.setLimitAmount(request.limitAmount());
             budgetDao.update(budget);
             return BudgetResponse.from(budget);
-        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
+                | OptimisticLockException e) {
             throw e;
         } catch (Exception e) {
             throw ServiceException.unexpected("BudgetService.update", e);
@@ -126,7 +130,8 @@ public class BudgetService {
                 copied++;
             }
             return new CopyBudgetsResponse(copied, source.size() - copied);
-        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
+                | OptimisticLockException e) {
             throw e;
         } catch (Exception e) {
             throw ServiceException.unexpected("BudgetService.copy", e);
@@ -139,7 +144,8 @@ public class BudgetService {
             log.info("delete - start, budgetId={}, familyId={}", budgetId, familyId);
             Budget budget = requireOwnedByFamily(budgetId, familyId);
             budgetDao.delete(budget);
-        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
+                | OptimisticLockException e) {
             throw e;
         } catch (Exception e) {
             throw ServiceException.unexpected("BudgetService.delete", e);

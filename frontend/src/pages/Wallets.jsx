@@ -9,6 +9,7 @@ import SeedDefaultsButton from "../components/SeedDefaultsButton";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
+import { maxDateTime, minDateTime } from "../utils/dateLimits";
 import { formatCurrency } from "../utils/format";
 import { LIMITS } from "../utils/inputLimits";
 
@@ -209,8 +210,10 @@ export default function Wallets() {
               <input
                 placeholder={t("wallets:currencyPlaceholder")}
                 value={currency}
-                onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+                onChange={(e) => setCurrency(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))}
                 maxLength={3}
+                pattern="[A-Z]{3}"
+                title={t("wallets:currencyPatternHint")}
                 required
               />
             </label>
@@ -358,6 +361,8 @@ export default function Wallets() {
                 type="datetime-local"
                 value={transferForm.occurredAt}
                 onChange={(e) => updateTransferField("occurredAt", e.target.value)}
+                min={minDateTime()}
+                max={maxDateTime()}
                 required
               />
             </label>

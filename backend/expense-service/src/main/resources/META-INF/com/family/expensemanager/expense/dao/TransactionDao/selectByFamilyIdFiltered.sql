@@ -11,7 +11,8 @@ SELECT
     note,
     receipt_path,
     receipt_content_type,
-    deleted_at
+    deleted_at,
+    version
 FROM
     TRANSACTIONS
 WHERE

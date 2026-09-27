@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -47,11 +48,13 @@ public class TransactionController {
     private final TransactionImportService transactionImportService;
 
     @PostMapping
-    public ApiResponse<TransactionResponse> create(@Valid @RequestBody TransactionRequest request) {
+    public ApiResponse<TransactionResponse> create(
+            @Valid @RequestBody TransactionRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         log.info("create - start");
         return ApiResponse.ok(transactionService.create(
                 CurrentUser.familyId(), CurrentUser.userId(), CurrentUser.email(), CurrentUser.displayName(),
-                request));
+                request, idempotencyKey));
     }
 
     @GetMapping

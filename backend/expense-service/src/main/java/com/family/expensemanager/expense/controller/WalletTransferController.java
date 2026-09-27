@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -29,10 +30,13 @@ public class WalletTransferController {
     private final WalletTransferService walletTransferService;
 
     @PostMapping
-    public ApiResponse<WalletTransferResponse> create(@Valid @RequestBody CreateWalletTransferRequest request) {
+    public ApiResponse<WalletTransferResponse> create(
+            @Valid @RequestBody CreateWalletTransferRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         log.info("create - start");
         return ApiResponse.ok(walletTransferService.create(
-                CurrentUser.familyId(), CurrentUser.userId(), CurrentUser.email(), CurrentUser.displayName(), request));
+                CurrentUser.familyId(), CurrentUser.userId(), CurrentUser.email(), CurrentUser.displayName(),
+                request, idempotencyKey));
     }
 
     @GetMapping

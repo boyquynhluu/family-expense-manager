@@ -43,12 +43,25 @@ public class WalletTransferService {
     private static final String ROLE_OWNER = "OWNER";
     private static final BigDecimal MIN_AMOUNT = new BigDecimal("0.01");
     private static final int MAX_PAGE_SIZE = 100;
+    private static final String IDEMPOTENCY_SCOPE = "CREATE_WALLET_TRANSFER";
 
     private final WalletTransferDao walletTransferDao;
     private final WalletService walletService;
     private final ApplicationEventPublisher eventPublisher;
+    private final IdempotencyGuard idempotencyGuard;
 
-    public WalletTransferResponse create(
+    /**
+     * @param idempotencyKey optional {@code Idempotency-Key} request header (see {@link IdempotencyGuard}) —
+     *                        a retry with the same key returns the same {@link WalletTransferResponse}
+     *                        instead of creating a second transfer; null/blank opts out, as before this existed.
+     */
+    public WalletTransferResponse create(Long familyId, Long userId, String userEmail, String userDisplayName,
+                                          CreateWalletTransferRequest request, String idempotencyKey) {
+        return idempotencyGuard.runOnce(familyId, IDEMPOTENCY_SCOPE, idempotencyKey, WalletTransferResponse.class,
+                () -> doCreate(familyId, userId, userEmail, userDisplayName, request));
+    }
+
+    private WalletTransferResponse doCreate(
             Long familyId, Long userId, String userEmail, String userDisplayName, CreateWalletTransferRequest request) {
         try {
             log.info("create - start, familyId={}, from={}, to={}", familyId, request.fromWalletId(), request.toWalletId());
@@ -74,7 +87,7 @@ public class WalletTransferService {
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
             throw e;
         } catch (Exception e) {
-            throw ServiceException.unexpected("WalletTransferService.create", e);
+            throw ServiceException.unexpected("WalletTransferService.doCreate", e);
         }
     }
 

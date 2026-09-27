@@ -194,7 +194,7 @@ public class TransactionImportService {
         TransactionRequest request = new TransactionRequest(
                 wallet.id(), category.id(), type, amount, date.atStartOfDay(), note.isEmpty() ? null : note);
         try {
-            transactionService.create(familyId, userId, userEmail, userDisplayName, request);
+            transactionService.create(familyId, userId, userEmail, userDisplayName, request, null);
         } catch (Exception e) {
             log.warn("importFile - dòng {} thất bại", rowNumber, e);
             errors.add(new ImportRowError(rowNumber, "Lỗi khi tạo giao dịch: " + e.getMessage()));

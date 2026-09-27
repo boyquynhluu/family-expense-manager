@@ -576,7 +576,6 @@ export default function Profile() {
                   minLength={LIMITS.newPasswordMin}
                   maxLength={LIMITS.newPasswordMax}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  minLength={8}
                   required
                 />
                 <button

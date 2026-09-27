@@ -7,6 +7,7 @@
   "namePlaceholder": "e.g. Cash",
   "currencyLabel": "Currency",
   "currencyPlaceholder": "VND",
+  "currencyPatternHint": "A 3-letter currency code (e.g. VND, USD)",
   "initialBalanceLabel": "Initial balance",
   "submitAdd": "Add wallet",
   "submitUpdate": "Update",

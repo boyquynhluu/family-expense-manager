@@ -7,6 +7,7 @@ import Pagination from "../components/Pagination";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
+import { maxDate, minDate } from "../utils/dateLimits";
 import { formatCurrency } from "../utils/format";
 import { LIMITS } from "../utils/inputLimits";
 
@@ -277,12 +278,20 @@ export default function RecurringTransactions() {
                 type="date"
                 value={form.startDate}
                 onChange={(e) => updateField("startDate", e.target.value)}
+                min={minDate()}
+                max={maxDate(5)}
                 required
               />
             </label>
             <label className="field">
               {t("recurringTransactions:endDateLabel")}
-              <input type="date" value={form.endDate} onChange={(e) => updateField("endDate", e.target.value)} />
+              <input
+                type="date"
+                value={form.endDate}
+                onChange={(e) => updateField("endDate", e.target.value)}
+                min={minDate()}
+                max={maxDate(50)}
+              />
             </label>
             <label className="field">
               {t("recurringTransactions:noteLabel")}

@@ -1,11 +1,14 @@
 package com.family.expensemanager.auth.messaging;
 
 import com.family.expensemanager.common.event.UserVerificationEvent;
+import com.family.expensemanager.common.event.KafkaSendLogging;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
+
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Listens for {@link UserVerificationEvent}s raised (via {@code ApplicationEventPublisher})
@@ -14,6 +17,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
  * — same pattern as expense-service's {@code ExpenseEventPublisher}.
  */
 @Component
+@Slf4j(topic = "UserVerificationEventPublisher")
 public class UserVerificationEventPublisher {
 
     private final KafkaTemplate<Object, Object> kafkaTemplate;
@@ -27,6 +31,7 @@ public class UserVerificationEventPublisher {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onUserVerificationEvent(UserVerificationEvent event) {
-        kafkaTemplate.send(topic, String.valueOf(event.userId()), event);
+        String key = String.valueOf(event.userId());
+        KafkaSendLogging.logOnFailure(kafkaTemplate.send(topic, key, event), log, topic, key, event);
     }
 }

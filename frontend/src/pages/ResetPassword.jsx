@@ -56,7 +56,6 @@ export default function ResetPassword() {
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder={t("newPasswordPlaceholder")}
                   aria-label={t("newPasswordLabel")}
-                  minLength={8}
                   required
                 />
                 <button

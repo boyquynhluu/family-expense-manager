@@ -7,6 +7,7 @@
   "namePlaceholder": "VD: Tiền mặt",
   "currencyLabel": "Tiền tệ",
   "currencyPlaceholder": "VND",
+  "currencyPatternHint": "Mã tiền tệ gồm 3 chữ cái (ví dụ VND, USD)",
   "initialBalanceLabel": "Số dư ban đầu",
   "submitAdd": "Thêm ví",
   "submitUpdate": "Cập nhật",

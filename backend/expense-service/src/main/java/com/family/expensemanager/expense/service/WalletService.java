@@ -51,6 +51,7 @@ public class WalletService {
             log.info("create - start, familyId={}, name={}", familyId, request.name());
             String currency = normalizeCurrency(request.currency());
             requireConsistentCurrency(familyId, currency, null);
+            requireUniqueName(familyId, request.name(), null);
             Wallet wallet = new Wallet();
             wallet.setFamilyId(familyId);
             wallet.setName(request.name());
@@ -85,6 +86,7 @@ public class WalletService {
             Wallet wallet = requireOwnedByFamily(walletId, familyId);
             String currency = normalizeCurrency(request.currency());
             requireConsistentCurrency(familyId, currency, walletId);
+            requireUniqueName(familyId, request.name(), walletId);
             wallet.setName(request.name());
             wallet.setCurrency(currency);
             wallet.setInitialBalance(request.initialBalance());
@@ -172,6 +174,17 @@ public class WalletService {
                 .anyMatch(w -> !w.getCurrency().equals(currency));
         if (mismatch) {
             throw logged(log, new ConflictException("Tất cả ví trong gia đình phải dùng chung 1 loại tiền tệ"));
+        }
+    }
+
+    /** Case/whitespace-insensitive: "Ví chính" and "ví chính " count as the same name within one family. */
+    private void requireUniqueName(Long familyId, String name, Long excludeWalletId) {
+        String normalized = name.trim().toLowerCase(Locale.ROOT);
+        boolean duplicate = walletDao.selectByFamilyId(familyId).stream()
+                .filter(w -> excludeWalletId == null || !w.getId().equals(excludeWalletId))
+                .anyMatch(w -> w.getName().trim().toLowerCase(Locale.ROOT).equals(normalized));
+        if (duplicate) {
+            throw logged(log, new ConflictException("Đã có ví tên \"" + name + "\" trong gia đình"));
         }
     }
 

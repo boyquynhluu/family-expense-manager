@@ -3,7 +3,8 @@ SELECT
     family_id,
     category_id,
     period_month,
-    limit_amount
+    limit_amount,
+    version
 FROM
     BUDGETS
 WHERE

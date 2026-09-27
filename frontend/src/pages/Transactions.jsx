@@ -9,6 +9,7 @@ import SeedDefaultsButton from "../components/SeedDefaultsButton";
 import { useAuth } from "../hooks/useAuth";
 import { PAGE_SIZE } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
+import { maxDateTime, minDateTime } from "../utils/dateLimits";
 import { formatCurrency } from "../utils/format";
 import { LIMITS } from "../utils/inputLimits";
 
@@ -468,6 +469,8 @@ export default function Transactions() {
                 type="datetime-local"
                 value={form.occurredAt}
                 onChange={(e) => updateField("occurredAt", e.target.value)}
+                min={minDateTime()}
+                max={maxDateTime()}
                 required
               />
             </label>

@@ -1,6 +1,7 @@
 package com.family.expensemanager.expense.service;
 
 import com.family.expensemanager.common.exception.ApiException;
+import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.common.report.CsvReportGenerator;
 import com.family.expensemanager.common.report.ExcelReportGenerator;
@@ -27,6 +28,8 @@ import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
 
 /**
  * Builds the transaction report row/column model once and hands it to whichever generator
@@ -72,7 +75,7 @@ public class TransactionReportService {
     }
 
     private List<TransactionReportRow> buildRows(Long familyId, TransactionReportFilter filter) {
-        filter.validate();
+        validateFilter(filter);
         Map<Long, String> walletNames = walletService.listByFamily(familyId).stream()
                 .collect(Collectors.toMap(w -> w.id(), w -> w.name()));
         Map<Long, String> categoryNames = categoryService.listByFamily(familyId).stream()
@@ -89,6 +92,17 @@ public class TransactionReportService {
                         t.getAmount(),
                         t.getNote() == null ? "" : t.getNote()))
                 .toList();
+    }
+
+    private void validateFilter(TransactionReportFilter filter) {
+        if (filter.q() != null && filter.q().length() > TransactionReportFilter.MAX_QUERY_LENGTH) {
+            throw logged(log, new BadRequestException(
+                    "Từ khoá tìm kiếm tối đa " + TransactionReportFilter.MAX_QUERY_LENGTH + " ký tự"));
+        }
+        if (filter.minAmount() != null && filter.maxAmount() != null
+                && filter.minAmount().compareTo(filter.maxAmount()) > 0) {
+            throw logged(log, new BadRequestException("Số tiền tối thiểu không được lớn hơn số tiền tối đa"));
+        }
     }
 
     private boolean matches(Transaction t, TransactionReportFilter filter) {

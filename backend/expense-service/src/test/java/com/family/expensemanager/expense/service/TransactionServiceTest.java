@@ -30,13 +30,16 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -64,14 +67,21 @@ class TransactionServiceTest {
     private CacheManager cacheManager;
     @Mock
     private ReceiptStorageService receiptStorageService;
+    @Mock
+    private IdempotencyGuard idempotencyGuard;
 
     private TransactionService transactionService;
 
     @BeforeEach
+    @SuppressWarnings("unchecked")
     void setUp() {
         transactionService = new TransactionService(
                 transactionDao, budgetDao, walletService, categoryService, eventPublisher, cacheManager,
-                receiptStorageService);
+                receiptStorageService, idempotencyGuard);
+        // None of these tests exercise idempotency (they all pass a null key) — just run the action,
+        // like the real IdempotencyGuard does for a null/blank key.
+        lenient().when(idempotencyGuard.runOnce(any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(4)).get());
     }
 
     @Test
@@ -117,7 +127,7 @@ class TransactionServiceTest {
         TransactionReportFilter tooLong =
                 new TransactionReportFilter(null, null, null, null, null, "a".repeat(101), null, null);
 
-        ok.validate();
+        assertThatCode(() -> transactionService.listByFamilyPaged(1L, ok, 0, 20)).doesNotThrowAnyException();
         assertThatThrownBy(() -> transactionService.listByFamilyPaged(1L, tooLong, 0, 20))
                 .isInstanceOf(BadRequestException.class);
     }
@@ -554,7 +564,7 @@ class TransactionServiceTest {
         }
 
         transactionService.create(1L, CREATOR_ID, "user@b.com", "Chủ hộ",
-                new TransactionRequest(5L, 7L, "EXPENSE", new BigDecimal(amount), occurredAt, null));
+                new TransactionRequest(5L, 7L, "EXPENSE", new BigDecimal(amount), occurredAt, null), null);
 
         ArgumentCaptor<ExpenseEvent> captor = ArgumentCaptor.forClass(ExpenseEvent.class);
         verify(eventPublisher, atLeastOnce()).publishEvent(captor.capture());
@@ -599,7 +609,7 @@ class TransactionServiceTest {
         when(categoryService.requireOwnedByFamily(eq(7L), eq(1L), anyString())).thenReturn(category);
 
         TransactionResponse response = transactionService.create(1L, CREATOR_ID, "user@b.com", userDisplayName,
-                new TransactionRequest(5L, 7L, "INCOME", BigDecimal.TEN, LocalDateTime.of(2026, 1, 15, 10, 0), null));
+                new TransactionRequest(5L, 7L, "INCOME", BigDecimal.TEN, LocalDateTime.of(2026, 1, 15, 10, 0), null), null);
 
         ArgumentCaptor<Transaction> captor = ArgumentCaptor.forClass(Transaction.class);
         verify(transactionDao).insert(captor.capture());

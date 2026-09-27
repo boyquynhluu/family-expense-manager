@@ -23,6 +23,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -44,6 +45,8 @@ class WalletTransferServiceTest {
     private WalletService walletService;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private IdempotencyGuard idempotencyGuard;
 
     @InjectMocks
     private WalletTransferService service;
@@ -52,8 +55,13 @@ class WalletTransferServiceTest {
     // (via WalletService.currentBalanceOf); default every test to a wallet that's "rich enough" so
     // that check doesn't trip up tests that aren't specifically exercising it.
     @BeforeEach
+    @SuppressWarnings("unchecked")
     void setUpDefaultBalance() {
         lenient().when(walletService.currentBalanceOf(any())).thenReturn(new BigDecimal("999999999"));
+        // None of these tests exercise idempotency (they all pass a null key) — just run the action,
+        // like the real IdempotencyGuard does for a null/blank key.
+        lenient().when(idempotencyGuard.runOnce(any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(4)).get());
     }
 
     @Test
@@ -62,7 +70,7 @@ class WalletTransferServiceTest {
         when(walletService.requireOwnedByFamily(1L, 7L)).thenReturn(from);
         when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "VND"));
 
-        service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "150000"));
+        service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "150000"), null);
 
         // Otherwise two concurrent transfers could both read the same balance and together overdraw it.
         InOrder order = inOrder(walletService);
@@ -75,7 +83,7 @@ class WalletTransferServiceTest {
         when(walletService.requireOwnedByFamily(1L, 7L)).thenReturn(wallet(1L, 7L, "VND"));
         when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "VND"));
 
-        var response = service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "150000"));
+        var response = service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "150000"), null);
 
         ArgumentCaptor<WalletTransfer> captor = ArgumentCaptor.forClass(WalletTransfer.class);
         verify(walletTransferDao).insert(captor.capture());
@@ -108,21 +116,21 @@ class WalletTransferServiceTest {
 
     @Test
     void create_doesNotPublishEvent_whenValidationFailsBeforeInsert() {
-        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 1L, "10")))
+        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 1L, "10"), null))
                 .isInstanceOf(BadRequestException.class);
         verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
     void create_throwsBadRequest_whenSourceAndTargetAreSameWallet() {
-        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 1L, "10")))
+        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 1L, "10"), null))
                 .isInstanceOf(BadRequestException.class);
         verify(walletTransferDao, never()).insert(any());
     }
 
     @Test
     void create_throwsBadRequest_whenAmountBelowMinimum() {
-        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "0.001")))
+        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "0.001"), null))
                 .isInstanceOf(BadRequestException.class);
         verify(walletTransferDao, never()).insert(any());
     }
@@ -132,7 +140,7 @@ class WalletTransferServiceTest {
         when(walletService.requireOwnedByFamily(1L, 7L)).thenReturn(wallet(1L, 7L, "VND"));
         when(walletService.requireOwnedByFamily(2L, 7L)).thenThrow(new NotFoundException("Wallet không tồn tại: 2"));
 
-        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "10")))
+        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "10"), null))
                 .isInstanceOf(NotFoundException.class);
         verify(walletTransferDao, never()).insert(any());
     }
@@ -142,7 +150,7 @@ class WalletTransferServiceTest {
         when(walletService.requireOwnedByFamily(1L, 7L)).thenReturn(wallet(1L, 7L, "VND"));
         when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "USD"));
 
-        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "10")))
+        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "10"), null))
                 .isInstanceOf(BadRequestException.class);
         verify(walletTransferDao, never()).insert(any());
     }
@@ -154,7 +162,7 @@ class WalletTransferServiceTest {
         when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "VND"));
         when(walletService.currentBalanceOf(from)).thenReturn(new BigDecimal("100"));
 
-        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "150")))
+        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "150"), null))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("ví nguồn");
         verify(walletTransferDao, never()).insert(any());
@@ -171,7 +179,7 @@ class WalletTransferServiceTest {
         when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(to);
         when(walletService.currentBalanceOf(from)).thenReturn(new BigDecimal("1000000"));
 
-        service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "150000"));
+        service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "150000"), null);
 
         verify(walletTransferDao).insert(any());
     }

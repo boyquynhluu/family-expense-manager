@@ -247,7 +247,7 @@ public class RecurringTransactionService {
                         r.getNote());
                 TransactionResponse created = transactionService.create(
                         r.getFamilyId(), r.getCreatedByUserId(), r.getCreatedByEmail(), r.getCreatedByDisplayName(),
-                        request);
+                        request, null);
                 // Frontend status badge ("Chưa thực hiện" vs "Hoàn thành") is null-vs-not-null
                 // on this field — set only once a transaction actually got created above.
                 r.setLastRunDate(occurrence);
