@@ -50,6 +50,8 @@
   "activateButton": "Kích hoạt",
   "saveFailed": "Lưu giao dịch định kỳ thất bại",
   "deleteConfirm": "Xoá giao dịch định kỳ này? Các giao dịch đã tạo trước đó sẽ không bị xoá.",
+  "pauseConfirm": "Tạm dừng giao dịch định kỳ này? Hệ thống sẽ không tự tạo giao dịch nữa cho đến khi bạn kích hoạt lại.",
+  "activateConfirm": "Kích hoạt lại giao dịch định kỳ này? Hệ thống sẽ tiếp tục tự tạo giao dịch theo lịch.",
   "deleteFailed": "Xoá giao dịch định kỳ thất bại",
   "toggleFailed": "Cập nhật thất bại"
 }

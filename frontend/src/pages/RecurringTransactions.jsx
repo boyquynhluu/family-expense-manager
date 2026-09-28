@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
-import { EditIcon, TrashIcon } from "../components/AppIcons";
 import AmountInput from "../components/AmountInput";
+import { EditIcon, TrashIcon } from "../components/AppIcons";
 import Pagination from "../components/Pagination";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
@@ -115,6 +115,11 @@ export default function RecurringTransactions() {
   }
 
   async function toggleActive(rule) {
+    const action = rule.active ? "pause" : "activate";
+    const confirmed = await confirmDialog(t(`recurringTransactions:${action}Confirm`), {
+      confirmButtonText: t(`recurringTransactions:${action}Button`),
+    });
+    if (!confirmed) return;
     setError("");
     try {
       await client.put(`/expenses/recurring-transactions/${rule.id}/active`, { active: !rule.active });

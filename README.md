@@ -705,7 +705,7 @@ flowchart LR
     G["mvn test"] --> H["Surefire chỉ chạy *Test.java, mock, nhanh"]
 ```
 
-Cần Docker chạy được với JVM. Trên máy Windows dùng Docker Desktop hiện tại Testcontainers chưa kết nối được (lỗi named pipe), nên các `*IT.java` cần chạy ở máy khác hoặc CI. Ngoài ra nên `EXPLAIN` toàn bộ file `.sql` mới trên MySQL thật sau mỗi lần thêm truy vấn, vì unit test dùng DAO giả không bắt được lỗi SQL.
+Chỉ cần Docker đang chạy (Docker Desktop trên Windows cũng được). Testcontainers phải từ **1.21.4** trở lên: bản cũ hơn gọi Docker bằng API version mà Docker Engine 29+ từ chối (API tối thiểu 1.44), khiến mọi `*IT.java` báo "Could not find a valid Docker environment". CI (`.github/workflows/backend-ci.yml`) chạy `mvn verify` nên integration test chạy trên mọi push/PR. Ngoài ra nên `EXPLAIN` toàn bộ file `.sql` mới trên MySQL thật sau mỗi lần thêm truy vấn, vì unit test dùng DAO giả không bắt được lỗi SQL.
 
 ### Mục 12 — Observability
 

@@ -339,6 +339,44 @@ class RecurringTransactionServiceTest {
     }
 
     @Test
+    void setActive_reactivating_resumesFromNextOccurrence_insteadOfBackfillingThePausedMonths() {
+        // Monthly on the 5th, paused since Oct 5 (nextRunDate still points there); today is Jan 15.
+        RecurringTransaction rule = rule(1L, LocalDate.of(2025, 10, 5), 5, null);
+        rule.setActive(false);
+        when(recurringTransactionDao.selectById(9L)).thenReturn(Optional.of(rule));
+
+        service.setActive(9L, 1L, 10L, false, true);
+
+        assertThat(rule.getActive()).isTrue();
+        // Next 5th after Jan 15 — not Oct 5, which would make tonight's job create Oct, Nov, Dec and Jan.
+        assertThat(rule.getNextRunDate()).isEqualTo(LocalDate.of(2026, 2, 5));
+        verify(recurringTransactionDao).update(rule);
+    }
+
+    @Test
+    void setActive_pausing_leavesNextRunDateAlone() {
+        RecurringTransaction rule = rule(1L, LocalDate.of(2026, 2, 1), 1, null);
+        when(recurringTransactionDao.selectById(9L)).thenReturn(Optional.of(rule));
+
+        service.setActive(9L, 1L, 10L, false, false);
+
+        assertThat(rule.getActive()).isFalse();
+        assertThat(rule.getNextRunDate()).isEqualTo(LocalDate.of(2026, 2, 1));
+    }
+
+    @Test
+    void setActive_reactivating_isRejected_whenTheRuleHasAlreadyEnded() {
+        RecurringTransaction rule = rule(1L, LocalDate.of(2025, 10, 5), 5, LocalDate.of(2025, 12, 31));
+        rule.setActive(false);
+        when(recurringTransactionDao.selectById(9L)).thenReturn(Optional.of(rule));
+
+        assertThatThrownBy(() -> service.setActive(9L, 1L, 10L, false, true))
+                .isInstanceOf(BadRequestException.class);
+        assertThat(rule.getActive()).isFalse();
+        verify(recurringTransactionDao, never()).update(any());
+    }
+
+    @Test
     void delete_removesOwnedRule() {
         RecurringTransaction rule = rule(1L, LocalDate.of(2026, 1, 1), 1, null);
         when(recurringTransactionDao.selectById(9L)).thenReturn(Optional.of(rule));

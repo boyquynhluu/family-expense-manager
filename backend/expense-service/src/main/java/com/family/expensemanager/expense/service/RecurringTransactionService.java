@@ -155,6 +155,17 @@ public class RecurringTransactionService {
             log.info("setActive - start, id={}, familyId={}, active={}", id, familyId, active);
             RecurringTransaction r = requireOwnedByFamily(id, familyId);
             requireCanModify(r, callerUserId, callerIsOwner);
+            if (active && !Boolean.TRUE.equals(r.getActive())) {
+                // Pausing means "skip these runs", not "postpone them": without this, nextRunDate would
+                // still point at the date it was paused on, and the next nightly job would back-fill
+                // every occurrence missed while paused. Resume from the next occurrence on/after today.
+                LocalDate next = firstOccurrenceOnOrAfter(r);
+                if (r.getEndDate() != null && next.isAfter(r.getEndDate())) {
+                    throw logged(log, new BadRequestException(
+                            "Giao dịch định kỳ đã quá ngày kết thúc — hãy sửa ngày kết thúc trước khi kích hoạt lại"));
+                }
+                r.setNextRunDate(next);
+            }
             r.setActive(active);
             recurringTransactionDao.update(r);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
