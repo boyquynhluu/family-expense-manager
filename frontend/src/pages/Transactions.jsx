@@ -2,16 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
-import { CloseIcon, EditIcon, ImageIcon, TrashIcon } from "../components/AppIcons";
 import AmountInput from "../components/AmountInput";
+import { CloseIcon, EditIcon, HistoryIcon, ImageIcon, TrashIcon } from "../components/AppIcons";
 import Pagination from "../components/Pagination";
 import SeedDefaultsButton from "../components/SeedDefaultsButton";
+import TransactionHistoryModal from "../components/TransactionHistoryModal";
 import { useAuth } from "../hooks/useAuth";
 import { PAGE_SIZE } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
 import { maxDateTime, minDateTime } from "../utils/dateLimits";
 import { formatCurrency } from "../utils/format";
 import { LIMITS } from "../utils/inputLimits";
+import { notifyTrashChanged } from "../utils/trashEvents";
 
 const emptyForm = {
   walletId: "",
@@ -57,6 +59,7 @@ export default function Transactions() {
   const [pageData, setPageData] = useState(emptyPage);
   const [wallets, setWallets] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [historyTransactionId, setHistoryTransactionId] = useState(null);
   const [members, setMembers] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
@@ -189,7 +192,7 @@ export default function Transactions() {
       const res = await client.post("/expenses/transactions/bulk-delete", { ids: [...selectedIds] });
       const { deleted, skipped, forbidden } = res.data.data;
       const message = t("transactions:bulkDeleteResult", { deleted, skipped, forbidden });
-      if (deleted > 0) toast.success(message);
+      if (deleted > 0) notifyTrashChanged(), toast.success(message);
       else toast.error(message);
       setSelectedIds(new Set());
       load();
@@ -245,6 +248,7 @@ export default function Transactions() {
     setError("");
     try {
       await client.delete(`/expenses/transactions/${id}`);
+      notifyTrashChanged();
       load();
     } catch (err) {
       setError(err.response?.data?.message || t("transactions:deleteFailed"));
@@ -726,6 +730,15 @@ export default function Transactions() {
                     >
                       <CopyIcon />
                     </button>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      onClick={() => setHistoryTransactionId(row.id)}
+                      aria-label={t("transactions:historyAria")}
+                      title={t("transactions:historyAria")}
+                    >
+                      <HistoryIcon />
+                    </button>
                     {canModify(row) && (
                       <>
                         {row.hasReceipt ? (
@@ -775,6 +788,13 @@ export default function Transactions() {
 
         <Pagination pageData={pageData} onPageChange={setPage} />
       </div>
+
+      <TransactionHistoryModal
+        transactionId={historyTransactionId}
+        onClose={() => setHistoryTransactionId(null)}
+        walletName={walletName}
+        categoryName={categoryName}
+      />
     </div>
   );
 }

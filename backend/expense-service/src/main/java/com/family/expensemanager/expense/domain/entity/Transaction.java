@@ -49,6 +49,13 @@ public class Transaction {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    /** Who soft-deleted it (V12); null while not deleted. The name is a snapshot, like createdByName. */
+    @Column(name = "deleted_by_user_id")
+    private Long deletedByUserId;
+
+    @Column(name = "deleted_by_name")
+    private String deletedByName;
+
     @Column(name = "created_by_name")
     private String createdByName;
 
@@ -150,6 +157,22 @@ public class Transaction {
 
     public void setDeletedAt(LocalDateTime deletedAt) {
         this.deletedAt = deletedAt;
+    }
+
+    public Long getDeletedByUserId() {
+        return deletedByUserId;
+    }
+
+    public void setDeletedByUserId(Long deletedByUserId) {
+        this.deletedByUserId = deletedByUserId;
+    }
+
+    public String getDeletedByName() {
+        return deletedByName;
+    }
+
+    public void setDeletedByName(String deletedByName) {
+        this.deletedByName = deletedByName;
     }
 
     public String getCreatedByName() {

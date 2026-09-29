@@ -151,7 +151,7 @@ class RecurringTransactionServiceTest {
         when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
         when(transactionService.create(any(), any(), any(), any(), any(), any()))
                 .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.TEN,
-                        LocalDate.of(2026, 1, 1).atStartOfDay(), null, false, null));
+                        LocalDate.of(2026, 1, 1).atStartOfDay(), null, false, null, null));
 
         service.generateDueTransactions();
 
@@ -168,7 +168,7 @@ class RecurringTransactionServiceTest {
         RecurringTransaction rule = rule(1L, LocalDate.of(2025, 10, 1), 1, null);
         when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
         when(transactionService.create(any(), any(), any(), any(), any(), any()))
-                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.TEN, null, null, false, null));
+                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.TEN, null, null, false, null, null));
 
         service.generateDueTransactions();
 
@@ -183,7 +183,7 @@ class RecurringTransactionServiceTest {
         RecurringTransaction rule = rule(1L, LocalDate.of(2026, 1, 1), 1, LocalDate.of(2026, 1, 31));
         when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
         when(transactionService.create(any(), any(), any(), any(), any(), any()))
-                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.TEN, null, null, false, null));
+                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.TEN, null, null, false, null, null));
 
         service.generateDueTransactions();
 
@@ -198,7 +198,7 @@ class RecurringTransactionServiceTest {
         when(transactionService.create(eq(1L), any(), any(), any(), any(), any()))
                 .thenThrow(new RuntimeException("wallet was deleted"));
         when(transactionService.create(eq(2L), any(), any(), any(), any(), any()))
-                .thenReturn(new TransactionResponse(99L, 5L, 7L, 2L, 10L, null, "EXPENSE", BigDecimal.TEN, null, null, false, null));
+                .thenReturn(new TransactionResponse(99L, 5L, 7L, 2L, 10L, null, "EXPENSE", BigDecimal.TEN, null, null, false, null, null));
 
         service.generateDueTransactions();
 
@@ -216,7 +216,7 @@ class RecurringTransactionServiceTest {
         when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
         when(transactionService.create(any(), any(), any(), any(), any(), any()))
                 .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.TEN,
-                        LocalDate.of(2026, 1, 1).atStartOfDay(), null, false, null));
+                        LocalDate.of(2026, 1, 1).atStartOfDay(), null, false, null, null));
 
         service.generateDueTransactions();
 
@@ -255,7 +255,7 @@ class RecurringTransactionServiceTest {
         RecurringTransaction rule = rule(1L, LocalDate.of(2026, 1, 1), 1, null);
         when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
         when(transactionService.create(any(), any(), any(), any(), any(), any()))
-                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.TEN, null, null, false, null));
+                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.TEN, null, null, false, null, null));
         doThrow(new IllegalStateException("kafka down")).when(eventPublisher).publishEvent(any(ExpenseEvent.class));
 
         service.generateDueTransactions();
@@ -583,7 +583,7 @@ class RecurringTransactionServiceTest {
         when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
         when(transactionService.create(any(), any(), any(), any(), any(), any()))
                 .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.TEN, null, null,
-                        false, null))
+                        false, null, null))
                 .thenThrow(new RuntimeException("wallet was deleted"));
 
         service.generateDueTransactions();
@@ -653,7 +653,7 @@ class RecurringTransactionServiceTest {
     private void stubTransactionCreate() {
         when(transactionService.create(any(), any(), any(), any(), any(), any()))
                 .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.TEN, null, null,
-                        false, null));
+                        false, null, null));
     }
 
     private void assertBadRequest(CreateRecurringTransactionRequest request) {

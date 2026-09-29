@@ -102,6 +102,10 @@ public class ExpenseEventListener {
             recordWarningNotification(event);
             return;
         }
+        if (ExpenseEvent.EXPENSE_DELETED.equals(event.eventType())) {
+            save(event, "Giao dịch đã bị xoá", deletedMessage(event));
+            return;
+        }
         if (ExpenseEvent.RECURRING_EXECUTED.equals(event.eventType())) {
             save(event, "Giao dịch định kỳ đã được ghi",
                     "Đã ghi " + recurringLabel(event) + dateSuffix(event));
@@ -228,6 +232,25 @@ public class ExpenseEventListener {
             label.append(' ').append(formatAmount(event.amount()));
         }
         return label.toString();
+    }
+
+    /** One transaction: what was removed; a bulk delete (itemCount > 1): just how many. Either way, where to undo it. */
+    private String deletedMessage(ExpenseEvent event) {
+        String actor = event.userDisplayName() != null ? event.userDisplayName() : "Một thành viên";
+        StringBuilder message = new StringBuilder(actor);
+        if (event.itemCount() != null && event.itemCount() > 1) {
+            message.append(" đã xoá ").append(event.itemCount()).append(" giao dịch");
+        } else {
+            message.append(" đã xoá giao dịch");
+            if (event.amount() != null) {
+                message.append(' ').append(formatAmount(event.amount()));
+            }
+            message.append(dateSuffix(event));
+            if (event.note() != null && !event.note().isBlank()) {
+                message.append(" \"").append(event.note().trim()).append('"');
+            }
+        }
+        return message.append(". Có thể khôi phục trong Thùng rác.").toString();
     }
 
     private String dateSuffix(ExpenseEvent event) {

@@ -12,6 +12,7 @@
   "colName": "Tên",
   "colCurrency": "Tiền tệ",
   "colDeletedAt": "Đã xoá lúc",
+  "colDeletedBy": "Người xoá",
   "colType": "Loại",
   "colAmount": "Số tiền",
   "colOccurredAt": "Ngày giao dịch",

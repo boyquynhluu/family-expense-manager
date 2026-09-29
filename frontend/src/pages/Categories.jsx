@@ -3,9 +3,10 @@ import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { EditIcon, TrashIcon } from "../components/AppIcons";
 import SeedDefaultsButton from "../components/SeedDefaultsButton";
-import { confirmDialog } from "../utils/confirm";
 import { useAuth } from "../hooks/useAuth";
+import { confirmDialog } from "../utils/confirm";
 import { LIMITS } from "../utils/inputLimits";
+import { notifyTrashChanged } from "../utils/trashEvents";
 
 export default function Categories() {
   const { t } = useTranslation(["common", "categories"]);
@@ -63,6 +64,7 @@ export default function Categories() {
     setError("");
     try {
       await client.delete(`/expenses/categories/${id}`);
+      notifyTrashChanged();
       load();
     } catch (err) {
       setError(err.response?.data?.message || t("categories:deleteFailed"));

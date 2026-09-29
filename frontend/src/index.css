@@ -2135,3 +2135,128 @@ select:disabled:focus {
     max-width: none;
   }
 }
+
+/* ---------- Transaction history dialog (components/TransactionHistoryModal.jsx) ---------- */
+.history-empty {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* A vertical timeline: each entry hangs off a line on the left, with a dot coloured by action. */
+.history-item {
+  position: relative;
+  padding: 0 0 1.1rem 1.4rem;
+  border-left: 2px solid #e5e7eb;
+  margin-left: 0.4rem;
+}
+
+.history-item:last-child {
+  padding-bottom: 0;
+  border-left-color: transparent;
+}
+
+.history-item::before {
+  content: "";
+  position: absolute;
+  left: -7px;
+  top: 0.2rem;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--history-color, #9ca3af);
+}
+
+.history-item-created {
+  --history-color: #16a34a;
+}
+
+.history-item-updated {
+  --history-color: #4f46e5;
+}
+
+.history-item-deleted {
+  --history-color: #dc2626;
+}
+
+.history-item-restored {
+  --history-color: #d97706;
+}
+
+.history-item-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.history-item-header .badge {
+  color: var(--history-color);
+  background: color-mix(in srgb, var(--history-color) 12%, #fff);
+}
+
+.history-actor {
+  font-weight: 600;
+  color: #111827;
+}
+
+.history-time {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.history-detail {
+  margin: 0.35rem 0 0;
+  font-size: 0.87rem;
+  color: #4b5563;
+}
+
+.history-changes {
+  list-style: none;
+  margin: 0.45rem 0 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  background: #f9fafb;
+  font-size: 0.87rem;
+}
+
+.history-changes li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.history-changes li + li {
+  margin-top: 0.25rem;
+}
+
+.history-field {
+  min-width: 6.5rem;
+  color: #6b7280;
+}
+
+.history-from {
+  color: #9ca3af;
+  text-decoration: line-through;
+}
+
+.history-to {
+  font-weight: 600;
+  color: #111827;
+}
+
+@media (max-width: 520px) {
+  .history-time {
+    margin-left: 0;
+    width: 100%;
+  }
+}

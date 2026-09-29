@@ -86,6 +86,34 @@ class ExpenseEventListenerTest {
     }
 
     @Test
+    void onExpenseEvent_recordsWhoDeletedWhat_whenOneTransactionDeleted() throws Exception {
+        listener.onExpenseEvent(new ExpenseEvent(
+                ExpenseEvent.EXPENSE_DELETED, 1L, 10L, 55L, 7L, new BigDecimal("150000"), null, null, null, null,
+                null, "An", Instant.now(), LocalDate.of(2026, 9, 12), "Tiền chợ", null, null, 1));
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(notificationCaptor.capture());
+        Notification saved = notificationCaptor.getValue();
+        assertThat(saved.getType()).isEqualTo(ExpenseEvent.EXPENSE_DELETED);
+        assertThat(saved.getTitle()).isEqualTo("Giao dịch đã bị xoá");
+        assertThat(saved.getMessage()).isEqualTo(
+                "An đã xoá giao dịch 150,000 vào ngày 12/09/2026 \"Tiền chợ\". Có thể khôi phục trong Thùng rác.");
+        verify(mailSender, never()).createMimeMessage();
+    }
+
+    @Test
+    void onExpenseEvent_recordsOneSummary_whenManyTransactionsDeletedAtOnce() throws Exception {
+        listener.onExpenseEvent(new ExpenseEvent(
+                ExpenseEvent.EXPENSE_DELETED, 1L, 10L, null, null, null, null, null, null, null,
+                null, "An", Instant.now(), null, null, null, null, 12));
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(notificationCaptor.capture());
+        assertThat(notificationCaptor.getValue().getMessage())
+                .isEqualTo("An đã xoá 12 giao dịch. Có thể khôi phục trong Thùng rác.");
+    }
+
+    @Test
     void onExpenseEvent_recordsInAppNotification_whenRecurringFailed_withoutNoteOrCategory() throws Exception {
         listener.onExpenseEvent(recurringEvent(ExpenseEvent.RECURRING_FAILED, null, null, null));
 

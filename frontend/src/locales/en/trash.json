@@ -12,6 +12,7 @@
   "colName": "Name",
   "colCurrency": "Currency",
   "colDeletedAt": "Deleted at",
+  "colDeletedBy": "Deleted by",
   "colType": "Type",
   "colAmount": "Amount",
   "colOccurredAt": "Transaction date",

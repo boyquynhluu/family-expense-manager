@@ -16,7 +16,9 @@ import com.family.expensemanager.expense.dto.BulkDeleteResult;
 import com.family.expensemanager.expense.dto.ReceiptFile;
 import com.family.expensemanager.expense.dto.TransactionReportFilter;
 import com.family.expensemanager.expense.dto.TransactionRequest;
+import com.family.expensemanager.expense.dto.TransactionAuditLogResponse;
 import com.family.expensemanager.expense.dto.TransactionResponse;
+import com.family.expensemanager.expense.dto.TransactionSnapshot;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.ApplicationEventPublisher;
@@ -69,6 +71,7 @@ public class TransactionService {
     private final CacheManager cacheManager;
     private final ReceiptStorageService receiptStorageService;
     private final IdempotencyGuard idempotencyGuard;
+    private final TransactionAuditService auditService;
 
     /**
      * @param idempotencyKey optional {@code Idempotency-Key} request header (see {@link IdempotencyGuard}) —
@@ -106,6 +109,8 @@ public class TransactionService {
 
             transactionDao.insert(transaction);
             evictCaches(familyId, periodMonth);
+            auditService.record(TransactionAuditService.ACTION_CREATED, familyId, transaction.getId(), null,
+                    TransactionSnapshot.of(transaction), userId, userDisplayName);
 
             eventPublisher.publishEvent(new ExpenseEvent(
                     ExpenseEvent.EXPENSE_CREATED, familyId, userId, transaction.getId(), category.getId(),
@@ -181,12 +186,13 @@ public class TransactionService {
         }
     }
 
-    public TransactionResponse update(
-            Long familyId, Long transactionId, Long callerUserId, boolean callerIsOwner, TransactionRequest request) {
+    public TransactionResponse update(Long familyId, Long transactionId, Long callerUserId, String callerName,
+                                      boolean callerIsOwner, TransactionRequest request) {
         try {
             log.info("update - start, familyId={}, transactionId={}", familyId, transactionId);
             Transaction transaction = requireOwnedByFamily(transactionId, familyId);
             requireCanModify(transaction, callerUserId, callerIsOwner);
+            TransactionSnapshot before = TransactionSnapshot.of(transaction);
             Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
             Category category = categoryService.requireOwnedByFamily(request.categoryId(), familyId, request.type());
 
@@ -199,6 +205,8 @@ public class TransactionService {
             transaction.setOccurredAt(request.occurredAt());
             transaction.setNote(request.note());
             transactionDao.update(transaction);
+            auditService.record(TransactionAuditService.ACTION_UPDATED, familyId, transactionId, before,
+                    TransactionSnapshot.of(transaction), callerUserId, callerName);
 
             String newPeriodMonth = periodMonthOf(request.occurredAt());
             evictCaches(familyId, oldPeriodMonth);
@@ -220,14 +228,15 @@ public class TransactionService {
      * both stay in place, just hidden from normal queries, so {@link #restore} can bring
      * a mistaken delete back exactly as it was.
      */
-    public void delete(Long familyId, Long transactionId, Long callerUserId, boolean callerIsOwner) {
+    public void delete(Long familyId, Long transactionId, Long callerUserId, String callerName,
+                       boolean callerIsOwner) {
         try {
             log.info("delete - start, familyId={}, transactionId={}", familyId, transactionId);
-            Transaction transaction = requireOwnedByFamily(transactionId, familyId);
-            requireCanModify(transaction, callerUserId, callerIsOwner);
-            transaction.setDeletedAt(LocalDateTime.now());
-            transactionDao.update(transaction);
-            evictCaches(familyId, periodMonthOf(transaction.getOccurredAt()));
+            Transaction transaction = softDelete(familyId, transactionId, callerUserId, callerName, callerIsOwner);
+            eventPublisher.publishEvent(new ExpenseEvent(
+                    ExpenseEvent.EXPENSE_DELETED, familyId, callerUserId, transaction.getId(),
+                    transaction.getCategoryId(), transaction.getAmount(), null, null, null, null, null, callerName,
+                    Instant.now(), transaction.getOccurredAt().toLocalDate(), transaction.getNote(), null, null, 1));
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
                 | OptimisticLockException e) {
             throw e;
@@ -236,7 +245,24 @@ public class TransactionService {
         }
     }
 
-    public BulkDeleteResult bulkDelete(Long familyId, List<Long> ids, Long callerUserId, boolean callerIsOwner) {
+    /** Marks one transaction deleted (who + when) and logs it; no notification — callers decide how to announce it. */
+    private Transaction softDelete(Long familyId, Long transactionId, Long callerUserId, String callerName,
+                                   boolean callerIsOwner) {
+        Transaction transaction = requireOwnedByFamily(transactionId, familyId);
+        requireCanModify(transaction, callerUserId, callerIsOwner);
+        transaction.setDeletedAt(LocalDateTime.now());
+        transaction.setDeletedByUserId(callerUserId);
+        transaction.setDeletedByName(truncateName(callerName));
+        transactionDao.update(transaction);
+        auditService.record(TransactionAuditService.ACTION_DELETED, familyId, transactionId,
+                TransactionSnapshot.of(transaction), null, callerUserId, callerName);
+        evictCaches(familyId, periodMonthOf(transaction.getOccurredAt()));
+        return transaction;
+    }
+
+    /** Publishes ONE notification for the whole batch (itemCount = how many), not one per row. */
+    public BulkDeleteResult bulkDelete(Long familyId, List<Long> ids, Long callerUserId, String callerName,
+                                       boolean callerIsOwner) {
         try {
             log.info("bulkDelete - start, familyId={}, count={}", familyId, ids.size());
             if (ids.size() > MAX_BULK_DELETE) {
@@ -247,7 +273,7 @@ public class TransactionService {
             int forbidden = 0;
             for (Long id : new LinkedHashSet<>(ids)) {
                 try {
-                    delete(familyId, id, callerUserId, callerIsOwner);
+                    softDelete(familyId, id, callerUserId, callerName, callerIsOwner);
                     deleted++;
                 } catch (NotFoundException e) {
                     skipped++;
@@ -257,6 +283,11 @@ public class TransactionService {
                     }
                     forbidden++;
                 }
+            }
+            if (deleted > 0) {
+                eventPublisher.publishEvent(new ExpenseEvent(
+                        ExpenseEvent.EXPENSE_DELETED, familyId, callerUserId, null, null, null, null, null, null,
+                        null, null, callerName, Instant.now(), null, null, null, null, deleted));
             }
             return new BulkDeleteResult(deleted, skipped, forbidden);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
@@ -288,7 +319,8 @@ public class TransactionService {
         }
     }
 
-    public void restore(Long familyId, Long transactionId, Long callerUserId, boolean callerIsOwner) {
+    public void restore(Long familyId, Long transactionId, Long callerUserId, String callerName,
+                        boolean callerIsOwner) {
         try {
             log.info("restore - start, familyId={}, transactionId={}", familyId, transactionId);
             Transaction deleted = transactionDao.selectDeletedById(transactionId)
@@ -298,6 +330,8 @@ public class TransactionService {
             if (transactionDao.restore(transactionId, familyId) == 0) {
                 throw logged(log, new NotFoundException("Giao dịch đã xoá không tồn tại: " + transactionId));
             }
+            auditService.record(TransactionAuditService.ACTION_RESTORED, familyId, transactionId, null,
+                    TransactionSnapshot.of(deleted), callerUserId, callerName);
             evictCaches(familyId, periodMonthOf(deleted.getOccurredAt()));
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
                 | OptimisticLockException e) {
@@ -305,6 +339,11 @@ public class TransactionService {
         } catch (Exception e) {
             throw ServiceException.unexpected("TransactionService.restore", e);
         }
+    }
+
+    /** Who created/changed/deleted/restored this transaction and what it looked like before and after, oldest first. */
+    public List<TransactionAuditLogResponse> history(Long familyId, Long transactionId) {
+        return auditService.listHistory(familyId, transactionId);
     }
 
     public TransactionResponse uploadReceipt(

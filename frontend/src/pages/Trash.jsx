@@ -2,9 +2,10 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import Pagination from "../components/Pagination";
-import { formatCurrency, formatServerDateTime } from "../utils/format";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
+import { formatCurrency, formatServerDateTime } from "../utils/format";
+import { notifyTrashChanged } from "../utils/trashEvents";
 
 export default function Trash() {
   const { t } = useTranslation("trash");
@@ -25,6 +26,7 @@ export default function Trash() {
   async function handleRestore(kind, id, reload) {
     try {
       await client.post(`/expenses/${kind}/${id}/restore`);
+      notifyTrashChanged();
       toast.success(t("restoreSuccess"));
       reload();
     } catch (err) {
@@ -129,6 +131,7 @@ export default function Trash() {
                 <th>{t("colOccurredAt")}</th>
                 <th>{t("colNote")}</th>
                 <th>{t("colDeletedAt")}</th>
+                <th>{t("colDeletedBy")}</th>
                 <th></th>
               </tr>
             </thead>
@@ -140,6 +143,8 @@ export default function Trash() {
                   <td data-label={t("colOccurredAt")}>{formatDateTime(t2.occurredAt)}</td>
                   <td data-label={t("colNote")}>{t2.note || "-"}</td>
                   <td data-label={t("colDeletedAt")}>{formatDateTime(t2.deletedAt)}</td>
+                  {/* Null for rows deleted before "who deleted it" was recorded (V12). */}
+                  <td data-label={t("colDeletedBy")}>{t2.deletedByName || "-"}</td>
                   <td className="row-actions">
                     {(isOwner || String(t2.userId) === String(userId)) && (
                       <button type="button" onClick={() => handleRestore("transactions", t2.id, loadTransactions)}>

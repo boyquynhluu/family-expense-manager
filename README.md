@@ -138,6 +138,7 @@ Topic `expense-events`, key = `familyId`, phân biệt bằng field `eventType`:
 - `BUDGET_WARNING` — chi chạm 80% ngân sách (danh mục hoặc tổng) lần đầu, chưa vượt 100%. Chỉ tạo thông báo trong app.
 - `BUDGET_EXCEEDED` — chi **vượt 100% lần đầu** (không lặp lại ở các giao dịch vượt tiếp theo). Thông báo trong app và email cho người tạo giao dịch.
 - `RECURRING_EXECUTED`, `RECURRING_FAILED` — scheduler giao dịch định kỳ ghi thành công hoặc gặp lỗi. Chỉ trong app.
+- `EXPENSE_DELETED` — giao dịch bị xoá (xoá mềm, vào Thùng rác). `userId`/`userDisplayName` là **người xoá**. Xoá một giao dịch: event mô tả giao dịch đó (`transactionId`, `amount`, `occurredOn`, `note`) với `itemCount = 1`; **xoá hàng loạt chỉ publish một event** với `itemCount` = số giao dịch đã xoá, để không làm ngập thông báo của cả gia đình. Chỉ trong app, người dùng tắt được trong tuỳ chọn thông báo. Ai xoá cũng được lưu ngay trên dòng giao dịch (`deleted_by_user_id`, `deleted_by_name`, migration V12) và toàn bộ lịch sử tạo/sửa/xoá/khôi phục nằm ở bảng `TRANSACTION_AUDIT_LOGS` (V13, xem `GET /api/expenses/transactions/{id}/history`).
 - `WALLET_TRANSFERRED` — publish sau khi ghi `WALLET_TRANSFERRED` (mục 14). Một dòng thông báo trong app dùng chung cho cả gia đình (ví không có chủ sở hữu riêng, nên không có "người nhận" theo user). Về email, `notification-service` gửi hai kiểu khác nhau: người tạo giao dịch nhận email "đã trừ" (địa chỉ có sẵn trong event, do expense-service đọc từ JWT lúc publish), còn **mỗi thành viên khác trong gia đình** nhận email "đã cộng, ai chuyển" — địa chỉ của họ được tra cứu qua endpoint nội bộ `GET /internal/families/{familyId}/members` của auth-service (xem "Bảo mật" bên dưới), vì notification-service không có sẵn USERS. Lỗi gửi email (kể cả `BUDGET_EXCEEDED`) chỉ được log, không throw lại — tránh Kafka redeliver event và ghi trùng dòng thông báo trong app.
 
 Các topic khác (khai báo dưới `kafka.topic.*` trong `application.yml`): `user-verification` và `password-reset` (email xác thực, đặt lại mật khẩu, cả xác nhận đổi email), `family-invite` (email mời thành viên), `family-member-events` (`MEMBER_JOINED`, `MEMBER_LEFT`, `MEMBER_REMOVED`, do auth-service phát), `user-registered` (có tài khoản mới, kèm danh sách email admin nhận, xem mục 25).
@@ -858,6 +859,7 @@ flowchart LR
         E3["RECURRING_EXECUTED"]
         E4["RECURRING_FAILED"]
         E5["WALLET_TRANSFERRED"]
+        E6["EXPENSE_DELETED"]
     end
     subgraph AUTHS["auth-service, topic family-member-events"]
         A1["MEMBER_JOINED"]
@@ -869,6 +871,7 @@ flowchart LR
     E3 --> N
     E4 --> N
     E5 --> N
+    E6 --> N
     A1 --> N
     A2 --> N
     A3 --> N

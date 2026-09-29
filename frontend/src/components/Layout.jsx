@@ -1,31 +1,33 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { useTrashCount } from "../hooks/useTrashCount";
 import { useUnreadNotifications } from "../hooks/useUnreadNotifications";
+import {
+    BellIcon,
+    CloseIcon,
+    GridIcon,
+    LogoutIcon,
+    MenuIcon,
+    PieChartIcon,
+    ReceiptIcon,
+    RepeatIcon,
+    ShieldIcon,
+    TagIcon,
+    TrashIcon,
+    TrendUpIcon,
+    UserIcon,
+    WalletIcon,
+} from "./AppIcons";
 import FamilySwitcher from "./FamilySwitcher";
 import LanguageSwitcher from "./LanguageSwitcher";
-import {
-  BellIcon,
-  CloseIcon,
-  GridIcon,
-  LogoutIcon,
-  MenuIcon,
-  PieChartIcon,
-  ReceiptIcon,
-  RepeatIcon,
-  ShieldIcon,
-  TagIcon,
-  TrashIcon,
-  TrendUpIcon,
-  UserIcon,
-  WalletIcon,
-} from "./AppIcons";
 
 export default function Layout() {
   const { t } = useTranslation("layout");
   const { logout, displayName, isSystemAdmin } = useAuth();
   const unreadCount = useUnreadNotifications();
+  const trashCount = useTrashCount();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -96,6 +98,9 @@ export default function Layout() {
                   {link.label}
                   {link.to === "/notifications" && unreadCount > 0 && (
                     <span className="nav-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
+                  )}
+                  {link.to === "/trash" && trashCount > 0 && (
+                    <span className="nav-badge">{trashCount > 99 ? "99+" : trashCount}</span>
                   )}
                 </NavLink>
               </li>

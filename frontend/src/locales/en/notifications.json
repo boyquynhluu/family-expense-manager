@@ -30,6 +30,7 @@
     "MEMBER_JOINED": "New member joined",
     "MEMBER_LEFT": "Member left the family",
     "MEMBER_REMOVED": "Member removed from the family",
-    "WALLET_TRANSFERRED": "Wallet transfer"
+    "WALLET_TRANSFERRED": "Wallet transfer",
+    "EXPENSE_DELETED": "Transaction deleted"
   }
 }

@@ -12,6 +12,8 @@ import { confirmDialog } from "../utils/confirm";
 import { maxDateTime, minDateTime } from "../utils/dateLimits";
 import { formatCurrency } from "../utils/format";
 import { LIMITS } from "../utils/inputLimits";
+import { notifyTrashChanged } from "../utils/trashEvents";
+
 
 // <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" in the browser's local time.
 function nowForDateTimeInput() {
@@ -92,6 +94,7 @@ export default function Wallets() {
     setError("");
     try {
       await client.delete(`/expenses/wallets/${id}`);
+      notifyTrashChanged();
       load();
     } catch (err) {
       setError(err.response?.data?.message || t("wallets:deleteFailed"));

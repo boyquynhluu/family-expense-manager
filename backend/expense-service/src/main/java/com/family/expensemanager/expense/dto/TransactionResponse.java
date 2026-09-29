@@ -17,7 +17,8 @@ public record TransactionResponse(
         LocalDateTime occurredAt,
         String note,
         Boolean hasReceipt,
-        LocalDateTime deletedAt) {
+        LocalDateTime deletedAt,
+        String deletedByName) {
 
     public static TransactionResponse from(Transaction transaction) {
         return new TransactionResponse(
@@ -32,6 +33,7 @@ public record TransactionResponse(
                 transaction.getOccurredAt(),
                 transaction.getNote(),
                 transaction.getReceiptPath() != null,
-                transaction.getDeletedAt());
+                transaction.getDeletedAt(),
+                transaction.getDeletedByName());
     }
 }

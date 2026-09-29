@@ -13,6 +13,7 @@ import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.dto.TransactionReportFilter;
 import com.family.expensemanager.expense.dto.TransactionRequest;
 import com.family.expensemanager.expense.dto.TransactionResponse;
+import com.family.expensemanager.expense.dto.TransactionSnapshot;
 
 import org.assertj.core.api.ThrowableAssert;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,9 +39,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -69,6 +72,8 @@ class TransactionServiceTest {
     private ReceiptStorageService receiptStorageService;
     @Mock
     private IdempotencyGuard idempotencyGuard;
+    @Mock
+    private TransactionAuditService auditService;
 
     private TransactionService transactionService;
 
@@ -77,7 +82,7 @@ class TransactionServiceTest {
     void setUp() {
         transactionService = new TransactionService(
                 transactionDao, budgetDao, walletService, categoryService, eventPublisher, cacheManager,
-                receiptStorageService, idempotencyGuard);
+                receiptStorageService, idempotencyGuard, auditService);
         // None of these tests exercise idempotency (they all pass a null key) — just run the action,
         // like the real IdempotencyGuard does for a null/blank key.
         lenient().when(idempotencyGuard.runOnce(any(), any(), any(), any(), any()))
@@ -137,17 +142,32 @@ class TransactionServiceTest {
         Transaction target = transaction(1L);
         stubUpdateDependencies(target);
 
-        var response = transactionService.update(1L, 1L, CREATOR_ID, false, updateRequest());
+        var response = transactionService.update(1L, 1L, CREATOR_ID, "An", false, updateRequest());
 
         assertThat(response.amount()).isEqualByComparingTo("99");
         verify(transactionDao).update(target);
     }
 
     @Test
+    void update_logsTheStateBeforeAndAfterTheEdit() {
+        Transaction target = transaction(1L);
+        stubUpdateDependencies(target);
+
+        transactionService.update(1L, 1L, CREATOR_ID, "An", false, updateRequest());
+
+        ArgumentCaptor<TransactionSnapshot> before = ArgumentCaptor.forClass(TransactionSnapshot.class);
+        ArgumentCaptor<TransactionSnapshot> after = ArgumentCaptor.forClass(TransactionSnapshot.class);
+        verify(auditService).record(eq(TransactionAuditService.ACTION_UPDATED), eq(1L), eq(1L), before.capture(),
+                after.capture(), eq(CREATOR_ID), eq("An"));
+        assertThat(before.getValue().amount()).isEqualByComparingTo("10");
+        assertThat(after.getValue().amount()).isEqualByComparingTo("99");
+    }
+
+    @Test
     void update_throwsForbidden_whenMemberEditsSomeoneElsesTransaction() {
         when(transactionDao.selectById(1L)).thenReturn(Optional.of(transaction(1L)));
 
-        assertForbidden(() -> transactionService.update(1L, 1L, OTHER_USER_ID, false, updateRequest()));
+        assertForbidden(() -> transactionService.update(1L, 1L, OTHER_USER_ID, "An", false, updateRequest()));
         verify(transactionDao, never()).update(any());
     }
 
@@ -156,7 +176,7 @@ class TransactionServiceTest {
         Transaction target = transaction(1L);
         stubUpdateDependencies(target);
 
-        transactionService.update(1L, 1L, OTHER_USER_ID, true, updateRequest());
+        transactionService.update(1L, 1L, OTHER_USER_ID, "An", true, updateRequest());
 
         verify(transactionDao).update(target);
     }
@@ -313,7 +333,7 @@ class TransactionServiceTest {
         target.setReceiptPath("1/1-a.jpg");
         when(transactionDao.selectById(1L)).thenReturn(Optional.of(target));
 
-        transactionService.delete(1L, 1L, CREATOR_ID, false);
+        transactionService.delete(1L, 1L, CREATOR_ID, "An", false);
 
         assertThat(target.getDeletedAt()).isNotNull();
         verify(transactionDao).update(target);
@@ -322,11 +342,38 @@ class TransactionServiceTest {
     }
 
     @Test
+    void delete_recordsWhoDeletedIt_logsTheOldState_andNotifiesTheFamily() {
+        Transaction target = transaction(1L);
+        target.setNote("Tiền chợ");
+        when(transactionDao.selectById(1L)).thenReturn(Optional.of(target));
+
+        transactionService.delete(1L, 1L, CREATOR_ID, "An", false);
+
+        // Level 1 — who, not just when.
+        assertThat(target.getDeletedByUserId()).isEqualTo(CREATOR_ID);
+        assertThat(target.getDeletedByName()).isEqualTo("An");
+        // Level 3 — the row as it was, and nothing after.
+        ArgumentCaptor<TransactionSnapshot> before = ArgumentCaptor.forClass(TransactionSnapshot.class);
+        verify(auditService).record(eq(TransactionAuditService.ACTION_DELETED), eq(1L), eq(1L), before.capture(),
+                isNull(), eq(CREATOR_ID), eq("An"));
+        assertThat(before.getValue().amount()).isEqualByComparingTo("10");
+        assertThat(before.getValue().note()).isEqualTo("Tiền chợ");
+        // Level 2 — one notification describing this transaction.
+        ArgumentCaptor<ExpenseEvent> event = ArgumentCaptor.forClass(ExpenseEvent.class);
+        verify(eventPublisher).publishEvent(event.capture());
+        assertThat(event.getValue().eventType()).isEqualTo(ExpenseEvent.EXPENSE_DELETED);
+        assertThat(event.getValue().transactionId()).isEqualTo(1L);
+        assertThat(event.getValue().userDisplayName()).isEqualTo("An");
+        assertThat(event.getValue().note()).isEqualTo("Tiền chợ");
+        assertThat(event.getValue().itemCount()).isEqualTo(1);
+    }
+
+    @Test
     void delete_throwsForbidden_whenMemberDeletesSomeoneElsesTransaction() {
         Transaction target = transaction(1L);
         when(transactionDao.selectById(1L)).thenReturn(Optional.of(target));
 
-        assertForbidden(() -> transactionService.delete(1L, 1L, OTHER_USER_ID, false));
+        assertForbidden(() -> transactionService.delete(1L, 1L, OTHER_USER_ID, "An", false));
         assertThat(target.getDeletedAt()).isNull();
         verify(transactionDao, never()).update(any());
     }
@@ -336,7 +383,7 @@ class TransactionServiceTest {
         Transaction target = transaction(1L);
         when(transactionDao.selectById(1L)).thenReturn(Optional.of(target));
 
-        transactionService.delete(1L, 1L, OTHER_USER_ID, true);
+        transactionService.delete(1L, 1L, OTHER_USER_ID, "An", true);
 
         assertThat(target.getDeletedAt()).isNotNull();
         verify(transactionDao).update(target);
@@ -347,16 +394,27 @@ class TransactionServiceTest {
         when(transactionDao.selectDeletedById(1L)).thenReturn(Optional.of(transaction(1L)));
         when(transactionDao.restore(1L, 1L)).thenReturn(1);
 
-        transactionService.restore(1L, 1L, CREATOR_ID, false);
+        transactionService.restore(1L, 1L, CREATOR_ID, "An", false);
 
         verify(transactionDao).restore(1L, 1L);
+    }
+
+    @Test
+    void restore_logsARestoredEntry() {
+        when(transactionDao.selectDeletedById(1L)).thenReturn(Optional.of(transaction(1L)));
+        when(transactionDao.restore(1L, 1L)).thenReturn(1);
+
+        transactionService.restore(1L, 1L, CREATOR_ID, "An", false);
+
+        verify(auditService).record(eq(TransactionAuditService.ACTION_RESTORED), eq(1L), eq(1L), isNull(),
+                any(TransactionSnapshot.class), eq(CREATOR_ID), eq("An"));
     }
 
     @Test
     void restore_throwsNotFound_whenRowMissingOrNotDeleted() {
         when(transactionDao.selectDeletedById(1L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> transactionService.restore(1L, 1L, CREATOR_ID, false))
+        assertThatThrownBy(() -> transactionService.restore(1L, 1L, CREATOR_ID, "An", false))
                 .isInstanceOf(NotFoundException.class);
         verify(transactionDao, never()).restore(any(), any());
     }
@@ -367,7 +425,7 @@ class TransactionServiceTest {
         deleted.setFamilyId(2L);
         when(transactionDao.selectDeletedById(1L)).thenReturn(Optional.of(deleted));
 
-        assertThatThrownBy(() -> transactionService.restore(1L, 1L, CREATOR_ID, true))
+        assertThatThrownBy(() -> transactionService.restore(1L, 1L, CREATOR_ID, "An", true))
                 .isInstanceOf(NotFoundException.class);
         verify(transactionDao, never()).restore(any(), any());
     }
@@ -376,7 +434,7 @@ class TransactionServiceTest {
     void restore_throwsForbidden_whenMemberRestoresSomeoneElsesTransaction() {
         when(transactionDao.selectDeletedById(1L)).thenReturn(Optional.of(transaction(1L)));
 
-        assertForbidden(() -> transactionService.restore(1L, 1L, OTHER_USER_ID, false));
+        assertForbidden(() -> transactionService.restore(1L, 1L, OTHER_USER_ID, "An", false));
         verify(transactionDao, never()).restore(any(), any());
     }
 
@@ -385,7 +443,7 @@ class TransactionServiceTest {
         when(transactionDao.selectDeletedById(1L)).thenReturn(Optional.of(transaction(1L)));
         when(transactionDao.restore(1L, 1L)).thenReturn(1);
 
-        transactionService.restore(1L, 1L, OTHER_USER_ID, true);
+        transactionService.restore(1L, 1L, OTHER_USER_ID, "An", true);
 
         verify(transactionDao).restore(1L, 1L);
     }
@@ -629,7 +687,7 @@ class TransactionServiceTest {
         when(transactionDao.selectById(3L)).thenReturn(Optional.empty());
         when(transactionDao.selectById(4L)).thenReturn(Optional.of(otherFamily));
 
-        var result = transactionService.bulkDelete(1L, List.of(1L, 2L, 3L, 4L, 1L), CREATOR_ID, false);
+        var result = transactionService.bulkDelete(1L, List.of(1L, 2L, 3L, 4L, 1L), CREATOR_ID, "An", false);
 
         assertThat(result.deleted()).isEqualTo(1);
         assertThat(result.forbidden()).isEqualTo(1);
@@ -650,7 +708,7 @@ class TransactionServiceTest {
         when(transactionDao.selectById(1L)).thenReturn(Optional.of(first));
         when(transactionDao.selectById(2L)).thenReturn(Optional.of(second));
 
-        var result = transactionService.bulkDelete(1L, List.of(1L, 2L), 99L, true);
+        var result = transactionService.bulkDelete(1L, List.of(1L, 2L), 99L, "An", true);
 
         assertThat(result.deleted()).isEqualTo(2);
         assertThat(result.skipped()).isZero();
@@ -658,10 +716,36 @@ class TransactionServiceTest {
     }
 
     @Test
+    void bulkDelete_publishesOneNotificationForTheWholeBatch_butLogsEachRow() {
+        when(transactionDao.selectById(1L)).thenReturn(Optional.of(transaction(1L)));
+        when(transactionDao.selectById(2L)).thenReturn(Optional.of(transaction(2L)));
+        when(transactionDao.selectById(3L)).thenReturn(Optional.of(transaction(3L)));
+
+        transactionService.bulkDelete(1L, List.of(1L, 2L, 3L), CREATOR_ID, "An", false);
+
+        ArgumentCaptor<ExpenseEvent> event = ArgumentCaptor.forClass(ExpenseEvent.class);
+        verify(eventPublisher).publishEvent(event.capture());
+        assertThat(event.getValue().eventType()).isEqualTo(ExpenseEvent.EXPENSE_DELETED);
+        assertThat(event.getValue().itemCount()).isEqualTo(3);
+        assertThat(event.getValue().transactionId()).isNull();
+        verify(auditService, times(3)).record(eq(TransactionAuditService.ACTION_DELETED), eq(1L), any(), any(),
+                isNull(), eq(CREATOR_ID), eq("An"));
+    }
+
+    @Test
+    void bulkDelete_publishesNothing_whenNothingWasDeleted() {
+        when(transactionDao.selectById(1L)).thenReturn(Optional.empty());
+
+        transactionService.bulkDelete(1L, List.of(1L), CREATOR_ID, "An", false);
+
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
     void bulkDelete_throwsBadRequest_whenMoreThan100Ids() {
         List<Long> ids = java.util.stream.LongStream.rangeClosed(1, 101).boxed().toList();
 
-        assertThatThrownBy(() -> transactionService.bulkDelete(1L, ids, CREATOR_ID, true))
+        assertThatThrownBy(() -> transactionService.bulkDelete(1L, ids, CREATOR_ID, "An", true))
                 .isInstanceOf(BadRequestException.class);
         verify(transactionDao, never()).selectById(any());
     }

@@ -13,6 +13,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import com.family.expensemanager.common.doma.AppDomaConfig;
 import com.family.expensemanager.expense.domain.entity.Category;
 import com.family.expensemanager.expense.domain.entity.Transaction;
+import com.family.expensemanager.expense.domain.entity.TransactionAuditLog;
 import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.domain.entity.WalletTransfer;
 import com.zaxxer.hikari.HikariDataSource;
@@ -141,8 +142,14 @@ class ExpenseDaoIT {
 
         // Soft-deleting a transaction must drop it from balance/report aggregates too.
         transaction.setDeletedAt(LocalDateTime.now());
+        transaction.setDeletedByUserId(7L);
+        transaction.setDeletedByName("Người Xoá IT");
         transactionDao.update(transaction);
         assertThat(transactionDao.selectById(transaction.getId())).isEmpty();
+        // V12: who deleted it survives the round trip...
+        Transaction trashed = transactionDao.selectDeletedById(transaction.getId()).orElseThrow();
+        assertThat(trashed.getDeletedByUserId()).isEqualTo(7L);
+        assertThat(trashed.getDeletedByName()).isEqualTo("Người Xoá IT");
         assertThat(transactionDao.countByWalletId(wallet.getId())).isEqualTo(0);
         assertThat(transactionDao.countDeletedByFamilyId(familyId)).isGreaterThanOrEqualTo(1);
         assertThat(transactionDao.selectDeletedByFamilyIdPaged(familyId, 100, 0))
@@ -151,8 +158,49 @@ class ExpenseDaoIT {
 
         int restored = transactionDao.restore(transaction.getId(), familyId);
         assertThat(restored).isEqualTo(1);
-        assertThat(transactionDao.selectById(transaction.getId())).isPresent();
+        Transaction back = transactionDao.selectById(transaction.getId()).orElseThrow();
+        // ...and a restore clears it again.
+        assertThat(back.getDeletedByUserId()).isNull();
+        assertThat(back.getDeletedByName()).isNull();
         assertThat(transactionDao.countByWalletId(wallet.getId())).isEqualTo(1);
+    }
+
+    @Test
+    void transactionAuditLog_storesJsonSnapshots_andIsReadBackPerFamilyInOrder() {
+        TransactionAuditLogDao auditDao = new TransactionAuditLogDaoImpl(domaConfig);
+        Long familyId = 400L;
+        Long transactionId = 9001L;
+
+        TransactionAuditLog created = auditLog(familyId, transactionId, "CREATED", null,
+                "{\"amount\": 150000.00, \"note\": \"Tiền chợ\"}");
+        TransactionAuditLog updated = auditLog(familyId, transactionId, "UPDATED",
+                "{\"amount\": 150000.00, \"note\": \"Tiền chợ\"}", "{\"amount\": 175000.00, \"note\": \"Tiền chợ\"}");
+        auditDao.insert(created);
+        auditDao.insert(updated);
+        // Same transaction id, different family — must never show up in family 400's history.
+        auditDao.insert(auditLog(401L, transactionId, "CREATED", null, "{\"amount\": 1}"));
+
+        var history = auditDao.selectByTransactionIdAndFamilyId(transactionId, familyId);
+
+        assertThat(history).extracting(TransactionAuditLog::getAction).containsExactly("CREATED", "UPDATED");
+        assertThat(history.get(0).getBeforeJson()).isNull();
+        // MySQL's JSON column may re-format the text (spacing/key order), so compare content, not the string.
+        assertThat(history.get(1).getAfterJson()).contains("175000").contains("Tiền chợ");
+        assertThat(history.get(1).getActorName()).isEqualTo("Người Sửa IT");
+    }
+
+    private static TransactionAuditLog auditLog(Long familyId, Long transactionId, String action,
+                                                String beforeJson, String afterJson) {
+        TransactionAuditLog log = new TransactionAuditLog();
+        log.setFamilyId(familyId);
+        log.setTransactionId(transactionId);
+        log.setAction(action);
+        log.setActorUserId(7L);
+        log.setActorName("Người Sửa IT");
+        log.setBeforeJson(beforeJson);
+        log.setAfterJson(afterJson);
+        log.setCreatedAt(LocalDateTime.now().withNano(0));
+        return log;
     }
 
     @Test

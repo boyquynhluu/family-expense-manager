@@ -11,6 +11,8 @@ import com.family.expensemanager.expense.dao.RecurringTransactionDao;
 import com.family.expensemanager.expense.dao.RecurringTransactionDaoImpl;
 import com.family.expensemanager.expense.dao.ReportDao;
 import com.family.expensemanager.expense.dao.ReportDaoImpl;
+import com.family.expensemanager.expense.dao.TransactionAuditLogDao;
+import com.family.expensemanager.expense.dao.TransactionAuditLogDaoImpl;
 import com.family.expensemanager.expense.dao.TransactionDao;
 import com.family.expensemanager.expense.dao.TransactionDaoImpl;
 import com.family.expensemanager.expense.dao.WalletDao;
@@ -70,5 +72,10 @@ public class DomaConfiguration {
     @Bean
     public IdempotencyKeyDao idempotencyKeyDao(Config domaConfig) {
         return new IdempotencyKeyDaoImpl(domaConfig);
+    }
+
+    @Bean
+    public TransactionAuditLogDao transactionAuditLogDao(Config domaConfig) {
+        return new TransactionAuditLogDaoImpl(domaConfig);
     }
 }

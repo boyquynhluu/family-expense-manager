@@ -30,6 +30,7 @@
     "MEMBER_JOINED": "Thành viên mới tham gia",
     "MEMBER_LEFT": "Thành viên rời gia đình",
     "MEMBER_REMOVED": "Thành viên bị xoá khỏi gia đình",
-    "WALLET_TRANSFERRED": "Chuyển tiền giữa các ví"
+    "WALLET_TRANSFERRED": "Chuyển tiền giữa các ví",
+    "EXPENSE_DELETED": "Giao dịch bị xoá"
   }
 }

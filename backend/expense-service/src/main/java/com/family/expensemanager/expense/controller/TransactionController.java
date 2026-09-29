@@ -2,6 +2,7 @@ package com.family.expensemanager.expense.controller;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -27,6 +28,7 @@ import com.family.expensemanager.expense.dto.BulkDeleteResult;
 import com.family.expensemanager.expense.dto.ImportResult;
 import com.family.expensemanager.expense.dto.ReceiptFile;
 import com.family.expensemanager.expense.dto.TransactionReportFilter;
+import com.family.expensemanager.expense.dto.TransactionAuditLogResponse;
 import com.family.expensemanager.expense.dto.TransactionRequest;
 import com.family.expensemanager.expense.dto.TransactionResponse;
 import com.family.expensemanager.expense.service.TransactionImportService;
@@ -85,13 +87,13 @@ public class TransactionController {
     public ApiResponse<TransactionResponse> update(@PathVariable Long id, @Valid @RequestBody TransactionRequest request) {
         log.info("update - start, id={}", id);
         return ApiResponse.ok(transactionService.update(
-                CurrentUser.familyId(), id, CurrentUser.userId(), isOwner(), request));
+                CurrentUser.familyId(), id, CurrentUser.userId(), CurrentUser.displayName(), isOwner(), request));
     }
 
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         log.info("delete - start, id={}", id);
-        transactionService.delete(CurrentUser.familyId(), id, CurrentUser.userId(), isOwner());
+        transactionService.delete(CurrentUser.familyId(), id, CurrentUser.userId(), CurrentUser.displayName(), isOwner());
         return ApiResponse.ok();
     }
 
@@ -99,7 +101,7 @@ public class TransactionController {
     public ApiResponse<BulkDeleteResult> bulkDelete(@Valid @RequestBody BulkDeleteRequest request) {
         log.info("bulkDelete - start, count={}", request.ids().size());
         return ApiResponse.ok(transactionService.bulkDelete(
-                CurrentUser.familyId(), request.ids(), CurrentUser.userId(), isOwner()));
+                CurrentUser.familyId(), request.ids(), CurrentUser.userId(), CurrentUser.displayName(), isOwner()));
     }
 
     @GetMapping("/trash")
@@ -112,8 +114,15 @@ public class TransactionController {
     @PostMapping("/{id}/restore")
     public ApiResponse<Void> restore(@PathVariable Long id) {
         log.info("restore - start, id={}", id);
-        transactionService.restore(CurrentUser.familyId(), id, CurrentUser.userId(), isOwner());
+        transactionService.restore(CurrentUser.familyId(), id, CurrentUser.userId(), CurrentUser.displayName(), isOwner());
         return ApiResponse.ok();
+    }
+
+    /** Works for deleted transactions too (their history is exactly what the Trash page may need). */
+    @GetMapping("/{id}/history")
+    public ApiResponse<List<TransactionAuditLogResponse>> history(@PathVariable Long id) {
+        log.info("history - start, id={}", id);
+        return ApiResponse.ok(transactionService.history(CurrentUser.familyId(), id));
     }
 
     @PostMapping("/{id}/receipt")

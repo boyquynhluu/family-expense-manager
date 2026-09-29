@@ -12,6 +12,8 @@ SELECT
     receipt_path,
     receipt_content_type,
     deleted_at,
+    deleted_by_user_id,
+    deleted_by_name,
     version
 FROM
     TRANSACTIONS
