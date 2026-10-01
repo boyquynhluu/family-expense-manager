@@ -254,6 +254,8 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: fem-cloudflared
+    profiles:
+      - dev
     command: tunnel --no-autoupdate --url http://api-gateway:8080
     depends_on:
       - api-gateway

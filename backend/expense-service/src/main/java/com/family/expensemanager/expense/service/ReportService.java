@@ -4,6 +4,8 @@ import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.expense.dao.ReportDao;
+import com.family.expensemanager.expense.dao.WalletDao;
+import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.dto.CompareReportResponse;
 import com.family.expensemanager.expense.dto.CompareReportResponse.CategoryCompareItem;
 import com.family.expensemanager.expense.dto.CompareReportResponse.MonthSummary;
@@ -11,6 +13,7 @@ import com.family.expensemanager.expense.dto.MemberReportItem;
 import com.family.expensemanager.expense.dto.RangeReportResponse;
 import com.family.expensemanager.expense.dto.RangeReportResponse.BucketTotal;
 import com.family.expensemanager.expense.dto.RangeReportResponse.CategoryTotal;
+import com.family.expensemanager.expense.dto.WalletMonthlyItem;
 import com.family.expensemanager.expense.dto.YearReportResponse;
 import com.family.expensemanager.expense.dto.YearReportResponse.MonthTotal;
 import java.io.UncheckedIOException;
@@ -54,7 +57,11 @@ public class ReportService {
     private static final int MIN_YEAR = 2000;
     private static final int MAX_YEAR = 2100;
 
+    private static final String DIRECTION_IN = "IN";
+    private static final String DIRECTION_OUT = "OUT";
+
     private final ReportDao reportDao;
+    private final WalletDao walletDao;
 
     public RangeReportResponse range(Long familyId, String from, String to) {
         try {
@@ -202,6 +209,59 @@ public class ReportService {
         }
     }
 
+    /**
+     * Per-wallet opening balance, income/expense, transfers in/out, net (surplus or deficit) and
+     * closing balance for one month. Opening balance = initial balance + every movement before the
+     * month, i.e. the same formula as {@code WalletService.currentBalanceOf} cut off at the month start.
+     */
+    public List<WalletMonthlyItem> walletMonthly(Long familyId, String yearMonth) {
+        try {
+            log.info("walletMonthly - start, familyId={}, yearMonth={}", familyId, yearMonth);
+            YearMonth month = parseMonth(yearMonth, "Tháng");
+            LocalDate monthStart = month.atDay(1);
+            LocalDate monthEnd = month.plusMonths(1).atDay(1);
+
+            Map<Long, WalletFlows> before = walletFlows(familyId, null, monthStart);
+            Map<Long, WalletFlows> during = walletFlows(familyId, monthStart, monthEnd);
+
+            List<WalletMonthlyItem> result = new ArrayList<>();
+            for (Wallet wallet : walletDao.selectByFamilyId(familyId)) {
+                WalletFlows prior = before.getOrDefault(wallet.getId(), new WalletFlows());
+                WalletFlows current = during.getOrDefault(wallet.getId(), new WalletFlows());
+                BigDecimal opening = wallet.getInitialBalance().add(prior.net());
+                BigDecimal net = current.net();
+                result.add(new WalletMonthlyItem(
+                        wallet.getId(), wallet.getName(), wallet.getCurrency(), opening,
+                        current.totals.income, current.totals.expense, current.transferIn, current.transferOut,
+                        net, opening.add(net)));
+            }
+            return result;
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("ReportService.walletMonthly", e);
+        }
+    }
+
+    private Map<Long, WalletFlows> walletFlows(Long familyId, LocalDate fromDate, LocalDate toExclusive) {
+        Map<Long, WalletFlows> flows = new HashMap<>();
+        for (Map<String, Object> row : reportDao.sumByWalletAndType(familyId, fromDate, toExclusive)) {
+            flows.computeIfAbsent(longValue(row.get("walletId")), k -> new WalletFlows())
+                    .totals.add(str(row.get("type")), decimal(row.get("total")));
+        }
+        for (Map<String, Object> row : reportDao.sumTransfersByWalletAndDirection(familyId, fromDate, toExclusive)) {
+            WalletFlows wf = flows.computeIfAbsent(longValue(row.get("walletId")), k -> new WalletFlows());
+            BigDecimal total = decimal(row.get("total"));
+            String direction = str(row.get("direction"));
+            if (DIRECTION_IN.equals(direction)) {
+                wf.transferIn = wf.transferIn.add(total);
+            } else if (DIRECTION_OUT.equals(direction)) {
+                wf.transferOut = wf.transferOut.add(total);
+            }
+        }
+        return flows;
+    }
+
     private Map<Long, BigDecimal> expenseByCategory(Long familyId, YearMonth month, Totals totals) {
         Map<Long, BigDecimal> expenseByCategory = new HashMap<>();
         List<Map<String, Object>> rows =
@@ -274,6 +334,16 @@ public class ReportService {
     // BIGINT UNSIGNED comes back as BigInteger from the MySQL driver, hence Number rather than Long.
     private static Long longValue(Object value) {
         return value == null ? null : ((Number) value).longValue();
+    }
+
+    private static final class WalletFlows {
+        private final Totals totals = new Totals();
+        private BigDecimal transferIn = BigDecimal.ZERO;
+        private BigDecimal transferOut = BigDecimal.ZERO;
+
+        BigDecimal net() {
+            return totals.income.subtract(totals.expense).add(transferIn).subtract(transferOut);
+        }
     }
 
     private static final class Totals {

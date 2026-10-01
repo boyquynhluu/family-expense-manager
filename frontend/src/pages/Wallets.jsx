@@ -3,9 +3,10 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import AmountInput from "../components/AmountInput";
-import { EditIcon, TrashIcon, WalletIcon } from "../components/AppIcons";
+import { CalendarIcon, EditIcon, TrashIcon, WalletIcon } from "../components/AppIcons";
 import Pagination from "../components/Pagination";
 import SeedDefaultsButton from "../components/SeedDefaultsButton";
+import WalletMonthlyTable from "../components/WalletMonthlyTable";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
@@ -20,6 +21,11 @@ function nowForDateTimeInput() {
   const now = new Date();
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
   return now.toISOString().slice(0, 16);
+}
+
+function currentYearMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function emptyTransferForm() {
@@ -47,9 +53,12 @@ export default function Wallets() {
   const [initialBalance, setInitialBalance] = useState("0");
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
+  const [yearMonth, setYearMonth] = useState(currentYearMonth);
+  const [reloadKey, setReloadKey] = useState(0);
 
   function load() {
     client.get("/expenses/wallets").then((res) => setWallets(res.data.data));
+    setReloadKey((k) => k + 1);
   }
 
   useEffect(load, []);
@@ -301,6 +310,18 @@ export default function Wallets() {
             </tbody>
           </table>
         )}
+      </div>
+
+      <div className="section-card">
+        <div className="page-header">
+          <h2>{t("wallets:monthlyTitle")}</h2>
+          <label className="month-picker">
+            <CalendarIcon />
+            <input type="month" value={yearMonth} onChange={(e) => setYearMonth(e.target.value)} />
+          </label>
+        </div>
+        <p className="page-header-subtitle">{t("wallets:monthlyHint")}</p>
+        <WalletMonthlyTable yearMonth={yearMonth} reloadKey={reloadKey} />
       </div>
 
       <div className="section-card" ref={transferFormRef}>

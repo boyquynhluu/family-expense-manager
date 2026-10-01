@@ -48,5 +48,15 @@
   "transferEditTitle": "Cập nhật giao dịch chuyển tiền",
   "transferSubmitUpdate": "Cập nhật",
   "transferUpdated": "Đã cập nhật giao dịch chuyển tiền",
-  "ownerOnlyManage": "Chỉ chủ hộ mới được thêm/sửa/xoá ví."
+  "ownerOnlyManage": "Chỉ chủ hộ mới được thêm/sửa/xoá ví.",
+  "monthlyTitle": "Số dư và dư/âm theo tháng",
+  "monthlyHint": "Dư/Âm = thu − chi + chuyển vào − chuyển ra trong tháng. Số dư cuối tháng = đầu tháng + dư/âm.",
+  "monthlyLoadFailed": "Không tải được số dư theo tháng",
+  "colOpening": "Đầu tháng",
+  "colIncome": "Thu",
+  "colExpense": "Chi",
+  "colTransfers": "Chuyển vào / ra",
+  "colNet": "Dư / Âm",
+  "colClosing": "Cuối tháng",
+  "totalRow": "Tổng"
 }

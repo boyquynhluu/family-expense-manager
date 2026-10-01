@@ -10,6 +10,8 @@
   "income": "Thu nhập",
   "expense": "Chi tiêu",
   "walletBalanceTitle": "Số dư theo ví",
+  "walletMonthlyTitle": "Số dư và dư/âm theo ví — tháng {{yearMonth}}",
+  "walletMonthlyHint": "Dư/Âm = thu − chi + chuyển vào − chuyển ra trong tháng. Số dư cuối tháng = đầu tháng + dư/âm.",
   "noWallets": "Chưa có ví nào",
   "expenseByCategoryTitle": "Chi theo danh mục",
   "noExpenseData": "Chưa có dữ liệu chi tiêu trong tháng này",

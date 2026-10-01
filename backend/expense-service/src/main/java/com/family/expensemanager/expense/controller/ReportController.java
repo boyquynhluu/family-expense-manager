@@ -5,6 +5,7 @@ import com.family.expensemanager.common.security.CurrentUser;
 import com.family.expensemanager.expense.dto.CompareReportResponse;
 import com.family.expensemanager.expense.dto.MemberReportItem;
 import com.family.expensemanager.expense.dto.RangeReportResponse;
+import com.family.expensemanager.expense.dto.WalletMonthlyItem;
 import com.family.expensemanager.expense.dto.YearReportResponse;
 import com.family.expensemanager.expense.service.ReportService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -47,5 +48,11 @@ public class ReportController {
     public ApiResponse<CompareReportResponse> compare(@RequestParam String month, @RequestParam String withMonth) {
         log.info("compare - start, month={}, withMonth={}", month, withMonth);
         return ApiResponse.ok(reportService.compare(CurrentUser.familyId(), month, withMonth));
+    }
+
+    @GetMapping("/wallet-month")
+    public ApiResponse<List<WalletMonthlyItem>> walletMonthly(@RequestParam String yearMonth) {
+        log.info("walletMonthly - start, yearMonth={}", yearMonth);
+        return ApiResponse.ok(reportService.walletMonthly(CurrentUser.familyId(), yearMonth));
     }
 }

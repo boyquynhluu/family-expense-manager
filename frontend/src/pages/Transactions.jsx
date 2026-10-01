@@ -192,8 +192,12 @@ export default function Transactions() {
       const res = await client.post("/expenses/transactions/bulk-delete", { ids: [...selectedIds] });
       const { deleted, skipped, forbidden } = res.data.data;
       const message = t("transactions:bulkDeleteResult", { deleted, skipped, forbidden });
-      if (deleted > 0) notifyTrashChanged(), toast.success(message);
-      else toast.error(message);
+      if (deleted > 0) {
+        notifyTrashChanged();
+        toast.success(message);
+      } else {
+        toast.error(message);
+      }
       setSelectedIds(new Set());
       load();
     } catch (err) {

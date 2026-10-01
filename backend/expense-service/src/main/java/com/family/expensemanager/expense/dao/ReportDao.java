@@ -34,4 +34,12 @@ public interface ReportDao {
     /** Rows: userId, displayName — the latest non-null created_by_name per user in the range. */
     @Select(mapKeyNaming = MapKeyNamingType.CAMEL_CASE)
     List<Map<String, Object>> selectLatestMemberNames(Long familyId, LocalDate fromDate, LocalDate toExclusive);
+
+    /** Rows: walletId, type, total. A null {@code fromDate} means "since the beginning". */
+    @Select(mapKeyNaming = MapKeyNamingType.CAMEL_CASE)
+    List<Map<String, Object>> sumByWalletAndType(Long familyId, LocalDate fromDate, LocalDate toExclusive);
+
+    /** Rows: walletId, direction (IN/OUT), total — over WALLET_TRANSFERS. A null {@code fromDate} means "since the beginning". */
+    @Select(mapKeyNaming = MapKeyNamingType.CAMEL_CASE)
+    List<Map<String, Object>> sumTransfersByWalletAndDirection(Long familyId, LocalDate fromDate, LocalDate toExclusive);
 }

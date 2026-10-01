@@ -48,5 +48,15 @@
   "transferEditTitle": "Update transfer",
   "transferSubmitUpdate": "Update",
   "transferUpdated": "Transfer updated",
-  "ownerOnlyManage": "Only the household owner can add, edit or delete wallets."
+  "ownerOnlyManage": "Only the household owner can add, edit or delete wallets.",
+  "monthlyTitle": "Monthly balance & surplus/deficit",
+  "monthlyHint": "Surplus/deficit = income − expense + transfers in − transfers out for the month. Closing = opening + surplus/deficit.",
+  "monthlyLoadFailed": "Failed to load monthly wallet balances",
+  "colOpening": "Opening",
+  "colIncome": "Income",
+  "colExpense": "Expense",
+  "colTransfers": "Transfers in / out",
+  "colNet": "Surplus / Deficit",
+  "colClosing": "Closing",
+  "totalRow": "Total"
 }
