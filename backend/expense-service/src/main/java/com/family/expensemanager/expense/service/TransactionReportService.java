@@ -51,10 +51,11 @@ public class TransactionReportService {
     private final CsvReportGenerator csvReportGenerator;
     private final ExcelReportGenerator excelReportGenerator;
 
-    public byte[] export(Long familyId, TransactionReportFilter filter, ReportFormat format) {
+    /** @param viewerUserId other members' private transactions are left out of the file. */
+    public byte[] export(Long familyId, Long viewerUserId, TransactionReportFilter filter, ReportFormat format) {
         try {
             log.info("export - start, familyId={}, format={}", familyId, format);
-            List<TransactionReportRow> rows = buildRows(familyId, filter);
+            List<TransactionReportRow> rows = buildRows(familyId, viewerUserId, filter);
             List<ReportColumn<TransactionReportRow>> columns = columns();
             return format == ReportFormat.EXCEL
                     ? excelReportGenerator.generate(openTemplate(), EXCEL_DATA_START_ROW, columns, rows)
@@ -74,7 +75,7 @@ public class TransactionReportService {
         }
     }
 
-    private List<TransactionReportRow> buildRows(Long familyId, TransactionReportFilter filter) {
+    private List<TransactionReportRow> buildRows(Long familyId, Long viewerUserId, TransactionReportFilter filter) {
         validateFilter(filter);
         Map<Long, String> walletNames = walletService.listByFamily(familyId).stream()
                 .collect(Collectors.toMap(w -> w.id(), w -> w.name()));
@@ -82,6 +83,7 @@ public class TransactionReportService {
                 .collect(Collectors.toMap(c -> c.id(), c -> c.name()));
 
         return transactionDao.selectByFamilyId(familyId).stream()
+                .filter(t -> t.isVisibleTo(viewerUserId))
                 .filter(t -> matches(t, filter))
                 .sorted(Comparator.comparing(Transaction::getOccurredAt))
                 .map(t -> new TransactionReportRow(

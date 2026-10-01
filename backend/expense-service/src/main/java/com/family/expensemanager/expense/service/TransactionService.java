@@ -17,6 +17,7 @@ import com.family.expensemanager.expense.dto.ReceiptFile;
 import com.family.expensemanager.expense.dto.TransactionReportFilter;
 import com.family.expensemanager.expense.dto.TransactionRequest;
 import com.family.expensemanager.expense.dto.TransactionAuditLogResponse;
+import com.family.expensemanager.expense.dto.TransactionLocation;
 import com.family.expensemanager.expense.dto.TransactionResponse;
 import com.family.expensemanager.expense.dto.TransactionSnapshot;
 import org.springframework.cache.Cache;
@@ -80,15 +81,28 @@ public class TransactionService {
      */
     public TransactionResponse create(Long familyId, Long userId, String userEmail, String userDisplayName,
                                        TransactionRequest request, String idempotencyKey) {
-        return idempotencyGuard.runOnce(familyId, IDEMPOTENCY_SCOPE, idempotencyKey, TransactionResponse.class,
-                () -> doCreate(familyId, userId, userEmail, userDisplayName, request));
+        // Trusted, non-interactive callers only (RecurringTransactionScheduler running a rule that was
+        // already checked when it was saved) — no wallet-ownership check. User requests must go through
+        // the overload below.
+        return create(familyId, userId, userEmail, userDisplayName, true, request, idempotencyKey);
     }
 
-    private TransactionResponse doCreate(
-            Long familyId, Long userId, String userEmail, String userDisplayName, TransactionRequest request) {
+    /**
+     * @param callerIsOwner whether the caller is the family OWNER — a plain member may only record into
+     *                      their own wallet or a shared one ({@link WalletService#canUse}).
+     */
+    public TransactionResponse create(Long familyId, Long userId, String userEmail, String userDisplayName,
+                                       boolean callerIsOwner, TransactionRequest request, String idempotencyKey) {
+        return idempotencyGuard.runOnce(familyId, IDEMPOTENCY_SCOPE, idempotencyKey, TransactionResponse.class,
+                () -> doCreate(familyId, userId, userEmail, userDisplayName, callerIsOwner, request));
+    }
+
+    private TransactionResponse doCreate(Long familyId, Long userId, String userEmail, String userDisplayName,
+                                          boolean callerIsOwner, TransactionRequest request) {
         try {
             log.info("create - start, familyId={}, userId={}", familyId, userId);
             Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
+            walletService.requireUsableBy(wallet, userId, callerIsOwner);
             Category category = categoryService.requireOwnedByFamily(request.categoryId(), familyId, request.type());
 
             Transaction transaction = new Transaction();
@@ -101,6 +115,7 @@ public class TransactionService {
             transaction.setAmount(request.amount());
             transaction.setOccurredAt(request.occurredAt());
             transaction.setNote(request.note());
+            transaction.setIsPrivate(Boolean.TRUE.equals(request.isPrivate()));
 
             String periodMonth = periodMonthOf(request.occurredAt());
             BigDecimal totalBefore = TYPE_EXPENSE.equals(request.type())
@@ -135,8 +150,14 @@ public class TransactionService {
      * tech-debt item this replaces: the old endpoint returned every transaction in the
      * family and left filtering/paging to client-side JS, which didn't scale).
      */
+    /**
+     * @param viewerUserId other members' private transactions appear MASKED (only that they exist + who made
+     *                     them) — and only on the unfiltered list, sorted after everything else. Any filter would
+     *                     leak through what it matched (a note search hitting a "***" row reveals its note), and a
+     *                     date-sorted position would reveal roughly when it happened.
+     */
     public PageResponse<TransactionResponse> listByFamilyPaged(
-            Long familyId, TransactionReportFilter filter, int page, int size) {
+            Long familyId, Long viewerUserId, TransactionReportFilter filter, int page, int size) {
         try {
             log.info("listByFamilyPaged - start, familyId={}, page={}, size={}", familyId, page, size);
             if (page < 0) {
@@ -147,19 +168,57 @@ public class TransactionService {
             }
             validateFilter(filter);
             String notePattern = filter.noteLikePattern();
+            boolean showOthersPrivate = filter.isEmpty();
             long totalElements = transactionDao.countByFamilyIdFiltered(
-                    familyId, filter.walletId(), filter.categoryId(), filter.type(), filter.fromDate(), filter.toDate(),
-                    notePattern, filter.minAmount(), filter.maxAmount());
+                    familyId, viewerUserId, showOthersPrivate, filter.walletId(), filter.categoryId(), filter.type(),
+                    filter.fromDate(), filter.toDate(), notePattern, filter.minAmount(), filter.maxAmount());
             List<TransactionResponse> content = transactionDao.selectByFamilyIdFiltered(
-                            familyId, filter.walletId(), filter.categoryId(), filter.type(), filter.fromDate(),
-                            filter.toDate(), notePattern, filter.minAmount(), filter.maxAmount(), size, page * size)
-                    .stream().map(TransactionResponse::from).toList();
+                            familyId, viewerUserId, showOthersPrivate, filter.walletId(), filter.categoryId(),
+                            filter.type(), filter.fromDate(), filter.toDate(), notePattern, filter.minAmount(),
+                            filter.maxAmount(), size, page * size)
+                    .stream()
+                    .map(t -> t.isVisibleTo(viewerUserId) ? TransactionResponse.from(t) : TransactionResponse.masked(t))
+                    .toList();
             return PageResponse.of(content, page, size, totalElements);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
                 | OptimisticLockException e) {
             throw e;
         } catch (Exception e) {
             throw ServiceException.unexpected("TransactionService.listByFamilyPaged", e);
+        }
+    }
+
+    /**
+     * Page of the filtered list holding {@code transactionId} (one the viewer sees in full — e.g. the entry they
+     * just saved). Mirrors {@link #listByFamilyPaged}'s order; masked rows are sorted last there, so they never
+     * come before it.
+     */
+    public TransactionLocation locate(Long familyId, Long viewerUserId, TransactionReportFilter filter,
+                                      Long transactionId, int size) {
+        try {
+            log.info("locate - start, familyId={}, transactionId={}", familyId, transactionId);
+            if (size < 1 || size > MAX_PAGE_SIZE) {
+                throw logged(log, new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE));
+            }
+            validateFilter(filter);
+            Transaction transaction = requireOwnedByFamily(transactionId, familyId, viewerUserId);
+            String notePattern = filter.noteLikePattern();
+            boolean inList = transactionDao.countFilteredMatchingId(
+                    familyId, viewerUserId, filter.walletId(), filter.categoryId(), filter.type(), filter.fromDate(),
+                    filter.toDate(), notePattern, filter.minAmount(), filter.maxAmount(), transactionId) > 0;
+            if (!inList) {
+                return new TransactionLocation(false, 0);
+            }
+            long ahead = transactionDao.countFilteredAhead(
+                    familyId, viewerUserId, filter.walletId(), filter.categoryId(), filter.type(), filter.fromDate(),
+                    filter.toDate(), notePattern, filter.minAmount(), filter.maxAmount(),
+                    transaction.getOccurredAt(), transactionId);
+            return new TransactionLocation(true, (int) (ahead / size));
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
+                | OptimisticLockException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("TransactionService.locate", e);
         }
     }
 
@@ -174,10 +233,10 @@ public class TransactionService {
         }
     }
 
-    public TransactionResponse get(Long familyId, Long transactionId) {
+    public TransactionResponse get(Long familyId, Long transactionId, Long viewerUserId) {
         try {
             log.info("get - start, familyId={}, transactionId={}", familyId, transactionId);
-            return TransactionResponse.from(requireOwnedByFamily(transactionId, familyId));
+            return TransactionResponse.from(requireOwnedByFamily(transactionId, familyId, viewerUserId));
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
                 | OptimisticLockException e) {
             throw e;
@@ -190,10 +249,15 @@ public class TransactionService {
                                       boolean callerIsOwner, TransactionRequest request) {
         try {
             log.info("update - start, familyId={}, transactionId={}", familyId, transactionId);
-            Transaction transaction = requireOwnedByFamily(transactionId, familyId);
+            Transaction transaction = requireOwnedByFamily(transactionId, familyId, callerUserId);
             requireCanModify(transaction, callerUserId, callerIsOwner);
             TransactionSnapshot before = TransactionSnapshot.of(transaction);
             Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
+            // Only when MOVING the transaction to another wallet: a member can still fix the amount/note of
+            // their own past entry in a wallet that has since been assigned to someone else.
+            if (!request.walletId().equals(transaction.getWalletId())) {
+                walletService.requireUsableBy(wallet, callerUserId, callerIsOwner);
+            }
             Category category = categoryService.requireOwnedByFamily(request.categoryId(), familyId, request.type());
 
             String oldPeriodMonth = periodMonthOf(transaction.getOccurredAt());
@@ -204,6 +268,11 @@ public class TransactionService {
             transaction.setAmount(request.amount());
             transaction.setOccurredAt(request.occurredAt());
             transaction.setNote(request.note());
+            // Only the creator decides whether their entry is private — an OWNER editing someone
+            // else's (non-private) transaction can't flip it, which would hide it from the OWNER too.
+            if (Objects.equals(transaction.getUserId(), callerUserId)) {
+                transaction.setIsPrivate(Boolean.TRUE.equals(request.isPrivate()));
+            }
             transactionDao.update(transaction);
             auditService.record(TransactionAuditService.ACTION_UPDATED, familyId, transactionId, before,
                     TransactionSnapshot.of(transaction), callerUserId, callerName);
@@ -233,10 +302,15 @@ public class TransactionService {
         try {
             log.info("delete - start, familyId={}, transactionId={}", familyId, transactionId);
             Transaction transaction = softDelete(familyId, transactionId, callerUserId, callerName, callerIsOwner);
+            // Notifications are listed to the whole family: a private transaction's event carries no
+            // details at all (they'd otherwise also sit in notification-service's stored payload).
+            boolean hidden = Boolean.TRUE.equals(transaction.getIsPrivate());
             eventPublisher.publishEvent(new ExpenseEvent(
-                    ExpenseEvent.EXPENSE_DELETED, familyId, callerUserId, transaction.getId(),
-                    transaction.getCategoryId(), transaction.getAmount(), null, null, null, null, null, callerName,
-                    Instant.now(), transaction.getOccurredAt().toLocalDate(), transaction.getNote(), null, null, 1));
+                    ExpenseEvent.EXPENSE_DELETED, familyId, callerUserId, hidden ? null : transaction.getId(),
+                    hidden ? null : transaction.getCategoryId(), hidden ? null : transaction.getAmount(),
+                    null, null, null, null, null, callerName, Instant.now(),
+                    hidden ? null : transaction.getOccurredAt().toLocalDate(), hidden ? null : transaction.getNote(),
+                    null, null, 1, hidden ? Boolean.TRUE : null));
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
                 | OptimisticLockException e) {
             throw e;
@@ -248,7 +322,7 @@ public class TransactionService {
     /** Marks one transaction deleted (who + when) and logs it; no notification — callers decide how to announce it. */
     private Transaction softDelete(Long familyId, Long transactionId, Long callerUserId, String callerName,
                                    boolean callerIsOwner) {
-        Transaction transaction = requireOwnedByFamily(transactionId, familyId);
+        Transaction transaction = requireOwnedByFamily(transactionId, familyId, callerUserId);
         requireCanModify(transaction, callerUserId, callerIsOwner);
         transaction.setDeletedAt(LocalDateTime.now());
         transaction.setDeletedByUserId(callerUserId);
@@ -298,7 +372,7 @@ public class TransactionService {
         }
     }
 
-    public PageResponse<TransactionResponse> listDeletedPaged(Long familyId, int page, int size) {
+    public PageResponse<TransactionResponse> listDeletedPaged(Long familyId, Long viewerUserId, int page, int size) {
         try {
             log.info("listDeletedPaged - start, familyId={}, page={}, size={}", familyId, page, size);
             if (page < 0) {
@@ -308,8 +382,12 @@ public class TransactionService {
                 throw logged(log, new BadRequestException("size phải trong khoảng 1-" + MAX_PAGE_SIZE));
             }
             long totalElements = transactionDao.countDeletedByFamilyId(familyId);
+            // Another member's private transaction is listed (the family sees that SOMETHING was deleted)
+            // but with every detail masked — and restoring it still answers 404 to anyone but its creator.
             List<TransactionResponse> content = transactionDao.selectDeletedByFamilyIdPaged(familyId, size, page * size)
-                    .stream().map(TransactionResponse::from).toList();
+                    .stream()
+                    .map(t -> t.isVisibleTo(viewerUserId) ? TransactionResponse.from(t) : TransactionResponse.masked(t))
+                    .toList();
             return PageResponse.of(content, page, size, totalElements);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
                 | OptimisticLockException e) {
@@ -324,7 +402,7 @@ public class TransactionService {
         try {
             log.info("restore - start, familyId={}, transactionId={}", familyId, transactionId);
             Transaction deleted = transactionDao.selectDeletedById(transactionId)
-                    .filter(t -> t.getFamilyId().equals(familyId))
+                    .filter(t -> t.getFamilyId().equals(familyId) && t.isVisibleTo(callerUserId))
                     .orElseThrow(() -> logged(log, new NotFoundException("Giao dịch đã xoá không tồn tại: " + transactionId)));
             requireCanModify(deleted, callerUserId, callerIsOwner);
             if (transactionDao.restore(transactionId, familyId) == 0) {
@@ -342,7 +420,14 @@ public class TransactionService {
     }
 
     /** Who created/changed/deleted/restored this transaction and what it looked like before and after, oldest first. */
-    public List<TransactionAuditLogResponse> history(Long familyId, Long transactionId) {
+    public List<TransactionAuditLogResponse> history(Long familyId, Long transactionId, Long viewerUserId) {
+        // Works for deleted transactions too, so look in both places before deciding on visibility.
+        transactionDao.selectById(transactionId)
+                .or(() -> transactionDao.selectDeletedById(transactionId))
+                .filter(t -> t.getFamilyId().equals(familyId) && !t.isVisibleTo(viewerUserId))
+                .ifPresent(t -> {
+                    throw logged(log, new NotFoundException("Giao dịch không tồn tại: " + transactionId));
+                });
         return auditService.listHistory(familyId, transactionId);
     }
 
@@ -362,7 +447,7 @@ public class TransactionService {
             if (sniffedType == null || !ALLOWED_RECEIPT_CONTENT_TYPES.contains(sniffedType)) {
                 throw logged(log, new BadRequestException("Chỉ chấp nhận ảnh JPEG, PNG hoặc WEBP"));
             }
-            Transaction transaction = requireOwnedByFamily(transactionId, familyId);
+            Transaction transaction = requireOwnedByFamily(transactionId, familyId, callerUserId);
             requireCanModify(transaction, callerUserId, callerIsOwner);
             String oldPath = transaction.getReceiptPath();
 
@@ -392,10 +477,10 @@ public class TransactionService {
         }
     }
 
-    public ReceiptFile getReceipt(Long familyId, Long transactionId) {
+    public ReceiptFile getReceipt(Long familyId, Long transactionId, Long viewerUserId) {
         try {
             log.info("getReceipt - start, familyId={}, transactionId={}", familyId, transactionId);
-            Transaction transaction = requireOwnedByFamily(transactionId, familyId);
+            Transaction transaction = requireOwnedByFamily(transactionId, familyId, viewerUserId);
             if (transaction.getReceiptPath() == null) {
                 throw logged(log, new NotFoundException("Giao dịch chưa có ảnh hoá đơn"));
             }
@@ -416,7 +501,7 @@ public class TransactionService {
     public void deleteReceipt(Long familyId, Long transactionId, Long callerUserId, boolean callerIsOwner) {
         try {
             log.info("deleteReceipt - start, familyId={}, transactionId={}", familyId, transactionId);
-            Transaction transaction = requireOwnedByFamily(transactionId, familyId);
+            Transaction transaction = requireOwnedByFamily(transactionId, familyId, callerUserId);
             requireCanModify(transaction, callerUserId, callerIsOwner);
             if (transaction.getReceiptPath() == null) {
                 return;
@@ -470,9 +555,13 @@ public class TransactionService {
         if (eventType == null) {
             return;
         }
+        // The budget message is about the category/family TOTAL, which stays public; only the triggering
+        // transaction's own id/amount are withheld when it is private.
+        boolean hidden = Boolean.TRUE.equals(transaction.getIsPrivate());
         eventPublisher.publishEvent(new ExpenseEvent(
-                eventType, familyId, userId, transaction.getId(), categoryId, transaction.getAmount(), periodMonth,
-                limit, totalAfter, categoryName, userEmail, userDisplayName, Instant.now()));
+                eventType, familyId, userId, hidden ? null : transaction.getId(), categoryId,
+                hidden ? null : transaction.getAmount(), periodMonth, limit, totalAfter, categoryName, userEmail,
+                userDisplayName, Instant.now()));
     }
 
     private String truncateName(String name) {
@@ -487,11 +576,15 @@ public class TransactionService {
         }
     }
 
-    private Transaction requireOwnedByFamily(Long transactionId, Long familyId) {
+    /**
+     * Also enforces privacy: another member's private transaction answers exactly like a missing one
+     * (404, not 403 — no confirmation it even exists), for the family OWNER as well.
+     */
+    private Transaction requireOwnedByFamily(Long transactionId, Long familyId, Long viewerUserId) {
         log.info("requireOwnedByFamily - start, transactionId={}, familyId={}", transactionId, familyId);
         Transaction transaction = transactionDao.selectById(transactionId)
                 .orElseThrow(() -> logged(log, new NotFoundException("Giao dịch không tồn tại: " + transactionId)));
-        if (!transaction.getFamilyId().equals(familyId)) {
+        if (!transaction.getFamilyId().equals(familyId) || !transaction.isVisibleTo(viewerUserId)) {
             throw logged(log, new NotFoundException("Giao dịch không tồn tại: " + transactionId));
         }
         return transaction;

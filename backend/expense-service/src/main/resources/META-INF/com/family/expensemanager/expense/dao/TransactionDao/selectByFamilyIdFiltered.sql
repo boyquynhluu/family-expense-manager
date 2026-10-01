@@ -9,6 +9,7 @@ SELECT
     amount,
     occurred_at,
     note,
+    is_private,
     receipt_path,
     receipt_content_type,
     deleted_at,
@@ -20,6 +21,7 @@ FROM
 WHERE
     family_id = /* familyId */0
     AND deleted_at IS NULL
+    AND (is_private = FALSE OR user_id = /* viewerUserId */0/*%if showOthersPrivate */ OR TRUE/*%end*/)
 /*%if walletId != null */
     AND wallet_id = /* walletId */0
 /*%end*/
@@ -45,5 +47,6 @@ WHERE
     AND amount <= /* maxAmount */0
 /*%end*/
 ORDER BY
+    CASE WHEN is_private = TRUE AND user_id <> /* viewerUserId */0 THEN 1 ELSE 0 END,
     occurred_at DESC, id DESC
 LIMIT /* limit */20 OFFSET /* offset */0

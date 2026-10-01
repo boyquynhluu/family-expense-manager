@@ -8,8 +8,12 @@ import { confirmDialog } from "../utils/confirm";
 import { formatCurrency, formatServerDateTime } from "../utils/format";
 import { notifyTrashChanged } from "../utils/trashEvents";
 
+import { LockIcon } from "../components/AppIcons";
 import { Button } from "../components/ui/Button";
 import { Table, TBody, Td, Th, THead } from "../components/ui/Table";
+
+const MASK = "***";
+
 export default function Trash() {
   const { t } = useTranslation("trash");
   const { role, userId } = useAuth();
@@ -134,6 +138,7 @@ export default function Trash() {
               <tr>
                 <Th align="right">{t("colAmount")}</Th>
                 <Th>{t("colType")}</Th>
+                <Th>{t("colVisibility")}</Th>
                 <Th>{t("colOccurredAt")}</Th>
                 <Th>{t("colNote")}</Th>
                 <Th>{t("colDeletedAt")}</Th>
@@ -142,24 +147,46 @@ export default function Trash() {
               </tr>
             </THead>
             <TBody>
-              {transactions.map((t2) => (
+              {transactions.map((t2) => {
+                const mine = String(t2.userId) === String(userId);
+                // Another member's private transaction: the API already withheld its details.
+                const masked = t2.isPrivate && !mine;
+                return (
                 <tr key={t2.id}>
-                  <Td data-label={t("colAmount")} align="right">{formatCurrency(t2.amount)}</Td>
-                  <Td data-label={t("colType")}>{t2.type === "EXPENSE" ? t("typeExpense") : t("typeIncome")}</Td>
-                  <Td data-label={t("colOccurredAt")}>{formatDateTime(t2.occurredAt)}</Td>
-                  <Td data-label={t("colNote")}>{t2.note || "-"}</Td>
+                  <Td data-label={t("colAmount")} align="right">{masked ? MASK : formatCurrency(t2.amount)}</Td>
+                  <Td data-label={t("colType")}>
+                    {masked ? MASK : t2.type === "EXPENSE" ? t("typeExpense") : t("typeIncome")}
+                  </Td>
+                  <Td data-label={t("colVisibility")}>
+                    {t2.isPrivate ? (
+                      <span
+                        className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-200 [&_svg]:size-3"
+                        title={masked ? t("privateMaskedHint") : t("privateOwnHint")}
+                      >
+                        <LockIcon />
+                        {t("privateBadge")}
+                      </span>
+                    ) : (
+                      <span className="inline-flex whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+                        {t("publicBadge")}
+                      </span>
+                    )}
+                  </Td>
+                  <Td data-label={t("colOccurredAt")}>{masked ? MASK : formatDateTime(t2.occurredAt)}</Td>
+                  <Td data-label={t("colNote")}>{masked ? MASK : t2.note || "-"}</Td>
                   <Td data-label={t("colDeletedAt")}>{formatDateTime(t2.deletedAt)}</Td>
                   {/* Null for rows deleted before "who deleted it" was recorded (V12). */}
                   <Td data-label={t("colDeletedBy")}>{t2.deletedByName || "-"}</Td>
                   <Td actions>
-                    {(isOwner || String(t2.userId) === String(userId)) && (
+                    {!masked && (isOwner || mine) && (
                       <Button variant="success-outline" size="sm" onClick={() => handleRestore("transactions", t2.id, loadTransactions)}>
                         {t("restoreButton")}
                       </Button>
                     )}
                   </Td>
                 </tr>
-              ))}
+                );
+              })}
             </TBody>
           </Table>
         )}

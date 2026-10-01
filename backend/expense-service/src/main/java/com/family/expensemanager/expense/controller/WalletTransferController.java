@@ -36,7 +36,7 @@ public class WalletTransferController {
         log.info("create - start");
         return ApiResponse.ok(walletTransferService.create(
                 CurrentUser.familyId(), CurrentUser.userId(), CurrentUser.email(), CurrentUser.displayName(),
-                request, idempotencyKey));
+                CurrentUser.role(), request, idempotencyKey));
     }
 
     @GetMapping

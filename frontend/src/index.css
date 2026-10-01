@@ -158,6 +158,12 @@ h1 {
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
 }
 
+/* Field validation failed (components/ui/Field.jsx sets aria-invalid on the input). */
+.auth-input-group:has(input[aria-invalid="true"]) {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+}
+
 .auth-input-group input {
   flex: 1;
   min-width: 0;
@@ -306,12 +312,18 @@ h1 {
 
 .auth-terms {
   display: flex;
+  flex-wrap: wrap; /* lets the validation message (Field) drop onto its own line */
   align-items: center;
   gap: 0.5rem;
   font-size: 0.78rem;
   font-weight: 500;
   color: #1f2430;
   cursor: pointer;
+}
+
+/* ...and keeps that message last, after the required "*" drawn by .auth-terms::after. */
+.auth-terms > [data-field-error] {
+  order: 1;
 }
 
 .auth-terms input[type="checkbox"] {
@@ -634,6 +646,19 @@ h1 {
   flex-wrap: wrap;
   gap: 0.9rem;
   align-items: flex-end;
+}
+
+/* In a real <form>, fields line up by their TOP: a field showing a validation message
+   (components/ui/Field.jsx) grows taller, and bottom alignment would then push its label
+   above its neighbours'. The submit/cancel buttons are pushed down by one label row
+   (font-size 0.78rem × line-height + the .field gap) so they still sit level with the
+   inputs. */
+form.inline-form {
+  align-items: flex-start;
+}
+
+form.inline-form > button {
+  margin-top: calc(0.78rem * 1.2 + 0.3rem);
 }
 
 .field {

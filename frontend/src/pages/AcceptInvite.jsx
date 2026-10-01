@@ -7,6 +7,8 @@ import { EyeIcon, EyeOffIcon, KeyIcon, UserIcon } from "../components/AuthIcons"
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { LIMITS } from "../utils/inputLimits";
 import { Button, IconButton } from "../components/ui/Button";
+import { Field } from "../components/ui/Field";
+import { Input } from "../components/ui/Input";
 
 export default function AcceptInvite() {
   const { t } = useTranslation("acceptInvite");
@@ -82,11 +84,11 @@ export default function AcceptInvite() {
                 <p className="auth-card-subtitle">{t("existingAccountSubtitle")}</p>
               ) : (
                 <>
-                  <div className="auth-input-group">
+                  <Field as="div" className="auth-input-group" errorPlacement="after">
                     <span className="auth-input-icon">
                       <UserIcon />
                     </span>
-                    <input
+                    <Input variant="bare"
                       value={displayName}
                       maxLength={LIMITS.displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
@@ -94,13 +96,13 @@ export default function AcceptInvite() {
                       aria-label={t("displayNamePlaceholder")}
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="auth-input-group">
+                  <Field as="div" className="auth-input-group" errorPlacement="after">
                     <span className="auth-input-icon">
                       <KeyIcon />
                     </span>
-                    <input
+                    <Input variant="bare"
                       type={showPassword ? "text" : "password"}
                       value={password}
                       minLength={LIMITS.newPasswordMin}
@@ -115,7 +117,7 @@ export default function AcceptInvite() {
                     >
                       {showPassword ? <EyeOffIcon /> : <EyeIcon />}
                     </IconButton>
-                  </div>
+                  </Field>
                 </>
               )}
 

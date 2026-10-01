@@ -7,6 +7,8 @@ import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuth } from "../hooks/useAuth";
 import { LIMITS } from "../utils/inputLimits";
 import { Button, IconButton } from "../components/ui/Button";
+import { Field } from "../components/ui/Field";
+import { Checkbox, Input } from "../components/ui/Input";
 
 export default function Register() {
   const { t } = useTranslation("register");
@@ -49,11 +51,11 @@ export default function Register() {
 
           {error && <p className="error-text">{error}</p>}
 
-          <div className="auth-input-group">
+          <Field as="div" className="auth-input-group" errorPlacement="after">
             <span className="auth-input-icon">
               <HomeIcon />
             </span>
-            <input
+            <Input variant="bare"
               value={familyName}
               maxLength={LIMITS.familyName}
               onChange={(e) => setFamilyName(e.target.value)}
@@ -61,13 +63,13 @@ export default function Register() {
               aria-label={t("familyNamePlaceholder")}
               required
             />
-          </div>
+          </Field>
 
-          <div className="auth-input-group">
+          <Field as="div" className="auth-input-group" errorPlacement="after">
             <span className="auth-input-icon">
               <UserIcon />
             </span>
-            <input
+            <Input variant="bare"
               value={displayName}
               maxLength={LIMITS.displayName}
               onChange={(e) => setDisplayName(e.target.value)}
@@ -75,13 +77,13 @@ export default function Register() {
               aria-label={t("displayNamePlaceholder")}
               required
             />
-          </div>
+          </Field>
 
-          <div className="auth-input-group">
+          <Field as="div" className="auth-input-group" errorPlacement="after">
             <span className="auth-input-icon">
               <MailIcon />
             </span>
-            <input
+            <Input variant="bare"
               type="email"
               value={email}
               maxLength={LIMITS.email}
@@ -90,13 +92,13 @@ export default function Register() {
               aria-label="Email"
               required
             />
-          </div>
+          </Field>
 
-          <div className="auth-input-group">
+          <Field as="div" className="auth-input-group" errorPlacement="after">
             <span className="auth-input-icon">
               <KeyIcon />
             </span>
-            <input
+            <Input variant="bare"
               type={showPassword ? "text" : "password"}
               value={password}
               minLength={LIMITS.newPasswordMin}
@@ -112,12 +114,12 @@ export default function Register() {
             >
               {showPassword ? <EyeOffIcon /> : <EyeIcon />}
             </IconButton>
-          </div>
+          </Field>
 
-          <label className="auth-terms">
-            <input type="checkbox" required />
+          <Field className="auth-terms">
+            <Checkbox required />
             {t("termsAgreement")}
-          </label>
+          </Field>
 
           <Button variant="hero" size="lg" className="mt-1 w-full" type="submit" disabled={loading}>
             {loading ? t("registering") : t("submit")}

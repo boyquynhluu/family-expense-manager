@@ -18,7 +18,27 @@ public record TransactionResponse(
         String note,
         Boolean hasReceipt,
         LocalDateTime deletedAt,
-        String deletedByName) {
+        String deletedByName,
+        Boolean isPrivate) {
+
+    /** A non-private transaction. */
+    public TransactionResponse(Long id, Long walletId, Long categoryId, Long familyId, Long userId,
+                               String createdByName, String type, BigDecimal amount, LocalDateTime occurredAt,
+                               String note, Boolean hasReceipt, LocalDateTime deletedAt, String deletedByName) {
+        this(id, walletId, categoryId, familyId, userId, createdByName, type, amount, occurredAt, note, hasReceipt,
+                deletedAt, deletedByName, false);
+    }
+
+    /**
+     * Another member's private transaction as shown in the Trash: only that it exists, who deleted it and
+     * when. Wallet/category/type/amount/date/note/receipt are all withheld (the client renders "***").
+     */
+    public static TransactionResponse masked(Transaction transaction) {
+        return new TransactionResponse(
+                transaction.getId(), null, null, transaction.getFamilyId(), transaction.getUserId(),
+                transaction.getCreatedByName(), null, null, null, null, false,
+                transaction.getDeletedAt(), transaction.getDeletedByName(), true);
+    }
 
     public static TransactionResponse from(Transaction transaction) {
         return new TransactionResponse(
@@ -34,6 +54,7 @@ public record TransactionResponse(
                 transaction.getNote(),
                 transaction.getReceiptPath() != null,
                 transaction.getDeletedAt(),
-                transaction.getDeletedByName());
+                transaction.getDeletedByName(),
+                Boolean.TRUE.equals(transaction.getIsPrivate()));
     }
 }

@@ -8,6 +8,8 @@ import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuth } from "../hooks/useAuth";
 import { LIMITS } from "../utils/inputLimits";
 import { Button, IconButton } from "../components/ui/Button";
+import { Field } from "../components/ui/Field";
+import { Input } from "../components/ui/Input";
 
 export default function Login() {
   const { t } = useTranslation("login");
@@ -113,11 +115,11 @@ export default function Login() {
 
             {error && <p className="error-text">{error}</p>}
 
-            <div className="auth-input-group no-required-mark">
+            <Field as="div" className="auth-input-group no-required-mark" errorPlacement="after">
               <span className="auth-input-icon">
                 <KeyIcon />
               </span>
-              <input
+              <Input variant="bare"
                 value={totpCode}
                 maxLength={LIMITS.twoFactorCode}
                 onChange={(e) => setTotpCode(e.target.value)}
@@ -126,7 +128,7 @@ export default function Login() {
                 autoFocus
                 required
               />
-            </div>
+            </Field>
 
             <Button variant="hero" size="lg" className="mt-1 w-full" type="submit" disabled={loading}>
               {loading ? t("verifying") : t("confirm")}
@@ -160,11 +162,11 @@ export default function Login() {
             </Button>
           )}
 
-          <div className="auth-input-group no-required-mark">
+          <Field as="div" className="auth-input-group no-required-mark" errorPlacement="after">
             <span className="auth-input-icon">
               <MailIcon />
             </span>
-            <input
+            <Input variant="bare"
               type="email"
               value={email}
               maxLength={LIMITS.email}
@@ -173,13 +175,13 @@ export default function Login() {
               aria-label="Email"
               required
             />
-          </div>
+          </Field>
 
-          <div className="auth-input-group no-required-mark">
+          <Field as="div" className="auth-input-group no-required-mark" errorPlacement="after">
             <span className="auth-input-icon">
               <KeyIcon />
             </span>
-            <input
+            <Input variant="bare"
               type={showPassword ? "text" : "password"}
               value={password}
               maxLength={LIMITS.password}
@@ -194,7 +196,7 @@ export default function Login() {
             >
               {showPassword ? <EyeOffIcon /> : <EyeIcon />}
             </IconButton>
-          </div>
+          </Field>
 
           <div className="auth-options">
             <label className="auth-remember">

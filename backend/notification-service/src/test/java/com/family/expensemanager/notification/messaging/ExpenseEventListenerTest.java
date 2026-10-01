@@ -102,6 +102,29 @@ class ExpenseEventListenerTest {
     }
 
     @Test
+    void onExpenseEvent_masksTheDetails_whenAPrivateTransactionIsDeleted() throws Exception {
+        // As published by expense-service for a private transaction: no id/amount/date/note at all.
+        listener.onExpenseEvent(new ExpenseEvent(
+                ExpenseEvent.EXPENSE_DELETED, 1L, 10L, null, null, null, null, null, null, null,
+                null, "An", Instant.now(), null, null, null, null, 1, true));
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(notificationCaptor.capture());
+        assertThat(notificationCaptor.getValue().getMessage())
+                .isEqualTo("An đã xoá 1 giao dịch riêng tư (***). Có thể khôi phục trong Thùng rác.");
+    }
+
+    @Test
+    void expenseEvent_readsOldJsonWithoutPrivateEntry() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
+        ExpenseEvent old = mapper.readValue(
+                "{\"eventType\":\"EXPENSE_DELETED\",\"familyId\":1,\"userId\":10,\"itemCount\":1}", ExpenseEvent.class);
+        assertThat(old.privateEntry()).isNull();
+        assertThat(old.hidesDetails()).isFalse();
+        assertThat(mapper.writeValueAsString(old)).contains("\"privateEntry\":null").doesNotContain("hidesDetails");
+    }
+
+    @Test
     void onExpenseEvent_recordsOneSummary_whenManyTransactionsDeletedAtOnce() throws Exception {
         listener.onExpenseEvent(new ExpenseEvent(
                 ExpenseEvent.EXPENSE_DELETED, 1L, 10L, null, null, null, null, null, null, null,

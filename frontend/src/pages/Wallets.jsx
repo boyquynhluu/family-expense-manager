@@ -14,11 +14,13 @@ import { maxDateTime, minDateTime } from "../utils/dateLimits";
 import { formatCurrency } from "../utils/format";
 import { LIMITS } from "../utils/inputLimits";
 import { notifyTrashChanged } from "../utils/trashEvents";
+import { usableWallets } from "../utils/walletAccess";
 
 
 import { Table, THead, TBody, Th, Td } from "../components/ui/Table";
 import { Button, IconButton } from "../components/ui/Button";
 import { Input, Select } from "../components/ui/Input";
+import { Field } from "../components/ui/Field";
 // <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" in the browser's local time.
 function nowForDateTimeInput() {
   const now = new Date();
@@ -54,6 +56,9 @@ export default function Wallets() {
   const [name, setName] = useState("");
   const [currency, setCurrency] = useState("VND");
   const [initialBalance, setInitialBalance] = useState("0");
+  // "" = shared by the whole family ("ví chung"); otherwise the owning member's user id.
+  const [ownerUserId, setOwnerUserId] = useState("");
+  const [members, setMembers] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
   const [yearMonth, setYearMonth] = useState(currentYearMonth);
@@ -66,11 +71,31 @@ export default function Wallets() {
 
   useEffect(load, []);
 
+  useEffect(() => {
+    client
+      .get("/auth/family/members", { params: { page: 0, size: 100 } })
+      .then((res) => setMembers(res.data.data.content))
+      .catch(() => {});
+  }, []);
+
+  function ownerName(id) {
+    if (id == null) return null;
+    return members.find((m) => String(m.id) === String(id))?.displayName ?? t("wallets:formerMember");
+  }
+
+  // Only the wallets this member may move money OUT of; the destination can be anyone's.
+  const transferSourceWallets = usableWallets(
+    wallets,
+    { role, userId },
+    editingTransferId ? transfers.find((tr) => tr.id === editingTransferId)?.fromWalletId : null
+  );
+
   function startEdit(wallet) {
     setEditingId(wallet.id);
     setName(wallet.name);
     setCurrency(wallet.currency);
     setInitialBalance(String(wallet.initialBalance));
+    setOwnerUserId(wallet.ownerUserId == null ? "" : String(wallet.ownerUserId));
   }
 
   function cancelEdit() {
@@ -78,6 +103,7 @@ export default function Wallets() {
     setName("");
     setCurrency("VND");
     setInitialBalance("0");
+    setOwnerUserId("");
   }
 
   async function handleSubmit(e) {
@@ -87,6 +113,7 @@ export default function Wallets() {
       name,
       currency,
       initialBalance: Number(initialBalance),
+      ownerUserId: ownerUserId ? Number(ownerUserId) : null,
     };
     try {
       if (editingId) {
@@ -204,7 +231,7 @@ export default function Wallets() {
         <div className="section-card">
           <h2>{editingId ? t("wallets:editTitle") : t("wallets:addTitle")}</h2>
           <form className="inline-form" onSubmit={handleSubmit}>
-            <label className="field">
+            <Field>
               <span>
                 {t("wallets:nameLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
@@ -216,8 +243,8 @@ export default function Wallets() {
                 onChange={(e) => setName(e.target.value)}
                 required
               />
-            </label>
-            <label className="field">
+            </Field>
+            <Field>
               <span>
                 {t("wallets:currencyLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
@@ -231,14 +258,25 @@ export default function Wallets() {
                 title={t("wallets:currencyPatternHint")}
                 required
               />
-            </label>
-            <label className="field">
+            </Field>
+            <Field>
               <span>
                 {t("wallets:initialBalanceLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
               <AmountInput placeholder="0" value={initialBalance} onChange={setInitialBalance} required />
-            </label>
+            </Field>
+            <Field>
+              {t("wallets:ownerLabel")}
+              <Select value={ownerUserId} onChange={(e) => setOwnerUserId(e.target.value)}>
+                <option value="">{t("wallets:sharedWallet")}</option>
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.displayName}
+                  </option>
+                ))}
+              </Select>
+            </Field>
             <Button type="submit">{editingId ? t("wallets:submitUpdate") : t("wallets:submitAdd")}</Button>
             {editingId && (
               <Button variant="secondary" onClick={cancelEdit}>
@@ -267,6 +305,7 @@ export default function Wallets() {
             <THead>
               <tr>
                 <Th>{t("wallets:colName")}</Th>
+                <Th>{t("wallets:colOwner")}</Th>
                 <Th>{t("wallets:colCurrency")}</Th>
                 <Th align="right">{t("wallets:colInitialBalance")}</Th>
                 <Th align="right">{t("wallets:colCurrentBalance")}</Th>
@@ -280,6 +319,13 @@ export default function Wallets() {
                     <span className="table-cell-icon">
                       <WalletIcon /> {w.name}
                     </span>
+                  </Td>
+                  <Td data-label={t("wallets:colOwner")}>
+                    {w.ownerUserId == null ? (
+                      <span className="badge badge-neutral">{t("wallets:sharedBadge")}</span>
+                    ) : (
+                      ownerName(w.ownerUserId)
+                    )}
                   </Td>
                   <Td data-label={t("wallets:colCurrency")}>{w.currency}</Td>
                   <Td data-label={t("wallets:colInitialBalance")} align="right">{formatCurrency(w.initialBalance, w.currency)}</Td>
@@ -330,7 +376,7 @@ export default function Wallets() {
           <p className="empty-state">{t("wallets:transferNeedTwoWallets")}</p>
         ) : (
           <form className="inline-form" onSubmit={handleTransferSubmit}>
-            <label className="field">
+            <Field>
               <span>
                 {t("wallets:fromWalletLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
@@ -341,14 +387,14 @@ export default function Wallets() {
                 required
               >
                 <option value="">{t("wallets:selectWallet")}</option>
-                {wallets.map((w) => (
+                {transferSourceWallets.map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.name}
                   </option>
                 ))}
               </Select>
-            </label>
-            <label className="field">
+            </Field>
+            <Field>
               <span>
                 {t("wallets:toWalletLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
@@ -357,6 +403,7 @@ export default function Wallets() {
                 value={transferForm.toWalletId}
                 onChange={(e) => updateTransferField("toWalletId", e.target.value)}
                 required
+                validate={(v) => (v && v === transferForm.fromWalletId ? t("validation:walletsMustDiffer") : "")}
               >
                 <option value="">{t("wallets:selectWallet")}</option>
                 {wallets
@@ -367,15 +414,15 @@ export default function Wallets() {
                     </option>
                   ))}
               </Select>
-            </label>
-            <label className="field">
+            </Field>
+            <Field>
               <span>
                 {t("wallets:transferAmountLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <AmountInput placeholder="0" value={transferForm.amount} onChange={(v) => updateTransferField("amount", v)} required />
-            </label>
-            <label className="field">
+              <AmountInput placeholder="0" value={transferForm.amount} onChange={(v) => updateTransferField("amount", v)} required positive />
+            </Field>
+            <Field>
               <span>
                 {t("wallets:transferTimeLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
@@ -388,8 +435,8 @@ export default function Wallets() {
                 max={maxDateTime()}
                 required
               />
-            </label>
-            <label className="field">
+            </Field>
+            <Field>
               {t("wallets:transferNoteLabel")}
               <Input
                 placeholder={t("wallets:transferNotePlaceholder")}
@@ -397,7 +444,7 @@ export default function Wallets() {
                 maxLength={LIMITS.transferNote}
                 onChange={(e) => updateTransferField("note", e.target.value)}
               />
-            </label>
+            </Field>
             <Button type="submit">
               {editingTransferId ? t("wallets:transferSubmitUpdate") : t("wallets:transferSubmit")}
             </Button>

@@ -35,7 +35,7 @@ public class RecurringTransactionController {
         log.info("create - start");
         return ApiResponse.ok(recurringTransactionService.create(
                 CurrentUser.familyId(), CurrentUser.userId(), CurrentUser.email(), CurrentUser.displayName(),
-                request));
+                isOwner(), request));
     }
 
     @GetMapping

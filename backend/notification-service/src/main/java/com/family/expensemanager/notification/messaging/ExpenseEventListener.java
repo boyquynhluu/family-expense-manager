@@ -240,6 +240,9 @@ public class ExpenseEventListener {
         StringBuilder message = new StringBuilder(actor);
         if (event.itemCount() != null && event.itemCount() > 1) {
             message.append(" đã xoá ").append(event.itemCount()).append(" giao dịch");
+        } else if (event.hidesDetails()) {
+            // Family-wide notification of a private transaction: the event carries no details anyway.
+            message.append(" đã xoá 1 giao dịch riêng tư (***)");
         } else {
             message.append(" đã xoá giao dịch");
             if (event.amount() != null) {

@@ -8,6 +8,7 @@ import { formatCurrency } from "../utils/format";
 import { Table, THead, TBody, Th, Td } from "../components/ui/Table";
 import { Button } from "../components/ui/Button";
 import { Input, Select } from "../components/ui/Input";
+import { Field } from "../components/ui/Field";
 const INCOME_COLOR = "#16a34a";
 const EXPENSE_COLOR = "#dc2626";
 const CATEGORY_COLORS = ["#4f46e5", "#0ea5e9", "#f59e0b", "#16a34a", "#db2777", "#7c3aed", "#dc2626", "#0891b2"];
@@ -181,20 +182,20 @@ function RangeFilter({ from, to, onChange }) {
   return (
     <div className="section-card report-controls">
       <div className="inline-form">
-        <label className="field">
+        <Field>
           <span>
             {t("fromLabel")}
             <span className="required-mark" aria-hidden="true"> *</span>
           </span>
           <Input type="date" value={from} onChange={(e) => onChange(e.target.value, to)} required />
-        </label>
-        <label className="field">
+        </Field>
+        <Field>
           <span>
             {t("toLabel")}
             <span className="required-mark" aria-hidden="true"> *</span>
           </span>
           <Input type="date" value={to} onChange={(e) => onChange(from, e.target.value)} required />
-        </label>
+        </Field>
         {quickButtons.map(([kind, label]) => (
           <Button variant="secondary" className="self-end" key={kind} onClick={() => onChange(...quickRange(kind))}>
             {label}
@@ -266,7 +267,7 @@ function YearTab() {
     <>
       <div className="section-card report-controls">
         <div className="inline-form">
-          <label className="field">
+          <Field>
             <span>
               {t("yearLabel")}
               <span className="required-mark" aria-hidden="true"> *</span>
@@ -278,7 +279,7 @@ function YearTab() {
                 </option>
               ))}
             </Select>
-          </label>
+          </Field>
         </div>
       </div>
       <ErrorText report={report} />
@@ -403,20 +404,20 @@ function CompareTab({ categoryName }) {
     <>
       <div className="section-card report-controls">
         <div className="inline-form">
-          <label className="field">
+          <Field>
             <span>
               {t("monthLabel")}
               <span className="required-mark" aria-hidden="true"> *</span>
             </span>
             <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} required />
-          </label>
-          <label className="field">
+          </Field>
+          <Field>
             <span>
               {t("withMonthLabel")}
               <span className="required-mark" aria-hidden="true"> *</span>
             </span>
             <Input type="month" value={withMonth} onChange={(e) => setWithMonth(e.target.value)} required />
-          </label>
+          </Field>
         </div>
       </div>
       <ErrorText report={report} />

@@ -9,6 +9,7 @@ import { LIMITS } from "../utils/inputLimits";
 import { notifyTrashChanged } from "../utils/trashEvents";
 import { Button, IconButton } from "../components/ui/Button";
 import { Input, Select } from "../components/ui/Input";
+import { Field } from "../components/ui/Field";
 
 export default function Categories() {
   const { t } = useTranslation(["common", "categories"]);
@@ -86,7 +87,7 @@ export default function Categories() {
         <div className="section-card">
           <h2>{editingId ? t("categories:editTitle") : t("categories:addTitle")}</h2>
           <form className="inline-form" onSubmit={handleSubmit}>
-            <label className="field">
+            <Field>
               <span>
                 {t("categories:nameLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
@@ -98,22 +99,22 @@ export default function Categories() {
                 onChange={(e) => setName(e.target.value)}
                 required
               />
-            </label>
-            <label className="field">
+            </Field>
+            <Field>
               {t("categories:typeLabel")}
               <Select value={type} onChange={(e) => setType(e.target.value)}>
                 <option value="EXPENSE">{t("categories:typeExpense")}</option>
                 <option value="INCOME">{t("categories:typeIncome")}</option>
               </Select>
-            </label>
-            <label className="field">
+            </Field>
+            <Field>
               {t("categories:iconLabel")}
               <Input placeholder={t("categories:iconPlaceholder")} value={icon} maxLength={LIMITS.categoryIcon} onChange={(e) => setIcon(e.target.value)} />
-            </label>
-            <label className="field">
+            </Field>
+            <Field>
               {t("categories:colorLabel")}
               <Input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
-            </label>
+            </Field>
             <Button type="submit">{editingId ? t("categories:submitUpdate") : t("categories:submitAdd")}</Button>
             {editingId && (
               <Button variant="secondary" onClick={cancelEdit}>

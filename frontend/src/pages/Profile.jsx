@@ -18,6 +18,7 @@ import { LIMITS } from "../utils/inputLimits";
 import { Table, THead, TBody, Th, Td } from "../components/ui/Table";
 import { Button, IconButton } from "../components/ui/Button";
 import { Input, Select } from "../components/ui/Input";
+import { Field } from "../components/ui/Field";
 // The stored value is always this fixed Vietnamese word regardless of UI language —
 // only the displayed label is translated (see relationshipLabelFor below) — otherwise
 // switching languages would change what gets saved to the DB and orphan existing data
@@ -458,7 +459,7 @@ export default function Profile() {
 
   function renderCredentialField(value, onChange, showValue, setShowValue) {
     return hasPassword ? (
-      <label className="field">
+      <Field>
         <span>
           {t("currentPasswordLabel")}
           <span className="required-mark" aria-hidden="true"> *</span>
@@ -479,9 +480,9 @@ export default function Profile() {
             {showValue ? <EyeOffIcon /> : <EyeIcon />}
           </IconButton>
         </div>
-      </label>
+      </Field>
     ) : (
-      <label className="field">
+      <Field>
         <span>
           {t("verificationCodeLabel")}
           <span className="required-mark" aria-hidden="true"> *</span>
@@ -494,8 +495,10 @@ export default function Profile() {
           inputMode="numeric"
           autoComplete="one-time-code"
           required
+          pattern={`[0-9]{${LIMITS.totpCode}}`}
+          messages={{ patternMismatch: t("validation:codeDigits", { count: LIMITS.totpCode }) }}
         />
-      </label>
+      </Field>
     );
   }
 
@@ -511,18 +514,18 @@ export default function Profile() {
       <div className="section-card">
         <h2>{t("personalInfoTitle")}</h2>
         <form className="inline-form" onSubmit={handleProfileSubmit}>
-          <label className="field">
+          <Field>
             {t("emailLabel")}
             <Input value={profile.email} disabled />
-          </label>
-          <label className="field">
+          </Field>
+          <Field>
             <span>
               {t("displayNameLabel")}
               <span className="required-mark" aria-hidden="true"> *</span>
             </span>
             <Input value={displayName} maxLength={LIMITS.displayName} onChange={(e) => setDisplayName(e.target.value)} required />
-          </label>
-          <label className="field">
+          </Field>
+          <Field>
             {t("relationshipLabel")}
             <Select value={relationship} onChange={(e) => setRelationship(e.target.value)}>
               <option value="">{t("relationshipNone")}</option>
@@ -532,11 +535,11 @@ export default function Profile() {
                 </option>
               ))}
             </Select>
-          </label>
-          <label className="field">
+          </Field>
+          <Field>
             {t("roleLabel")}
             <Input value={profile.role} disabled />
-          </label>
+          </Field>
           <Button type="submit" disabled={savingProfile}>
             {savingProfile ? t("common:saving") : t("saveChanges")}
           </Button>
@@ -552,7 +555,7 @@ export default function Profile() {
           </p>
         ) : (
           <form className="inline-form" onSubmit={handlePasswordSubmit}>
-            <label className="field">
+            <Field>
               <span>
                 {t("currentPasswordLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
@@ -572,8 +575,8 @@ export default function Profile() {
                   {showCurrentPassword ? <EyeOffIcon /> : <EyeIcon />}
                 </IconButton>
               </div>
-            </label>
-            <label className="field">
+            </Field>
+            <Field>
               <span>
                 {t("newPasswordLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
@@ -594,7 +597,7 @@ export default function Profile() {
                   {showNewPassword ? <EyeOffIcon /> : <EyeIcon />}
                 </IconButton>
               </div>
-            </label>
+            </Field>
             <Button type="submit" disabled={savingPassword}>
               {savingPassword ? t("common:saving") : t("changePasswordButton")}
             </Button>
@@ -610,7 +613,7 @@ export default function Profile() {
           <p className="empty-state">{t("reauthNeedsTwoFactor", { provider: profile.provider })}</p>
         ) : (
           <form className="inline-form" onSubmit={handleChangeEmailSubmit}>
-            <label className="field">
+            <Field>
               <span>
                 {t("newEmailLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
@@ -623,7 +626,7 @@ export default function Profile() {
                 placeholder={t("emailPlaceholderExample")}
                 required
               />
-            </label>
+            </Field>
             {renderCredentialField(emailCredential, setEmailCredential, showEmailCredential, setShowEmailCredential)}
             <Button type="submit" disabled={changingEmail}>
               {changingEmail ? t("sendingChangeEmail") : t("changeEmailButton")}
@@ -637,13 +640,13 @@ export default function Profile() {
         <h2>{t("familyMembersTitle")}</h2>
         {profile.role === "OWNER" && (
           <form className="inline-form" onSubmit={handleRenameFamily}>
-            <label className="field">
+            <Field>
               <span>
                 {t("familyNameLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
               <Input value={familyName} onChange={(e) => setFamilyName(e.target.value)} maxLength={LIMITS.familyName} required />
-            </label>
+            </Field>
             <Button type="submit" disabled={renamingFamily || !familyName.trim()}>
               {renamingFamily ? t("common:saving") : t("renameFamilyButton")}
             </Button>
@@ -708,7 +711,7 @@ export default function Profile() {
           <>
             <h3>{t("inviteMemberTitle")}</h3>
             <form className="inline-form" onSubmit={handleInviteSubmit}>
-              <label className="field">
+              <Field>
                 <span>
                   {t("emailLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
@@ -721,7 +724,7 @@ export default function Profile() {
                   placeholder={t("emailPlaceholderExample")}
                   required
                 />
-              </label>
+              </Field>
               <Button type="submit" disabled={inviting}>
                 {inviting ? t("sendingInvite") : t("sendInviteButton")}
               </Button>
@@ -803,7 +806,7 @@ export default function Profile() {
         ) : profile.totpEnabled ? (
           disablingTwoFactor ? (
             <form className="inline-form" onSubmit={handleDisableTwoFactor}>
-              <label className="field">
+              <Field>
                 <span>
                   {hasPassword ? t("confirmDisablePasswordLabel") : t("confirmDisableCodeLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
@@ -817,7 +820,7 @@ export default function Profile() {
                   autoComplete={hasPassword ? "current-password" : "one-time-code"}
                   required
                 />
-              </label>
+              </Field>
               <Button variant="danger" type="submit" disabled={savingTwoFactor}>
                 {savingTwoFactor ? t("disablingTwoFactorLoading") : t("confirmDisableButton")}
               </Button>

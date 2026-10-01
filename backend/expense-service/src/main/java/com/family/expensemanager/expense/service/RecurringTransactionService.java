@@ -9,6 +9,7 @@ import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.expense.dao.RecurringTransactionDao;
 import com.family.expensemanager.expense.domain.entity.Category;
 import com.family.expensemanager.expense.domain.entity.RecurringTransaction;
+import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.dto.CreateRecurringTransactionRequest;
 import com.family.expensemanager.expense.dto.RecurringTransactionResponse;
 import com.family.expensemanager.expense.dto.TransactionRequest;
@@ -71,13 +72,26 @@ public class RecurringTransactionService {
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionTemplate transactionTemplate;
 
+    /** Trusted callers only (no wallet-ownership check) — user requests go through the overload below. */
     public RecurringTransactionResponse create(
             Long familyId, Long userId, String userEmail, String userDisplayName,
+            CreateRecurringTransactionRequest request) {
+        return create(familyId, userId, userEmail, userDisplayName, true, request);
+    }
+
+    /**
+     * @param callerIsOwner whether the caller is the family OWNER — a plain member may only schedule
+     *                      against their own wallet or a shared one. Checked once here, when the rule is
+     *                      saved; the scheduler later runs it without re-checking.
+     */
+    public RecurringTransactionResponse create(
+            Long familyId, Long userId, String userEmail, String userDisplayName, boolean callerIsOwner,
             CreateRecurringTransactionRequest request) {
         try {
             log.info("create - start, familyId={}, walletId={}, categoryId={}",
                     familyId, request.walletId(), request.categoryId());
-            walletService.requireOwnedByFamily(request.walletId(), familyId);
+            Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
+            walletService.requireUsableBy(wallet, userId, callerIsOwner);
             categoryService.requireOwnedByFamily(request.categoryId(), familyId, request.type());
 
             RecurringTransaction r = new RecurringTransaction();
@@ -132,7 +146,10 @@ public class RecurringTransactionService {
             log.info("update - start, id={}, familyId={}", id, familyId);
             RecurringTransaction r = requireOwnedByFamily(id, familyId);
             requireCanModify(r, callerUserId, callerIsOwner);
-            walletService.requireOwnedByFamily(request.walletId(), familyId);
+            Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
+            if (!request.walletId().equals(r.getWalletId())) {
+                walletService.requireUsableBy(wallet, callerUserId, callerIsOwner);
+            }
             categoryService.requireOwnedByFamily(request.categoryId(), familyId, request.type());
 
             r.setWalletId(request.walletId());

@@ -1,5 +1,6 @@
 package com.family.expensemanager.expense.service;
 
+import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.math.BigDecimal;
@@ -47,6 +49,40 @@ class WalletServiceTest {
     @BeforeEach
     void setUp() {
         walletService = new WalletService(walletDao, transactionDao, recurringTransactionDao, walletTransferDao);
+    }
+
+    @Test
+    void requireUsableBy_allowsSharedAndOwnWallets_andTheOwnerRole_rejectsAnotherMembersWallet() {
+        Wallet shared = ownedWallet(null);
+        Wallet mine = ownedWallet(7L);
+        Wallet spouses = ownedWallet(8L);
+
+        walletService.requireUsableBy(shared, 7L, false);
+        walletService.requireUsableBy(mine, 7L, false);
+        walletService.requireUsableBy(spouses, 7L, true); // family OWNER may use any wallet
+        assertThatThrownBy(() -> walletService.requireUsableBy(spouses, 7L, false))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
+    }
+
+    @Test
+    void create_storesTheOwner_andSharedWhenNoneGiven() {
+        when(walletDao.selectByFamilyId(1L)).thenReturn(List.of());
+
+        var owned = walletService.create(1L, new CreateWalletRequest("Ví Vợ", "VND", BigDecimal.ZERO, 8L));
+        var shared = walletService.create(1L, new CreateWalletRequest("Quỹ chung", "VND", BigDecimal.ZERO));
+
+        assertThat(owned.ownerUserId()).isEqualTo(8L);
+        assertThat(shared.ownerUserId()).isNull();
+    }
+
+    private static Wallet ownedWallet(Long ownerUserId) {
+        Wallet wallet = new Wallet();
+        wallet.setId(1L);
+        wallet.setFamilyId(1L);
+        wallet.setName("Ví");
+        wallet.setOwnerUserId(ownerUserId);
+        return wallet;
     }
 
     @Test

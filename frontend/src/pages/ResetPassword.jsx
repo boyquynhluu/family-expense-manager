@@ -6,6 +6,8 @@ import { EyeIcon, EyeOffIcon, KeyIcon } from "../components/AuthIcons";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { LIMITS } from "../utils/inputLimits";
 import { Button, IconButton } from "../components/ui/Button";
+import { Field } from "../components/ui/Field";
+import { Input } from "../components/ui/Input";
 
 export default function ResetPassword() {
   const { t } = useTranslation("resetPassword");
@@ -45,11 +47,11 @@ export default function ResetPassword() {
 
           {token && (
             <>
-              <div className="auth-input-group">
+              <Field as="div" className="auth-input-group" errorPlacement="after">
                 <span className="auth-input-icon">
                   <KeyIcon />
                 </span>
-                <input
+                <Input variant="bare"
                   type={showPassword ? "text" : "password"}
                   value={newPassword}
                   minLength={LIMITS.newPasswordMin}
@@ -65,7 +67,7 @@ export default function ResetPassword() {
                 >
                   {showPassword ? <EyeOffIcon /> : <EyeIcon />}
                 </IconButton>
-              </div>
+              </Field>
 
               <Button variant="hero" size="lg" className="mt-1 w-full" type="submit" disabled={loading}>
                 {loading ? t("saving") : t("submit")}

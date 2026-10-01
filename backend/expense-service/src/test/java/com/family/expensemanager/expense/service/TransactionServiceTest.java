@@ -37,10 +37,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -94,12 +96,12 @@ class TransactionServiceTest {
         TransactionReportFilter filter = new TransactionReportFilter(
                 5L, 7L, "EXPENSE", null, null, "an sang", new BigDecimal("10"), new BigDecimal("500"));
         when(transactionDao.countByFamilyIdFiltered(
-                1L, 5L, 7L, "EXPENSE", null, null, "%an sang%", new BigDecimal("10"), new BigDecimal("500"))).thenReturn(45L);
+                1L, CREATOR_ID, false, 5L, 7L, "EXPENSE", null, null, "%an sang%", new BigDecimal("10"), new BigDecimal("500"))).thenReturn(45L);
         when(transactionDao.selectByFamilyIdFiltered(
-                1L, 5L, 7L, "EXPENSE", null, null, "%an sang%", new BigDecimal("10"), new BigDecimal("500"), 20, 40))
+                1L, CREATOR_ID, false, 5L, 7L, "EXPENSE", null, null, "%an sang%", new BigDecimal("10"), new BigDecimal("500"), 20, 40))
                 .thenReturn(List.of(transaction(99L)));
 
-        var page = transactionService.listByFamilyPaged(1L, filter, 2, 20);
+        var page = transactionService.listByFamilyPaged(1L, CREATOR_ID, filter, 2, 20);
 
         assertThat(page.content()).hasSize(1);
         assertThat(page.content().get(0).id()).isEqualTo(99L);
@@ -113,16 +115,16 @@ class TransactionServiceTest {
     @Test
     void listByFamilyPaged_throwsBadRequest_whenPageNegative() {
         TransactionReportFilter filter = new TransactionReportFilter(null, null, null, null, null, null, null, null);
-        assertThatThrownBy(() -> transactionService.listByFamilyPaged(1L, filter, -1, 20))
+        assertThatThrownBy(() -> transactionService.listByFamilyPaged(1L, CREATOR_ID, filter, -1, 20))
                 .isInstanceOf(BadRequestException.class);
     }
 
     @Test
     void listByFamilyPaged_throwsBadRequest_whenSizeOutOfRange() {
         TransactionReportFilter filter = new TransactionReportFilter(null, null, null, null, null, null, null, null);
-        assertThatThrownBy(() -> transactionService.listByFamilyPaged(1L, filter, 0, 0))
+        assertThatThrownBy(() -> transactionService.listByFamilyPaged(1L, CREATOR_ID, filter, 0, 0))
                 .isInstanceOf(BadRequestException.class);
-        assertThatThrownBy(() -> transactionService.listByFamilyPaged(1L, filter, 0, 101))
+        assertThatThrownBy(() -> transactionService.listByFamilyPaged(1L, CREATOR_ID, filter, 0, 101))
                 .isInstanceOf(BadRequestException.class);
     }
 
@@ -132,8 +134,8 @@ class TransactionServiceTest {
         TransactionReportFilter tooLong =
                 new TransactionReportFilter(null, null, null, null, null, "a".repeat(101), null, null);
 
-        assertThatCode(() -> transactionService.listByFamilyPaged(1L, ok, 0, 20)).doesNotThrowAnyException();
-        assertThatThrownBy(() -> transactionService.listByFamilyPaged(1L, tooLong, 0, 20))
+        assertThatCode(() -> transactionService.listByFamilyPaged(1L, CREATOR_ID, ok, 0, 20)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> transactionService.listByFamilyPaged(1L, CREATOR_ID, tooLong, 0, 20))
                 .isInstanceOf(BadRequestException.class);
     }
 
@@ -146,6 +148,177 @@ class TransactionServiceTest {
 
         assertThat(response.amount()).isEqualByComparingTo("99");
         verify(transactionDao).update(target);
+    }
+
+    @Test
+    void privateTransaction_isHiddenFromOtherMembers_evenTheOwner_butNotFromItsCreator() {
+        Transaction secret = transaction(1L);
+        secret.setIsPrivate(true);
+        when(transactionDao.selectById(1L)).thenReturn(Optional.of(secret));
+
+        assertThat(transactionService.get(1L, 1L, CREATOR_ID).isPrivate()).isTrue();
+        assertThatThrownBy(() -> transactionService.get(1L, 1L, OTHER_USER_ID)).isInstanceOf(NotFoundException.class);
+        // OWNER (callerIsOwner = true) can normally edit/delete anyone's entry — but not one it can't see.
+        assertThatThrownBy(() -> transactionService.update(1L, 1L, OTHER_USER_ID, "Chủ hộ", true, updateRequest()))
+                .isInstanceOf(NotFoundException.class);
+        assertThatThrownBy(() -> transactionService.delete(1L, 1L, OTHER_USER_ID, "Chủ hộ", true))
+                .isInstanceOf(NotFoundException.class);
+        assertThatThrownBy(() -> transactionService.history(1L, 1L, OTHER_USER_ID))
+                .isInstanceOf(NotFoundException.class);
+        verify(transactionDao, never()).update(any());
+    }
+
+    @Test
+    void listDeletedPaged_masksOtherMembersPrivateTransactions_butShowsThemInFullToTheCreator() {
+        Transaction secret = transaction(1L);
+        secret.setIsPrivate(true);
+        secret.setNote("Quà sinh nhật");
+        secret.setDeletedAt(LocalDateTime.now());
+        when(transactionDao.countDeletedByFamilyId(1L)).thenReturn(1L);
+        when(transactionDao.selectDeletedByFamilyIdPaged(1L, 5, 0)).thenReturn(List.of(secret));
+
+        var asOther = transactionService.listDeletedPaged(1L, OTHER_USER_ID, 0, 5).content().get(0);
+        var asCreator = transactionService.listDeletedPaged(1L, CREATOR_ID, 0, 5).content().get(0);
+
+        assertThat(asOther.isPrivate()).isTrue();
+        assertThat(asOther.amount()).isNull();
+        assertThat(asOther.note()).isNull();
+        assertThat(asOther.type()).isNull();
+        assertThat(asOther.occurredAt()).isNull();
+        assertThat(asOther.walletId()).isNull();
+        assertThat(asOther.categoryId()).isNull();
+        assertThat(asOther.deletedAt()).isNotNull();
+        assertThat(asCreator.note()).isEqualTo("Quà sinh nhật");
+        assertThat(asCreator.amount()).isEqualByComparingTo(BigDecimal.TEN);
+    }
+
+    @Test
+    void listByFamilyPaged_showsOthersPrivateTransactionsMasked_onlyWhenNothingIsFiltered() {
+        Transaction secret = transaction(1L); // created by CREATOR_ID
+        secret.setIsPrivate(true);
+        secret.setNote("Quà sinh nhật");
+        TransactionReportFilter none = new TransactionReportFilter(null, null, null, null, null, null, null, null);
+        TransactionReportFilter byNote = new TransactionReportFilter(null, null, null, null, null, "quà", null, null);
+        when(transactionDao.countByFamilyIdFiltered(1L, OTHER_USER_ID, true, null, null, null, null, null, null, null, null))
+                .thenReturn(1L);
+        when(transactionDao.selectByFamilyIdFiltered(
+                1L, OTHER_USER_ID, true, null, null, null, null, null, null, null, null, 10, 0))
+                .thenReturn(List.of(secret));
+
+        var row = transactionService.listByFamilyPaged(1L, OTHER_USER_ID, none, 0, 10).content().get(0);
+        transactionService.listByFamilyPaged(1L, OTHER_USER_ID, byNote, 0, 10);
+
+        assertThat(row.isPrivate()).isTrue();
+        assertThat(row.note()).isNull();
+        assertThat(row.amount()).isNull();
+        assertThat(row.occurredAt()).isNull();
+        assertThat(row.walletId()).isNull();
+        assertThat(row.createdByName()).isEqualTo(secret.getCreatedByName());
+        // A note search must not let a "***" row through (its match would reveal the note).
+        verify(transactionDao).countByFamilyIdFiltered(
+                eq(1L), eq(OTHER_USER_ID), eq(false), any(), any(), any(), any(), any(), eq("%quà%"), any(), any());
+    }
+
+    @Test
+    void locate_returnsThePageHoldingTheTransaction_fromHowManyRowsComeBeforeIt() {
+        Transaction backDated = transaction(1L);
+        when(transactionDao.selectById(1L)).thenReturn(Optional.of(backDated));
+        TransactionReportFilter none = new TransactionReportFilter(null, null, null, null, null, null, null, null);
+        when(transactionDao.countFilteredMatchingId(
+                1L, CREATOR_ID, null, null, null, null, null, null, null, null, 1L)).thenReturn(1L);
+        when(transactionDao.countFilteredAhead(
+                1L, CREATOR_ID, null, null, null, null, null, null, null, null, backDated.getOccurredAt(), 1L))
+                .thenReturn(12L); // 12 newer rows → 13th row → page index 2 with 5 per page
+
+        var location = transactionService.locate(1L, CREATOR_ID, none, 1L, 5);
+
+        assertThat(location.inList()).isTrue();
+        assertThat(location.page()).isEqualTo(2);
+    }
+
+    @Test
+    void locate_reportsNotInList_whenTheTransactionDoesNotMatchTheFilters() {
+        when(transactionDao.selectById(1L)).thenReturn(Optional.of(transaction(1L)));
+        TransactionReportFilter octoberOnly = new TransactionReportFilter(null, null, null,
+                java.time.LocalDate.of(2026, 10, 1), java.time.LocalDate.of(2026, 10, 31), null, null, null);
+        when(transactionDao.countFilteredMatchingId(eq(1L), eq(CREATOR_ID), any(), any(), any(), any(), any(), any(),
+                any(), any(), eq(1L))).thenReturn(0L);
+
+        var location = transactionService.locate(1L, CREATOR_ID, octoberOnly, 1L, 5);
+
+        assertThat(location.inList()).isFalse();
+        verify(transactionDao, never()).countFilteredAhead(any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any());
+    }
+
+    @Test
+    void delete_publishesAnEventWithoutDetails_whenTheTransactionIsPrivate() {
+        Transaction secret = transaction(1L);
+        secret.setIsPrivate(true);
+        secret.setNote("Quà sinh nhật");
+        when(transactionDao.selectById(1L)).thenReturn(Optional.of(secret));
+
+        transactionService.delete(1L, 1L, CREATOR_ID, "An", false);
+
+        ArgumentCaptor<ExpenseEvent> captor = ArgumentCaptor.forClass(ExpenseEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        ExpenseEvent event = captor.getValue();
+        assertThat(event.eventType()).isEqualTo(ExpenseEvent.EXPENSE_DELETED);
+        assertThat(event.hidesDetails()).isTrue();
+        assertThat(event.amount()).isNull();
+        assertThat(event.note()).isNull();
+        assertThat(event.occurredOn()).isNull();
+        assertThat(event.transactionId()).isNull();
+        assertThat(event.categoryId()).isNull();
+    }
+
+    @Test
+    void update_letsTheCreatorToggleThePrivateFlag_butNotAnOwnerEditingSomeoneElsesEntry() {
+        Transaction mine = transaction(1L);
+        stubUpdateDependencies(mine);
+        TransactionRequest makePrivate =
+                new TransactionRequest(5L, 7L, "EXPENSE", new BigDecimal("99"), LocalDateTime.now(), "sửa", true);
+
+        transactionService.update(1L, 1L, CREATOR_ID, "An", false, makePrivate);
+        assertThat(mine.getIsPrivate()).isTrue();
+
+        mine.setIsPrivate(false);
+        transactionService.update(1L, 1L, OTHER_USER_ID, "Chủ hộ", true, makePrivate);
+        assertThat(mine.getIsPrivate()).isFalse();
+    }
+
+    @Test
+    void update_doesNotRecheckWalletOwnership_whenWalletUnchanged() {
+        Transaction target = transaction(1L); // already in wallet 5, request keeps wallet 5
+        stubUpdateDependencies(target);
+
+        transactionService.update(1L, 1L, CREATOR_ID, "An", false, updateRequest());
+
+        verify(walletService, never()).requireUsableBy(any(Wallet.class), any(), anyBoolean());
+    }
+
+    @Test
+    void update_checksWalletOwnership_whenMovingToAnotherWallet() {
+        Transaction target = transaction(1L);
+        target.setWalletId(3L); // request moves it to wallet 5
+        stubUpdateDependencies(target);
+
+        transactionService.update(1L, 1L, CREATOR_ID, "An", false, updateRequest());
+
+        verify(walletService).requireUsableBy(any(Wallet.class), eq(CREATOR_ID), eq(false));
+    }
+
+    @Test
+    void create_checksWalletOwnership_withTheCallersRole() {
+        Wallet wallet = new Wallet();
+        wallet.setId(5L);
+        when(walletService.requireOwnedByFamily(5L, 1L)).thenReturn(wallet);
+        doThrow(new ApiException(HttpStatus.FORBIDDEN, "ví riêng của thành viên khác"))
+                .when(walletService).requireUsableBy(wallet, OTHER_USER_ID, false);
+
+        assertForbidden(() -> transactionService.create(1L, OTHER_USER_ID, "m@b.com", "Member", false,
+                new TransactionRequest(5L, 7L, "INCOME", BigDecimal.TEN, LocalDateTime.now(), null), null));
+        verify(transactionDao, never()).insert(any());
     }
 
     @Test
@@ -264,7 +437,7 @@ class TransactionServiceTest {
         when(transactionDao.selectById(1L)).thenReturn(Optional.of(target));
         when(receiptStorageService.read("1/1-a.jpg")).thenReturn(new byte[] {9, 9});
 
-        var receipt = transactionService.getReceipt(1L, 1L);
+        var receipt = transactionService.getReceipt(1L, 1L, CREATOR_ID);
 
         assertThat(receipt.content()).containsExactly(9, 9);
         assertThat(receipt.contentType()).isEqualTo("image/jpeg");
@@ -275,7 +448,7 @@ class TransactionServiceTest {
         Transaction target = transaction(1L);
         when(transactionDao.selectById(1L)).thenReturn(Optional.of(target));
 
-        assertThatThrownBy(() -> transactionService.getReceipt(1L, 1L)).isInstanceOf(NotFoundException.class);
+        assertThatThrownBy(() -> transactionService.getReceipt(1L, 1L, CREATOR_ID)).isInstanceOf(NotFoundException.class);
     }
 
     @Test
@@ -454,7 +627,7 @@ class TransactionServiceTest {
         when(transactionDao.selectDeletedByFamilyIdPaged(1L, 5, 10))
                 .thenReturn(List.of(transaction(98L), transaction(99L)));
 
-        var result = transactionService.listDeletedPaged(1L, 2, 5);
+        var result = transactionService.listDeletedPaged(1L, CREATOR_ID, 2, 5);
 
         assertThat(result.content()).hasSize(2);
         assertThat(result.content().get(1).id()).isEqualTo(99L);
@@ -466,15 +639,15 @@ class TransactionServiceTest {
 
     @Test
     void listDeletedPaged_rejectsNegativePage() {
-        assertThatThrownBy(() -> transactionService.listDeletedPaged(1L, -1, 5))
+        assertThatThrownBy(() -> transactionService.listDeletedPaged(1L, CREATOR_ID, -1, 5))
                 .isInstanceOf(BadRequestException.class);
     }
 
     @Test
     void listDeletedPaged_rejectsOutOfRangeSize() {
-        assertThatThrownBy(() -> transactionService.listDeletedPaged(1L, 0, 0))
+        assertThatThrownBy(() -> transactionService.listDeletedPaged(1L, CREATOR_ID, 0, 0))
                 .isInstanceOf(BadRequestException.class);
-        assertThatThrownBy(() -> transactionService.listDeletedPaged(1L, 0, 101))
+        assertThatThrownBy(() -> transactionService.listDeletedPaged(1L, CREATOR_ID, 0, 101))
                 .isInstanceOf(BadRequestException.class);
     }
 
@@ -755,22 +928,22 @@ class TransactionServiceTest {
         TransactionReportFilter filter = new TransactionReportFilter(
                 null, null, null, null, null, null, new BigDecimal("500"), new BigDecimal("100"));
 
-        assertThatThrownBy(() -> transactionService.listByFamilyPaged(1L, filter, 0, 20))
+        assertThatThrownBy(() -> transactionService.listByFamilyPaged(1L, CREATOR_ID, filter, 0, 20))
                 .isInstanceOf(BadRequestException.class);
         verify(transactionDao, never()).countByFamilyIdFiltered(
-                any(), any(), any(), any(), any(), any(), any(), any(), any());
+                any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
     void listByFamilyPaged_passesNullPattern_whenSearchTextBlank() {
         TransactionReportFilter filter = new TransactionReportFilter(
                 null, null, null, null, null, "   ", null, null);
-        when(transactionDao.countByFamilyIdFiltered(1L, null, null, null, null, null, null, null, null))
+        when(transactionDao.countByFamilyIdFiltered(1L, CREATOR_ID, true, null, null, null, null, null, null, null, null))
                 .thenReturn(0L);
-        when(transactionDao.selectByFamilyIdFiltered(1L, null, null, null, null, null, null, null, null, 10, 0))
+        when(transactionDao.selectByFamilyIdFiltered(1L, CREATOR_ID, true, null, null, null, null, null, null, null, null, 10, 0))
                 .thenReturn(List.of());
 
-        var page = transactionService.listByFamilyPaged(1L, filter, 0, 10);
+        var page = transactionService.listByFamilyPaged(1L, CREATOR_ID, filter, 0, 10);
 
         assertThat(page.content()).isEmpty();
     }

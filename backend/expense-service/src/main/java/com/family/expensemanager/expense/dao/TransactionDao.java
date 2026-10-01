@@ -9,6 +9,7 @@ import org.seasar.doma.Update;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -30,14 +31,31 @@ public interface TransactionDao {
     /** Backs the paginated/filtered {@code GET /transactions} list — see {@code countByFamilyIdFiltered}. */
     @Select
     List<Transaction> selectByFamilyIdFiltered(
-            Long familyId, Long walletId, Long categoryId, String type,
+            Long familyId, Long viewerUserId, boolean showOthersPrivate, Long walletId, Long categoryId, String type,
             LocalDate fromDate, LocalDate toDate, String notePattern, BigDecimal minAmount, BigDecimal maxAmount,
             int limit, int offset);
 
     @Select
     long countByFamilyIdFiltered(
-            Long familyId, Long walletId, Long categoryId, String type,
+            Long familyId, Long viewerUserId, boolean showOthersPrivate, Long walletId, Long categoryId, String type,
             LocalDate fromDate, LocalDate toDate, String notePattern, BigDecimal minAmount, BigDecimal maxAmount);
+
+    /** 1 if transaction {@code targetId} matches these list filters (and the viewer sees it in full), else 0. */
+    @Select
+    long countFilteredMatchingId(
+            Long familyId, Long viewerUserId, Long walletId, Long categoryId, String type,
+            LocalDate fromDate, LocalDate toDate, String notePattern, BigDecimal minAmount, BigDecimal maxAmount,
+            Long targetId);
+
+    /**
+     * How many rows of the filtered list come BEFORE the target in its order (occurred_at DESC, id DESC) —
+     * i.e. its 0-based position, from which the page holding it follows.
+     */
+    @Select
+    long countFilteredAhead(
+            Long familyId, Long viewerUserId, Long walletId, Long categoryId, String type,
+            LocalDate fromDate, LocalDate toDate, String notePattern, BigDecimal minAmount, BigDecimal maxAmount,
+            LocalDateTime occurredAt, Long targetId);
 
     @Select
     Optional<Transaction> selectById(Long id);
@@ -64,6 +82,7 @@ public interface TransactionDao {
     @Select
     long countByCategoryId(Long categoryId);
 
+    /** All deleted transactions, private ones included (the service masks those it shows to others). */
     @Select
     long countDeletedByFamilyId(Long familyId);
 

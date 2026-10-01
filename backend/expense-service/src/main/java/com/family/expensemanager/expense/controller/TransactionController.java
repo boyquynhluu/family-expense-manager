@@ -29,6 +29,7 @@ import com.family.expensemanager.expense.dto.ImportResult;
 import com.family.expensemanager.expense.dto.ReceiptFile;
 import com.family.expensemanager.expense.dto.TransactionReportFilter;
 import com.family.expensemanager.expense.dto.TransactionAuditLogResponse;
+import com.family.expensemanager.expense.dto.TransactionLocation;
 import com.family.expensemanager.expense.dto.TransactionRequest;
 import com.family.expensemanager.expense.dto.TransactionResponse;
 import com.family.expensemanager.expense.service.TransactionImportService;
@@ -56,7 +57,7 @@ public class TransactionController {
         log.info("create - start");
         return ApiResponse.ok(transactionService.create(
                 CurrentUser.familyId(), CurrentUser.userId(), CurrentUser.email(), CurrentUser.displayName(),
-                request, idempotencyKey));
+                isOwner(), request, idempotencyKey));
     }
 
     @GetMapping
@@ -74,13 +75,33 @@ public class TransactionController {
         log.info("list - start, page={}, size={}", page, size);
         TransactionReportFilter filter = new TransactionReportFilter(
                 walletId, categoryId, type, fromDate, toDate, q, minAmount, maxAmount);
-        return ApiResponse.ok(transactionService.listByFamilyPaged(CurrentUser.familyId(), filter, page, size));
+        return ApiResponse.ok(transactionService.listByFamilyPaged(
+                CurrentUser.familyId(), CurrentUser.userId(), filter, page, size));
+    }
+
+    /** Same filters as {@link #list}: which page of that list holds transaction {@code id}. */
+    @GetMapping("/{id}/location")
+    public ApiResponse<TransactionLocation> locate(
+            @PathVariable Long id,
+            @RequestParam(required = false) Long walletId,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) LocalDate fromDate,
+            @RequestParam(required = false) LocalDate toDate,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) BigDecimal minAmount,
+            @RequestParam(required = false) BigDecimal maxAmount,
+            @RequestParam(defaultValue = "10") int size) {
+        log.info("locate - start, id={}, size={}", id, size);
+        TransactionReportFilter filter = new TransactionReportFilter(
+                walletId, categoryId, type, fromDate, toDate, q, minAmount, maxAmount);
+        return ApiResponse.ok(transactionService.locate(CurrentUser.familyId(), CurrentUser.userId(), filter, id, size));
     }
 
     @GetMapping("/{id}")
     public ApiResponse<TransactionResponse> get(@PathVariable Long id) {
         log.info("get - start, id={}", id);
-        return ApiResponse.ok(transactionService.get(CurrentUser.familyId(), id));
+        return ApiResponse.ok(transactionService.get(CurrentUser.familyId(), id, CurrentUser.userId()));
     }
 
     @PutMapping("/{id}")
@@ -108,7 +129,7 @@ public class TransactionController {
     public ApiResponse<PageResponse<TransactionResponse>> trash(
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "5") int size) {
         log.info("trash - start, page={}, size={}", page, size);
-        return ApiResponse.ok(transactionService.listDeletedPaged(CurrentUser.familyId(), page, size));
+        return ApiResponse.ok(transactionService.listDeletedPaged(CurrentUser.familyId(), CurrentUser.userId(), page, size));
     }
 
     @PostMapping("/{id}/restore")
@@ -122,7 +143,7 @@ public class TransactionController {
     @GetMapping("/{id}/history")
     public ApiResponse<List<TransactionAuditLogResponse>> history(@PathVariable Long id) {
         log.info("history - start, id={}", id);
-        return ApiResponse.ok(transactionService.history(CurrentUser.familyId(), id));
+        return ApiResponse.ok(transactionService.history(CurrentUser.familyId(), id, CurrentUser.userId()));
     }
 
     @PostMapping("/{id}/receipt")
@@ -136,7 +157,7 @@ public class TransactionController {
     @GetMapping("/{id}/receipt")
     public ResponseEntity<byte[]> getReceipt(@PathVariable Long id) {
         log.info("getReceipt - start, id={}", id);
-        ReceiptFile receipt = transactionService.getReceipt(CurrentUser.familyId(), id);
+        ReceiptFile receipt = transactionService.getReceipt(CurrentUser.familyId(), id, CurrentUser.userId());
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(receipt.contentType()))
                 .body(receipt.content());
@@ -157,7 +178,8 @@ public class TransactionController {
     public ApiResponse<ImportResult> importTransactions(@RequestParam("file") MultipartFile file) {
         log.info("importTransactions - start, filename={}", file.getOriginalFilename());
         return ApiResponse.ok(transactionImportService.importFile(
-                CurrentUser.familyId(), CurrentUser.userId(), CurrentUser.email(), CurrentUser.displayName(), file));
+                CurrentUser.familyId(), CurrentUser.userId(), CurrentUser.email(), CurrentUser.displayName(),
+                isOwner(), file));
     }
 
     @GetMapping("/export")
@@ -174,7 +196,7 @@ public class TransactionController {
         log.info("export - start, format={}", format);
         TransactionReportFilter filter = new TransactionReportFilter(
                 walletId, categoryId, type, fromDate, toDate, q, minAmount, maxAmount);
-        byte[] content = transactionReportService.export(CurrentUser.familyId(), filter, format);
+        byte[] content = transactionReportService.export(CurrentUser.familyId(), CurrentUser.userId(), filter, format);
 
         boolean excel = format == ReportFormat.EXCEL;
         String filename = "giao-dich-" + LocalDate.now() + (excel ? ".xlsx" : ".csv");

@@ -31,6 +31,10 @@ import java.time.LocalDate;
  * {@code transactionId}/{@code amount}/{@code occurredOn}/{@code note} describe that transaction and
  * {@code itemCount} is 1; a bulk delete publishes ONE event with {@code itemCount} = how many were deleted and
  * the per-transaction fields null, so deleting 50 rows doesn't flood the family's notifications.
+ * {@code privateEntry}: the transaction is private (only its creator may see its details). Notifications are
+ * listed family-wide, so the publisher already leaves the details OUT of such an event (amount/date/note/
+ * category/transactionId null) — nothing private ever reaches notification-service, not even its stored
+ * payload — and the consumer phrases the message generically. Null (older producers) = not private.
  */
 public record ExpenseEvent(
         String eventType,
@@ -50,7 +54,8 @@ public record ExpenseEvent(
         String note,
         String fromWalletName,
         String toWalletName,
-        Integer itemCount) {
+        Integer itemCount,
+        Boolean privateEntry) {
 
     public static final String EXPENSE_CREATED = "EXPENSE_CREATED";
     public static final String BUDGET_EXCEEDED = "BUDGET_EXCEEDED";
@@ -65,6 +70,22 @@ public record ExpenseEvent(
     public ExpenseEvent {
     }
 
+    /** Pre-privateEntry shape — every publisher except a private transaction's own events. */
+    public ExpenseEvent(String eventType, Long familyId, Long userId, Long transactionId, Long categoryId,
+                        BigDecimal amount, String periodMonth, BigDecimal limitAmount, BigDecimal totalSpent,
+                        String categoryName, String userEmail, String userDisplayName, Instant occurredAt,
+                        LocalDate occurredOn, String note, String fromWalletName, String toWalletName,
+                        Integer itemCount) {
+        this(eventType, familyId, userId, transactionId, categoryId, amount, periodMonth, limitAmount, totalSpent,
+                categoryName, userEmail, userDisplayName, occurredAt, occurredOn, note, fromWalletName, toWalletName,
+                itemCount, null);
+    }
+
+    // Not "isPrivateEntry()": Jackson would read that as a second getter for the "privateEntry" property.
+    public boolean hidesDetails() {
+        return Boolean.TRUE.equals(privateEntry);
+    }
+
     /** Pre-itemCount shape — still used by WALLET_TRANSFERRED publishers; itemCount only matters for EXPENSE_DELETED. */
     public ExpenseEvent(String eventType, Long familyId, Long userId, Long transactionId, Long categoryId,
                         BigDecimal amount, String periodMonth, BigDecimal limitAmount, BigDecimal totalSpent,
@@ -72,7 +93,7 @@ public record ExpenseEvent(
                         LocalDate occurredOn, String note, String fromWalletName, String toWalletName) {
         this(eventType, familyId, userId, transactionId, categoryId, amount, periodMonth, limitAmount, totalSpent,
                 categoryName, userEmail, userDisplayName, occurredAt, occurredOn, note, fromWalletName, toWalletName,
-                null);
+                null, null);
     }
 
     /** Pre-occurredOn/note/wallet-name shape — still used by EXPENSE_CREATED/BUDGET_EXCEEDED/BUDGET_WARNING publishers. */
@@ -80,7 +101,7 @@ public record ExpenseEvent(
                         BigDecimal amount, String periodMonth, BigDecimal limitAmount, BigDecimal totalSpent,
                         String categoryName, String userEmail, String userDisplayName, Instant occurredAt) {
         this(eventType, familyId, userId, transactionId, categoryId, amount, periodMonth, limitAmount, totalSpent,
-                categoryName, userEmail, userDisplayName, occurredAt, null, null, null, null, null);
+                categoryName, userEmail, userDisplayName, occurredAt, null, null, null, null, null, null);
     }
 
     /** Pre-wallet-name shape — still used by RECURRING_EXECUTED/RECURRING_FAILED publishers. */
@@ -89,6 +110,6 @@ public record ExpenseEvent(
                         String categoryName, String userEmail, String userDisplayName, Instant occurredAt,
                         LocalDate occurredOn, String note) {
         this(eventType, familyId, userId, transactionId, categoryId, amount, periodMonth, limitAmount, totalSpent,
-                categoryName, userEmail, userDisplayName, occurredAt, occurredOn, note, null, null, null);
+                categoryName, userEmail, userDisplayName, occurredAt, occurredOn, note, null, null, null, null);
     }
 }

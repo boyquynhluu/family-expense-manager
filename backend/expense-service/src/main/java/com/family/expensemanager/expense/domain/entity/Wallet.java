@@ -21,6 +21,10 @@ public class Wallet {
     @Column(name = "family_id")
     private Long familyId;
 
+    /** Member who owns this wallet ("ví riêng"); null = shared by the whole family ("ví chung"). */
+    @Column(name = "owner_user_id")
+    private Long ownerUserId;
+
     private String name;
 
     private String currency;
@@ -45,6 +49,14 @@ public class Wallet {
 
     public void setFamilyId(Long familyId) {
         this.familyId = familyId;
+    }
+
+    public Long getOwnerUserId() {
+        return ownerUserId;
+    }
+
+    public void setOwnerUserId(Long ownerUserId) {
+        this.ownerUserId = ownerUserId;
     }
 
     public String getName() {

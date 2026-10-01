@@ -27,6 +27,12 @@ public record TransactionReportFilter(
     }
 
     /** LIKE pattern for the note column; pair with {@code ESCAPE '!'} in SQL. */
+    /** No criterion set at all — e.g. the Transactions page with every filter cleared. */
+    public boolean isEmpty() {
+        return walletId == null && categoryId == null && type == null && fromDate == null && toDate == null
+                && normalizedQuery() == null && minAmount == null && maxAmount == null;
+    }
+
     public String noteLikePattern() {
         String query = normalizedQuery();
         if (query == null) {

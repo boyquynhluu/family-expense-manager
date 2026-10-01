@@ -87,8 +87,18 @@ public class TransactionImportService {
     private final WalletService walletService;
     private final CategoryService categoryService;
 
+    /** Trusted callers only (no wallet-ownership check) — user uploads go through the overload below. */
     public ImportResult importFile(
             Long familyId, Long userId, String userEmail, String userDisplayName, MultipartFile file) {
+        return importFile(familyId, userId, userEmail, userDisplayName, true, file);
+    }
+
+    /**
+     * @param callerIsOwner whether the uploader is the family OWNER — otherwise a row naming another
+     *                      member's private wallet is rejected (reported per row, the rest still import).
+     */
+    public ImportResult importFile(Long familyId, Long userId, String userEmail, String userDisplayName,
+                                   boolean callerIsOwner, MultipartFile file) {
         try {
             log.info("importFile - start, familyId={}, filename={}", familyId, file.getOriginalFilename());
             if (file.isEmpty()) {
@@ -114,8 +124,8 @@ public class TransactionImportService {
             for (int i = 0; i < rawRows.size(); i++) {
                 int rowNumber = i + 2; // row 1 is the header
                 int errorsBefore = errors.size();
-                processRow(rowNumber, rawRows.get(i), familyId, userId, userEmail, userDisplayName, walletsByName,
-                        categoriesByKey, errors);
+                processRow(rowNumber, rawRows.get(i), familyId, userId, userEmail, userDisplayName, callerIsOwner,
+                        walletsByName, categoriesByKey, errors);
                 if (errors.size() == errorsBefore) {
                     imported++;
                 }
@@ -131,7 +141,7 @@ public class TransactionImportService {
     }
 
     private void processRow(int rowNumber, Map<String, String> raw, Long familyId, Long userId, String userEmail,
-                             String userDisplayName, Map<String, WalletResponse> walletsByName,
+                             String userDisplayName, boolean callerIsOwner, Map<String, WalletResponse> walletsByName,
                              Map<String, CategoryResponse> categoriesByKey, List<ImportRowError> errors) {
         String dateStr = value(raw, COL_DATE);
         String walletName = value(raw, COL_WALLET);
@@ -181,6 +191,12 @@ public class TransactionImportService {
         WalletResponse wallet = walletsByName.get(key(walletName));
         if (wallet == null) {
             errors.add(new ImportRowError(rowNumber, "Không tìm thấy ví: \"" + walletName + "\""));
+            return;
+        }
+        // Same rule as WalletService.canUse (checked here, per row, so one bad row doesn't abort the file).
+        if (!callerIsOwner && wallet.ownerUserId() != null && !wallet.ownerUserId().equals(userId)) {
+            errors.add(new ImportRowError(rowNumber,
+                    "Ví \"" + walletName + "\" là ví riêng của thành viên khác — bạn chỉ dùng được ví của mình và ví chung"));
             return;
         }
 

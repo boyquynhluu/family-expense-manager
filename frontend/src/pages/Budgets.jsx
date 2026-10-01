@@ -11,6 +11,7 @@ import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
 import { Button, IconButton } from "../components/ui/Button";
 import { Input, Select } from "../components/ui/Input";
+import { Field } from "../components/ui/Field";
 
 function currentYearMonth() {
   const now = new Date();
@@ -188,7 +189,7 @@ export default function Budgets() {
           <div className="section-card">
             <h2>{editingId ? t("budgets:editTitle") : t("budgets:newTitle")}</h2>
             <form className="inline-form" onSubmit={handleSubmit}>
-              <label className="field">
+              <Field>
                 {t("budgets:categoryLabel")}
                 <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
                   <option value="">{t("budgets:overallOption")}</option>
@@ -198,21 +199,21 @@ export default function Budgets() {
                     </option>
                   ))}
                 </Select>
-              </label>
-              <label className="field">
+              </Field>
+              <Field>
                 <span>
                   {t("budgets:monthLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
                 <Input type="month" value={periodMonth} onChange={(e) => setPeriodMonth(e.target.value)} required />
-              </label>
-              <label className="field">
+              </Field>
+              <Field>
                 <span>
                   {t("budgets:limitLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
-                <AmountInput placeholder="0" value={limitAmount} onChange={setLimitAmount} required />
-              </label>
+                <AmountInput placeholder="0" value={limitAmount} onChange={setLimitAmount} required positive />
+              </Field>
               <Button type="submit">{editingId ? t("budgets:updateButton") : t("budgets:createButton")}</Button>
               {editingId && (
                 <Button variant="secondary" onClick={cancelEdit}>
@@ -227,20 +228,26 @@ export default function Budgets() {
             <h2>{t("budgets:copyTitle")}</h2>
             <p className="page-header-subtitle">{t("budgets:copyHint")}</p>
             <form className="inline-form" onSubmit={handleCopy}>
-              <label className="field">
+              <Field>
                 <span>
                   {t("budgets:copyFromLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
                 <Input type="month" value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)} required />
-              </label>
-              <label className="field">
+              </Field>
+              <Field>
                 <span>
                   {t("budgets:copyToLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
-                <Input type="month" value={copyTo} onChange={(e) => setCopyTo(e.target.value)} required />
-              </label>
+                <Input
+                  type="month"
+                  value={copyTo}
+                  onChange={(e) => setCopyTo(e.target.value)}
+                  required
+                  validate={(v) => (v && v === copyFrom ? t("validation:monthsMustDiffer") : "")}
+                />
+              </Field>
               <Button type="submit" disabled={copying}>
                 {t("budgets:copyButton")}
               </Button>

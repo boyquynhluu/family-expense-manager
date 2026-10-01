@@ -1,6 +1,7 @@
 SELECT
     id,
     family_id,
+    owner_user_id,
     name,
     currency,
     initial_balance,

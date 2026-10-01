@@ -14,6 +14,7 @@ import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.dto.CreateWalletRequest;
 import com.family.expensemanager.expense.dto.WalletResponse;
 import java.io.UncheckedIOException;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -57,6 +58,7 @@ public class WalletService {
             wallet.setName(request.name());
             wallet.setCurrency(currency);
             wallet.setInitialBalance(request.initialBalance());
+            wallet.setOwnerUserId(request.ownerUserId());
             walletDao.insert(wallet);
             return WalletResponse.from(wallet);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
@@ -90,6 +92,7 @@ public class WalletService {
             wallet.setName(request.name());
             wallet.setCurrency(currency);
             wallet.setInitialBalance(request.initialBalance());
+            wallet.setOwnerUserId(request.ownerUserId());
             walletDao.update(wallet);
             return WalletResponse.from(wallet, currentBalanceOf(wallet));
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
@@ -204,6 +207,29 @@ public class WalletService {
      */
     void lockForUpdate(Long walletId) {
         walletDao.selectByIdForUpdate(walletId);
+    }
+
+    /**
+     * Who may put money into / take money out of a wallet: the family OWNER (any wallet), anyone for a
+     * shared wallet (no owner), otherwise only the member it belongs to. Viewing is not restricted —
+     * every member still sees every wallet and its balance.
+     */
+    static boolean canUse(Wallet wallet, Long userId, boolean callerIsOwner) {
+        return callerIsOwner || wallet.getOwnerUserId() == null || wallet.getOwnerUserId().equals(userId);
+    }
+
+    /** {@link #requireOwnedByFamily} plus {@link #canUse} — for a wallet the caller is about to record money against. */
+    Wallet requireUsableBy(Long walletId, Long familyId, Long userId, boolean callerIsOwner) {
+        Wallet wallet = requireOwnedByFamily(walletId, familyId);
+        requireUsableBy(wallet, userId, callerIsOwner);
+        return wallet;
+    }
+
+    void requireUsableBy(Wallet wallet, Long userId, boolean callerIsOwner) {
+        if (!canUse(wallet, userId, callerIsOwner)) {
+            throw logged(log, new ApiException(HttpStatus.FORBIDDEN,
+                    "Ví \"" + wallet.getName() + "\" là ví riêng của thành viên khác — bạn chỉ dùng được ví của mình và ví chung"));
+        }
     }
 
     Wallet requireOwnedByFamily(Long walletId, Long familyId) {

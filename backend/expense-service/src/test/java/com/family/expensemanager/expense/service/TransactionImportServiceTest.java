@@ -75,6 +75,23 @@ class TransactionImportServiceTest {
     }
 
     @Test
+    void importFile_rejectsRow_whenMemberImportsIntoAnotherMembersWallet() {
+        WalletResponse spouses = new WalletResponse(10L, 1L, "Ví Vợ", "VND", BigDecimal.ZERO, BigDecimal.ZERO, null, 200L);
+        when(walletService.listByFamily(1L)).thenReturn(List.of(spouses));
+        when(categoryService.listByFamily(1L)).thenReturn(List.of(category(20L, "Ăn uống", "EXPENSE")));
+        MockMultipartFile file = csvFile(
+                "Thời gian,Ví,Danh mục,Loại,Số tiền,Ghi chú\n"
+                        + "2026-01-05,Ví Vợ,Ăn uống,Chi tiêu,50000,\n");
+
+        var result = importService.importFile(1L, 100L, "a@b.com", "An", false, file);
+
+        assertThat(result.importedCount()).isZero();
+        assertThat(result.errors()).singleElement()
+                .satisfies(e -> assertThat(e.message()).contains("ví riêng của thành viên khác"));
+        verify(transactionService, never()).create(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void importFile_reportsError_whenWalletNotFound() {
         when(walletService.listByFamily(1L)).thenReturn(List.of());
         when(categoryService.listByFamily(1L)).thenReturn(List.of(category(20L, "Ăn uống", "EXPENSE")));

@@ -40,6 +40,10 @@ public class Transaction {
 
     private String note;
 
+    /** Only the creator ({@link #userId}) may see this transaction's details; its amount still counts in totals. */
+    @Column(name = "is_private")
+    private Boolean isPrivate = false;
+
     @Column(name = "receipt_path")
     private String receiptPath;
 
@@ -133,6 +137,19 @@ public class Transaction {
 
     public void setNote(String note) {
         this.note = note;
+    }
+
+    public Boolean getIsPrivate() {
+        return isPrivate;
+    }
+
+    public void setIsPrivate(Boolean isPrivate) {
+        this.isPrivate = isPrivate;
+    }
+
+    /** Visible to {@code viewerUserId}: not private, or created by them. Applies to the family OWNER too. */
+    public boolean isVisibleTo(Long viewerUserId) {
+        return !Boolean.TRUE.equals(isPrivate) || (userId != null && userId.equals(viewerUserId));
     }
 
     public String getReceiptPath() {

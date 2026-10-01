@@ -58,15 +58,25 @@ public class WalletTransferService {
      */
     public WalletTransferResponse create(Long familyId, Long userId, String userEmail, String userDisplayName,
                                           CreateWalletTransferRequest request, String idempotencyKey) {
-        return idempotencyGuard.runOnce(familyId, IDEMPOTENCY_SCOPE, idempotencyKey, WalletTransferResponse.class,
-                () -> doCreate(familyId, userId, userEmail, userDisplayName, request));
+        // Trusted callers only (no wallet-ownership check) — user requests go through the overload below.
+        return create(familyId, userId, userEmail, userDisplayName, ROLE_OWNER, request, idempotencyKey);
     }
 
-    private WalletTransferResponse doCreate(
-            Long familyId, Long userId, String userEmail, String userDisplayName, CreateWalletTransferRequest request) {
+    /**
+     * @param role the caller's family role — a plain member may only move money OUT of their own wallet or a
+     *             shared one; the destination can be anyone's (e.g. giving money to a spouse's wallet).
+     */
+    public WalletTransferResponse create(Long familyId, Long userId, String userEmail, String userDisplayName,
+                                          String role, CreateWalletTransferRequest request, String idempotencyKey) {
+        return idempotencyGuard.runOnce(familyId, IDEMPOTENCY_SCOPE, idempotencyKey, WalletTransferResponse.class,
+                () -> doCreate(familyId, userId, userEmail, userDisplayName, role, request));
+    }
+
+    private WalletTransferResponse doCreate(Long familyId, Long userId, String userEmail, String userDisplayName,
+                                            String role, CreateWalletTransferRequest request) {
         try {
             log.info("create - start, familyId={}, from={}, to={}", familyId, request.fromWalletId(), request.toWalletId());
-            Wallet[] wallets = requireValidWallets(familyId, request, null);
+            Wallet[] wallets = requireValidWallets(familyId, request, null, userId, ROLE_OWNER.equals(role));
 
             WalletTransfer transfer = new WalletTransfer();
             transfer.setFamilyId(familyId);
@@ -98,7 +108,7 @@ public class WalletTransferService {
             log.info("update - start, familyId={}, userId={}, transferId={}", familyId, userId, transferId);
             WalletTransfer transfer = requireOwnedByFamily(transferId, familyId);
             requireCreatorOrOwner(transfer, userId, role, "sửa");
-            Wallet[] wallets = requireValidWallets(familyId, request, transfer);
+            Wallet[] wallets = requireValidWallets(familyId, request, transfer, userId, ROLE_OWNER.equals(role));
 
             transfer.setFromWalletId(wallets[0].getId());
             transfer.setToWalletId(wallets[1].getId());
@@ -118,7 +128,8 @@ public class WalletTransferService {
      * @param existing the transfer being edited, or null when creating — its own amount is already part of
      *                 the wallets' current balances, so it must be taken out before checking the new amount.
      */
-    private Wallet[] requireValidWallets(Long familyId, CreateWalletTransferRequest request, WalletTransfer existing) {
+    private Wallet[] requireValidWallets(Long familyId, CreateWalletTransferRequest request, WalletTransfer existing,
+                                         Long userId, boolean callerIsOwner) {
         if (request.fromWalletId().equals(request.toWalletId())) {
             throw logged(log, new BadRequestException("Ví nguồn và ví đích phải khác nhau"));
         }
@@ -126,6 +137,11 @@ public class WalletTransferService {
             throw logged(log, new BadRequestException("Số tiền chuyển phải >= 0.01"));
         }
         Wallet from = walletService.requireOwnedByFamily(request.fromWalletId(), familyId);
+        // Only the SOURCE is restricted (nobody can take money out of someone else's wallet). On edit, only
+        // when the source changes — the creator can still fix the amount/note of their own earlier transfer.
+        if (existing == null || !request.fromWalletId().equals(existing.getFromWalletId())) {
+            walletService.requireUsableBy(from, userId, callerIsOwner);
+        }
         Wallet to = walletService.requireOwnedByFamily(request.toWalletId(), familyId);
         if (!from.getCurrency().equals(to.getCurrency())) {
             throw logged(log, new BadRequestException("Hai ví phải cùng loại tiền tệ"));

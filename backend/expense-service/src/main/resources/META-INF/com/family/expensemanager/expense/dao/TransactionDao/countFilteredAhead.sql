@@ -5,7 +5,7 @@ FROM
 WHERE
     family_id = /* familyId */0
     AND deleted_at IS NULL
-    AND (is_private = FALSE OR user_id = /* viewerUserId */0/*%if showOthersPrivate */ OR TRUE/*%end*/)
+    AND (is_private = FALSE OR user_id = /* viewerUserId */0)
 /*%if walletId != null */
     AND wallet_id = /* walletId */0
 /*%end*/
@@ -30,3 +30,5 @@ WHERE
 /*%if maxAmount != null */
     AND amount <= /* maxAmount */0
 /*%end*/
+    AND (occurred_at > /* occurredAt */'2025-01-01 00:00:00'
+         OR (occurred_at = /* occurredAt */'2025-01-01 00:00:00' AND id > /* targetId */0))

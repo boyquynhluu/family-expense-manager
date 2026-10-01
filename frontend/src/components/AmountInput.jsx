@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Input } from "./ui/Input";
 
 // Matches the backend's @Digits(integer = 16, fraction = 2) on every amount field (DECIMAL(18, 2)).
@@ -33,8 +34,12 @@ function format(raw) {
  * digits are capped at 16 before / 2 after the decimal point (a plain `maxLength` can't do this:
  * it would count the "," and "." the display inserts).
  */
-export default function AmountInput({ value, onChange, ...props }) {
+export default function AmountInput({ value, onChange, positive = false, ...props }) {
   const inputRef = useRef(null);
+  const { t } = useTranslation("validation");
+  // `positive`: the backend's @DecimalMin("0.01") on transaction/transfer/budget amounts —
+  // "0" passes `required`, so it needs its own rule (shown like any other field error).
+  const validate = positive ? (display) => (display !== "" && Number(toRaw(display)) <= 0 ? t("amountPositive") : "") : undefined;
 
   function handleChange(e) {
     const input = e.target;
@@ -68,6 +73,7 @@ export default function AmountInput({ value, onChange, ...props }) {
       type="text"
       inputMode="decimal"
       className="tabular-nums"
+      validate={validate}
       value={format(String(value ?? ""))}
       onChange={handleChange}
     />
