@@ -15,7 +15,7 @@ const PROFANITY_ACCENTED = [
 const PROFANITY_PLAIN = [
   "dmm", "dcm", "dkm", "djt", "dit me", "dit con me", "vcl", "vkl", "vcc", "clgt", "cmm", "loz",
   "fuck", "fuk", "fck", "fucking", "fucker", "fucked", "motherfucker", "shit", "bullshit", "bitch",
-  "cunt", "pussy", "asshole", "bastard", "wtf", "stfu",
+  "cunt", "pussy", "asshole", "bastard", "wtf", "stfu", "lol", "cac", "lol"
 ];
 
 // Rejected only when they are the WHOLE value ("test" yes, "Phí test COVID" no).

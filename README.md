@@ -4,7 +4,7 @@ Hệ thống quản lý chi tiêu gia đình, dùng thực tế hàng ngày, xâ
 
 **Stack:** Spring Boot 3.3.5 + Doma 2 (không dùng JPA/Hibernate) · React (Vite) · MySQL + Flyway · Docker Compose · Kafka · Redis · Eureka · Spring Cloud Gateway **Server MVC** (servlet-based, không dùng WebFlux) · springdoc-openapi (Swagger UI).
 
-> Tài liệu mô tả **kiến trúc, cách chạy và toàn bộ tính năng đã làm** theo từng mục (mỗi mục có sơ đồ luồng, xem [Tính năng theo từng mục](#tính-năng-theo-từng-mục)). Schema bảng do Flyway quản lý (`db/migration/V*__*.sql`, xem [Database Migrations](#database-migrations-flyway)).
+> Tài liệu mô tả **kiến trúc, cách chạy và toàn bộ tính năng đã làm** theo từng mục (mỗi mục có sơ đồ luồng, xem [Tính năng theo từng mục](#tính-năng-theo-từng-mục)). Schema bảng do Flyway quản lý (`db/migration/V*__*.sql`, xem [Database Migrations](#database-migrations-flyway)). Các nghiệp vụ dự kiến làm sau nằm ở [Nghiệp vụ dự kiến](#nghiệp-vụ-dự-kiến-backlog--chưa-làm).
 
 ## Kiến trúc
 
@@ -1036,6 +1036,39 @@ sequenceDiagram
 - Mỗi admin nhận một email riêng (không lộ địa chỉ của nhau). Giá trị người dùng nhập (tên, tên gia đình) được escape HTML trước khi chèn vào email.
 - Sự kiện chỉ được gửi sau khi giao dịch tạo tài khoản commit. Gửi mail lỗi (SMTP chưa cấu hình hoặc một địa chỉ hỏng) chỉ ghi log, không làm Kafka gửi lại sự kiện.
 - Mẫu email: `notification-service/src/main/resources/mail-templates/new-user-registered-email.html`. Link "Mở trang quản trị" trỏ tới `FRONTEND_BASE_URL/admin`.
+
+---
+
+## Nghiệp vụ dự kiến (backlog — chưa làm)
+
+Kết quả review nghiệp vụ ngày 01/10/2026. Thứ tự đề xuất: **B1 → B2 → B3 → A1/A2 → phần còn lại**.
+
+### A. Hoàn thiện nghiệp vụ đã có
+
+- [ ] **A1 — Chính sách ví âm.** Chuyển tiền đã kiểm tra số dư ví nguồn (`WalletTransferService`), nhưng ghi khoản chi (`TransactionService`) thì không, nên ví có thể âm. Cần một quy tắc theo loại ví (xem C3): tiền mặt và tài khoản ngân hàng không được âm, thẻ tín dụng được âm trong hạn mức.
+- [ ] **A2 — Thông báo khi sửa giao dịch.** Hiện chỉ phát `EXPENSE_CREATED` và `EXPENSE_DELETED`; khoản 50k bị sửa thành 5 triệu thì cả nhà không biết. Cần thêm `EXPENSE_UPDATED` (nêu giá trị cũ → mới; giao dịch riêng tư thì che `***` như khi xoá).
+- [ ] **A3 — Audit log cho ví, ngân sách, chuyển tiền.** Hiện chỉ giao dịch có lịch sử sửa (`TRANSACTION_AUDIT_LOGS`, mục N4).
+- [ ] **A4 — Giao dịch định kỳ "nhắc và chờ xác nhận".** Hiện scheduler luôn tự ghi đúng số tiền cố định. Hoá đơn có số tiền thay đổi (điện, nước) cần chế độ tạo bản nháp và thông báo để người dùng nhập số thật rồi xác nhận.
+- [ ] **A5 — Phân quyền chi tiết hơn OWNER/MEMBER (mục 17).** Thêm vai trò chỉ xem (VIEWER) và vai trò trẻ em (giới hạn chi theo ngày/tháng); duyệt khoản chi vượt ngưỡng (thành viên chi trên X thì giao dịch ở trạng thái chờ đến khi chủ hộ duyệt).
+- [ ] **A6 — Ngân sách nâng cao (mục 18).** Ngân sách theo ví hoặc theo thành viên; chuyển phần còn dư sang tháng sau (rollover); ngân sách theo năm.
+- [ ] **A7 — Đa tiền tệ (chỉ khi thật sự cần).** Hiện mỗi gia đình chỉ dùng **một** tiền tệ (mục 7, `WalletService.requireConsistentCurrency`), nên mọi phép cộng tổng đều đúng. Nếu muốn có ví USD cạnh ví VND thì cần bảng tỷ giá theo ngày, cho chuyển tiền giữa hai ví khác tiền tệ (ghi cả hai số tiền), và quy đổi về tiền tệ gốc trong mọi SQL tổng hợp (summary, report, budget).
+
+### B. Toàn vẹn số liệu (ưu tiên cao)
+
+- [ ] **B1 — Điều chỉnh số dư (đối soát).** Khi số dư trong app lệch với thực tế, hiện chỉ sửa được bằng một khoản thu/chi giả, làm sai báo cáo thu chi. Cần loại giao dịch `ADJUSTMENT`: có tác động lên số dư ví, nhưng không tính vào thu/chi, ngân sách hay báo cáo danh mục.
+- [ ] **B2 — Chốt sổ theo tháng.** Hiện có thể sửa hoặc xoá giao dịch của tháng đã quyết toán, làm số dư đầu kỳ, mức dư/âm và ngân sách các tháng sau đổi theo mà không ai biết. Cần cho OWNER chốt tháng (bảng `PERIOD_LOCKS(family_id, period_month, locked_by, locked_at)`). Sau khi chốt, mọi thao tác tạo/sửa/xoá/khôi phục giao dịch, chuyển tiền và import có ngày thuộc tháng đó đều trả 409; chỉ OWNER mới được mở lại (ghi audit).
+- [ ] **B3 — Vay / cho vay / nợ.** Đối tác (tên, liên hệ), số tiền gốc, ngày vay, hạn trả, trả dần nhiều lần (mỗi lần trả là một dòng gắn với ví), số còn nợ; thông báo nhắc trước hạn. Tiền vay hoặc cho vay **không** được tính là thu/chi.
+
+### C. Nghiệp vụ mới
+
+- [ ] **C1 — Mục tiêu tiết kiệm.** Tên mục tiêu (mua xe, học phí), số tiền mục tiêu, hạn, ví gắn kèm và % tiến độ; thông báo khi đạt mốc 50/80/100%.
+- [ ] **C2 — Nhắc hoá đơn sắp đến hạn.** Thông báo trước N ngày; có thể làm dựa trên giao dịch định kỳ (mục 3) cùng với A4.
+- [ ] **C3 — Loại ví.** Tiền mặt, ngân hàng, thẻ tín dụng (hạn mức, ngày sao kê, hạn thanh toán), tiết kiệm có kỳ hạn (lãi suất, ngày đáo hạn). Đây là nền cho A1 và C2.
+- [ ] **C4 — Hoàn tiền / trả hàng** gắn với giao dịch gốc: giảm chi tiêu của chính danh mục đó, thay vì ghi một khoản thu làm phồng cả thu lẫn chi.
+- [ ] **C5 — Tách giao dịch** thành nhiều danh mục, ví dụ một hoá đơn siêu thị gồm ăn uống và đồ gia dụng (bảng `TRANSACTION_SPLITS`; tổng các phần phải bằng số tiền giao dịch).
+- [ ] **C6 — Danh mục con và tag.** `CATEGORIES.parent_id` (2 cấp, báo cáo cộng dồn lên danh mục cha); tag tự do để gom chi tiêu theo sự kiện, ví dụ "Du lịch Đà Lạt".
+- [ ] **C7 — Email tổng kết tháng** gửi cho các thành viên (thu, chi, top danh mục, so sánh với tháng trước, tình trạng ngân sách). Dùng scheduler cùng SMTP sẵn có của notification-service; cho tắt/bật trong tuỳ chọn thông báo (mục 19).
+- [ ] **C8 — Xác minh số điện thoại bằng OTP.** Hiện số điện thoại dùng để đăng nhập (USERS.phone, migration V14/V15) chưa được xác minh, nên một người có thể nhập số của người khác. Khi có ngân sách gửi tin thì thêm bước OTP qua Zalo ZNS (khoảng 300đ/tin, cần OA đã xác thực) hoặc SMS Brandname, và cột `phone_verified_at`.
 
 ---
 

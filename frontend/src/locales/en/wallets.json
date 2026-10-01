@@ -64,5 +64,6 @@
   "colTransfers": "Transfers in / out",
   "colNet": "Surplus / Deficit",
   "colClosing": "Closing",
-  "totalRow": "Total"
+  "totalRow": "Total",
+  "totalRowAll": "Total (all wallets)"
 }

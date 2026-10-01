@@ -337,7 +337,7 @@ class AuthServiceTest {
         // Same answer as an unknown email / wrong password — must not reveal the account or its provider.
         assertThatThrownBy(() -> authService.login(new LoginRequest("a@b.com", "password1"), null, null))
                 .isInstanceOf(UnauthorizedException.class)
-                .hasMessage("Email hoặc mật khẩu không đúng");
+                .hasMessage("Email/số điện thoại hoặc mật khẩu không đúng");
         verify(loginAttemptStore).recordFailure("a@b.com");
     }
 
@@ -347,8 +347,58 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.login(new LoginRequest("nobody@b.com", "password1"), null, null))
                 .isInstanceOf(UnauthorizedException.class)
-                .hasMessage("Email hoặc mật khẩu không đúng");
+                .hasMessage("Email/số điện thoại hoặc mật khẩu không đúng");
         verify(loginAttemptStore).recordFailure("nobody@b.com");
+    }
+
+    @Test
+    void login_byPhoneNumber_succeeds_andResetsTheAccountsEmailCounter() {
+        User user = activeLocalUser();
+        user.setPhone("+84912345678");
+        when(userDao.selectByPhone("+84912345678")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password1", "hashed")).thenReturn(true);
+        when(jwtUtil.generateToken(any(), any(), anyLong())).thenReturn("access-token");
+
+        var response = authService.login(new LoginRequest("0912 345 678", "password1"), null, null);
+
+        assertThat(response.tokens().accessToken()).isEqualTo("access-token");
+        verify(userDao, never()).selectByEmail(any());
+        verify(loginAttemptStore).reset("a@b.com");
+    }
+
+    @Test
+    void login_byPhoneNumber_withWrongPassword_countsAgainstTheAccountsEmail() {
+        User user = activeLocalUser();
+        when(userDao.selectByPhone("+84912345678")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("wrong", "hashed")).thenReturn(false);
+
+        // Same counter as logging in by email, so alternating the two can't double the guesses.
+        assertThatThrownBy(() -> authService.login(new LoginRequest("0912345678", "wrong"), null, null))
+                .isInstanceOf(UnauthorizedException.class);
+        verify(loginAttemptStore).recordFailure("a@b.com");
+    }
+
+    @Test
+    void login_byPhoneNumber_isLockedOut_whenTheAccountsEmailIsLockedOut() {
+        User user = activeLocalUser();
+        when(userDao.selectByPhone("+84912345678")).thenReturn(Optional.of(user));
+        // The phone itself has no failures of its own — the lock sits on the account's email.
+        when(loginAttemptStore.remainingLockMinutes("+84912345678")).thenReturn(0L);
+        when(loginAttemptStore.remainingLockMinutes("a@b.com")).thenReturn(5L);
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest("0912345678", "password1"), null, null))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS));
+        verify(passwordEncoder, never()).matches(any(), any());
+    }
+
+    @Test
+    void login_withSomethingThatIsNeitherEmailNorPhone_failsLikeAnUnknownAccount() {
+        assertThatThrownBy(() -> authService.login(new LoginRequest("hello", "password1"), null, null))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("Email/số điện thoại hoặc mật khẩu không đúng");
+        verify(userDao, never()).selectByPhone(any());
+        verify(loginAttemptStore).recordFailure("hello");
     }
 
     @Test
@@ -723,6 +773,45 @@ class AuthServiceTest {
         assertThat(response.displayName()).isEqualTo("Tên Mới");
         assertThat(response.relationship()).isEqualTo("Bố");
         verify(userDao).update(user);
+    }
+
+    @Test
+    void updateProfile_setsPhone_andKeepsItWhenItIsAlreadyTheUsersOwn() {
+        User user = activeLocalUser();
+        user.setPhone("+84912345678");
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(userDao.selectByPhone("+84912345678")).thenReturn(Optional.of(user));
+
+        var response = authService.updateProfile(1L, new UpdateProfileRequest("Tên", "Bố", "0912345678"));
+
+        assertThat(response.phone()).isEqualTo("+84912345678");
+        verify(userDao).update(user);
+    }
+
+    @Test
+    void updateProfile_rejectsPhone_alreadyUsedByAnotherAccount() {
+        User user = activeLocalUser();
+        User other = activeLocalUser();
+        other.setId(9L);
+        when(userDao.selectById(1L)).thenReturn(Optional.of(user));
+        when(userDao.selectByPhone("+84912345678")).thenReturn(Optional.of(other));
+
+        assertThatThrownBy(() -> authService.updateProfile(1L, new UpdateProfileRequest("Tên", "Bố", "0912345678")))
+                .isInstanceOf(ConflictException.class);
+        verify(userDao, never()).update(any(User.class));
+    }
+
+    @Test
+    void register_rejectsPhone_alreadyUsedByAnotherAccount() {
+        User other = activeLocalUser();
+        other.setId(9L);
+        when(userDao.selectByEmail("new@b.com")).thenReturn(Optional.empty());
+        when(userDao.selectByPhone("+84912345678")).thenReturn(Optional.of(other));
+
+        assertThatThrownBy(() -> authService.register(
+                new RegisterRequest("F", "new@b.com", "password1", "An", "0912345678")))
+                .isInstanceOf(ConflictException.class);
+        verify(userDao, never()).insert(any(User.class));
     }
 
     @Test

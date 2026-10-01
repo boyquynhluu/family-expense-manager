@@ -38,6 +38,7 @@ import com.family.expensemanager.auth.dao.FamilyMembershipDao;
 import com.family.expensemanager.auth.dao.RefreshTokenDao;
 import com.family.expensemanager.auth.dao.TwoFactorRecoveryCodeDao;
 import com.family.expensemanager.auth.dao.UserDao;
+import com.family.expensemanager.auth.domain.PhoneNumbers;
 import com.family.expensemanager.auth.domain.entity.Family;
 import com.family.expensemanager.auth.domain.entity.FamilyInvite;
 import com.family.expensemanager.auth.domain.entity.FamilyMembership;
@@ -198,8 +199,10 @@ public class AuthService {
                 if (!isPendingLocalRegistration(existing)) {
                     throw logged(log, new ConflictException("Email đã được đăng ký: " + request.email()));
                 }
+                requirePhoneAvailable(request.phone(), existing.getId());
                 return reRegisterPending(existing, request);
             }
+            requirePhoneAvailable(request.phone(), null);
 
             Family family = registerFamily(request);
 
@@ -231,6 +234,7 @@ public class AuthService {
         log.info("register - re-registering over pending account, userId={}", pending.getId());
         pending.setPasswordHash(passwordEncoder.encode(request.password()));
         pending.setDisplayName(request.displayName());
+        pending.setPhone(request.phone());
         familyDao.selectById(pending.getFamilyId()).ifPresent(family -> {
             family.setName(request.familyName());
             familyDao.update(family);
@@ -303,15 +307,22 @@ public class AuthService {
 
     public LoginResponse login(LoginRequest request, String deviceInfo, String ipAddress) {
         try {
-            log.info("login - start, email={}", request.email());
-            String email = request.email();
-            requireNotLockedOut(email);
+            log.info("login - start, identifier={}", request.identifier());
+            String identifier = request.identifier();
+            requireNotLockedOut(identifier);
 
-            // Unknown email and wrong password share one message and both count toward the lockout.
-            User user = userDao.selectByEmail(email).orElse(null);
+            // Unknown email/phone and wrong password share one message and both count toward the lockout.
+            User user = findByLoginIdentifier(identifier).orElse(null);
             if (user == null) {
-                loginAttemptStore.recordFailure(email);
+                loginAttemptStore.recordFailure(identifier);
                 throw logged(log, new UnauthorizedException(messages.get("auth.badCredentials")));
+            }
+
+            // Once the account is known, count against its email whichever identifier was typed — otherwise
+            // alternating email and phone would double the guesses allowed before the lockout.
+            String email = user.getEmail() != null ? user.getEmail() : identifier;
+            if (!email.equals(identifier)) {
+                requireNotLockedOut(email);
             }
 
             if (user.getPasswordHash() == null) {
@@ -349,6 +360,26 @@ public class AuthService {
         } catch (Exception e) {
             throw ServiceException.unexpected("AuthService.login", e);
         }
+    }
+
+    /** {@code identifier} as LoginRequest normalises it: a lower-cased email, or a phone number in +84… form. */
+    private Optional<User> findByLoginIdentifier(String identifier) {
+        if (PhoneNumbers.looksLikeEmail(identifier)) {
+            return userDao.selectByEmail(identifier);
+        }
+        return PhoneNumbers.isValid(identifier) ? userDao.selectByPhone(identifier) : Optional.empty();
+    }
+
+    /** A phone number belongs to one account; {@code selfUserId} (may be null) is the account allowed to keep it. */
+    private void requirePhoneAvailable(String phone, Long selfUserId) {
+        if (phone == null) {
+            return;
+        }
+        userDao.selectByPhone(phone)
+                .filter(other -> !other.getId().equals(selfUserId))
+                .ifPresent(other -> {
+                    throw logged(log, new ConflictException("Số điện thoại đã được tài khoản khác sử dụng"));
+                });
     }
 
     private void requireNotLockedOut(String email) {
@@ -601,6 +632,8 @@ public class AuthService {
                     .orElseThrow(() -> logged(log, new UnauthorizedException("Tài khoản không tồn tại")));
             user.setDisplayName(request.displayName());
             user.setRelationship(request.relationship());
+            requirePhoneAvailable(request.phone(), userId);
+            user.setPhone(request.phone());
             userDao.update(user);
             return UserProfileResponse.from(user);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
@@ -1631,6 +1664,7 @@ public class AuthService {
         User user = new User();
         user.setFamilyId(family.getId());
         user.setEmail(request.email());
+        user.setPhone(request.phone());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setDisplayName(request.displayName());
         user.setRole(ROLE_OWNER);

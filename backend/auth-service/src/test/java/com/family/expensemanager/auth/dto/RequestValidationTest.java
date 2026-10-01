@@ -2,6 +2,7 @@ package com.family.expensemanager.auth.dto;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.family.expensemanager.auth.domain.PhoneNumbers;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -28,7 +29,7 @@ class RequestValidationTest {
 
     @Test
     void emails_areTrimmedAndLowerCased_soOneAccountHasOneLockoutKey() {
-        assertThat(new LoginRequest("  Alice@Example.COM ", "pw").email()).isEqualTo("alice@example.com");
+        assertThat(new LoginRequest("  Alice@Example.COM ", "pw").identifier()).isEqualTo("alice@example.com");
         assertThat(new RegisterRequest("F", "Bob@X.com", "password1", "Bob").email()).isEqualTo("bob@x.com");
         assertThat(new ForgotPasswordRequest(" A@B.com").email()).isEqualTo("a@b.com");
         assertThat(new ResendVerificationRequest("A@B.com ").email()).isEqualTo("a@b.com");
@@ -37,9 +38,29 @@ class RequestValidationTest {
     }
 
     @Test
+    void phoneNumbers_areNormalisedToPlus84_howeverTyped() {
+        assertThat(new LoginRequest("0912 345 678", "pw").identifier()).isEqualTo("+84912345678");
+        assertThat(new LoginRequest("84912345678", "pw").identifier()).isEqualTo("+84912345678");
+        assertThat(new LoginRequest("+84 912.345-678", "pw").identifier()).isEqualTo("+84912345678");
+        assertThat(new RegisterRequest("F", "a@b.com", "password1", "D", "0387654321").phone()).isEqualTo("+84387654321");
+        assertThat(new UpdateProfileRequest("Tên", "Bố", "  ").phone()).isNull();
+    }
+
+    @Test
+    void phone_isOptional_butMustBeAVietnameseMobileNumberWhenGiven() {
+        assertThat(validator.validate(new RegisterRequest("Nhà Tài", "a@b.com", "password1", "Đức Tài", null))).isEmpty();
+        assertThat(validator.validate(new RegisterRequest("Nhà Tài", "a@b.com", "password1", "Đức Tài", "0912345678"))).isEmpty();
+        // Landline / too short / letters are all rejected with the phone message.
+        for (String bad : new String[] {"0241234567", "091234567", "09123456789", "abc"}) {
+            assertThat(validator.validate(new UpdateProfileRequest("Tên", "Bố", bad))).singleElement()
+                    .satisfies(v -> assertThat(v.getMessage()).isEqualTo(PhoneNumbers.INVALID_MESSAGE));
+        }
+    }
+
+    @Test
     void nullEmail_staysNull_andIsRejectedByNotBlank() {
         var request = new LoginRequest(null, "pw");
-        assertThat(request.email()).isNull();
+        assertThat(request.identifier()).isNull();
         assertThat(validator.validate(request)).hasSize(1);
     }
 

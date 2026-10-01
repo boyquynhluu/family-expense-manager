@@ -20,6 +20,7 @@ import { Button, IconButton } from "../components/ui/Button";
 import { Input, Select } from "../components/ui/Input";
 import { Field } from "../components/ui/Field";
 import { useCleanText } from "../utils/textQuality";
+import { formatPhone, isValidPhone, normalizePhone } from "../utils/phone";
 // The stored value is always this fixed Vietnamese word regardless of UI language —
 // only the displayed label is translated (see relationshipLabelFor below) — otherwise
 // switching languages would change what gets saved to the DB and orphan existing data
@@ -140,6 +141,8 @@ export default function Profile() {
   const [profile, setProfile] = useState(null);
   const [displayName, setDisplayName] = useState("");
   const [relationship, setRelationship] = useState("");
+  // Login phone number, shown as "0912 345 678"; empty removes it.
+  const [phone, setPhone] = useState("");
   const [profileError, setProfileError] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
@@ -194,6 +197,7 @@ export default function Profile() {
       setProfile(res.data.data);
       setDisplayName(res.data.data.displayName);
       setRelationship(res.data.data.relationship ?? "");
+      setPhone(formatPhone(res.data.data.phone));
     });
   }, []);
 
@@ -362,8 +366,13 @@ export default function Profile() {
     setProfileError("");
     setSavingProfile(true);
     try {
-      const res = await client.put("/auth/me", { displayName, relationship: relationship || null });
+      const res = await client.put("/auth/me", {
+        displayName,
+        relationship: relationship || null,
+        phone: normalizePhone(phone),
+      });
       setProfile(res.data.data);
+      setPhone(formatPhone(res.data.data.phone));
       loadMembers();
       toast.success(t("profileUpdateSuccess"));
     } catch (err) {
@@ -526,6 +535,18 @@ export default function Profile() {
               <span className="required-mark" aria-hidden="true"> *</span>
             </span>
             <Input value={displayName} validate={cleanText} maxLength={LIMITS.displayName} onChange={(e) => setDisplayName(e.target.value)} required />
+          </Field>
+          <Field>
+            {t("phoneLabel")}
+            <Input
+              type="tel"
+              autoComplete="tel"
+              value={phone}
+              maxLength={LIMITS.phone}
+              onChange={(e) => setPhone(e.target.value)}
+              validate={(v) => (v.trim() && !isValidPhone(v) ? t("validation:phoneInvalid") : "")}
+              placeholder={t("phonePlaceholder")}
+            />
           </Field>
           <Field>
             {t("relationshipLabel")}

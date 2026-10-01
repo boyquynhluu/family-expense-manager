@@ -20,6 +20,8 @@
   "personalInfoTitle": "Thông tin cá nhân",
   "emailLabel": "Email",
   "displayNameLabel": "Tên hiển thị",
+  "phoneLabel": "Số điện thoại (đăng nhập)",
+  "phonePlaceholder": "VD: 0912 345 678",
   "relationshipLabel": "Quan hệ trong gia đình",
   "relationshipNone": "Không chọn",
   "roleLabel": "Vai trò",

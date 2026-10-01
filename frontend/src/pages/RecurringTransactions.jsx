@@ -234,7 +234,7 @@ export default function RecurringTransactions() {
                 {t("recurringTransactions:amountLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <AmountInput placeholder="0" value={form.amount} onChange={(v) => updateField("amount", v)} required positive />
+              <AmountInput placeholder="0" value={form.amount} onChange={(v) => updateField("amount", v)} required positive min={LIMITS.minTransactionAmount} />
             </Field>
             <Field>
               <span>

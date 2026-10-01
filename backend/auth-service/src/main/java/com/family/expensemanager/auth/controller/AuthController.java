@@ -99,7 +99,7 @@ public class AuthController {
 
     @PostMapping("/login")
     public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
-        log.info("login - start, email={}", request.email());
+        log.info("login - start, identifier={}", request.identifier());
         return ApiResponse.ok(authService.login(request,
                 RequestMetadataUtil.deviceInfo(httpRequest), RequestMetadataUtil.ipAddress(httpRequest)));
     }

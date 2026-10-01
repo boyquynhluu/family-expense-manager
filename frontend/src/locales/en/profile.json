@@ -20,6 +20,8 @@
   "personalInfoTitle": "Personal information",
   "emailLabel": "Email",
   "displayNameLabel": "Display name",
+  "phoneLabel": "Phone number (for login)",
+  "phonePlaceholder": "e.g. 0912 345 678",
   "relationshipLabel": "Family relationship",
   "relationshipNone": "None selected",
   "roleLabel": "Role",

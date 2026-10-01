@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { formatCurrency } from "../utils/format";
 import { WalletIcon } from "./AppIcons";
+import Pagination from "./Pagination";
+import { useClientPage } from "../hooks/useClientPage";
 
 import { Table, THead, TBody, TFoot, Th, Td } from "./ui/Table";
 function signedClass(value) {
@@ -22,6 +24,8 @@ export default function WalletMonthlyTable({ yearMonth, reloadKey = 0 }) {
   const { t } = useTranslation("wallets");
   const [rows, setRows] = useState([]);
   const [error, setError] = useState("");
+  // Wallets are paged, the total row is not: it always sums every wallet, whichever page is shown.
+  const rowsPage = useClientPage(rows);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,78 +57,81 @@ export default function WalletMonthlyTable({ yearMonth, reloadKey = 0 }) {
   };
 
   return (
-    <Table>
-      <THead>
-        <tr>
-          <Th>{t("colName")}</Th>
-          <Th align="right">{t("colOpening")}</Th>
-          <Th align="right">{t("colIncome")}</Th>
-          <Th align="right">{t("colExpense")}</Th>
-          <Th align="right">{t("colTransfers")}</Th>
-          <Th align="right">{t("colNet")}</Th>
-          <Th align="right">{t("colClosing")}</Th>
-        </tr>
-      </THead>
-      <TBody>
-        {rows.map((r) => {
-          const net = Number(r.net);
-          const closing = Number(r.closingBalance);
-          const transferIn = Number(r.transferIn);
-          const transferOut = Number(r.transferOut);
-          return (
-            <tr key={r.walletId}>
+    <>
+      <Table>
+        <THead>
+          <tr>
+            <Th>{t("colName")}</Th>
+            <Th align="right">{t("colOpening")}</Th>
+            <Th align="right">{t("colIncome")}</Th>
+            <Th align="right">{t("colExpense")}</Th>
+            <Th align="right">{t("colTransfers")}</Th>
+            <Th align="right">{t("colNet")}</Th>
+            <Th align="right">{t("colClosing")}</Th>
+          </tr>
+        </THead>
+        <TBody>
+          {rowsPage.rows.map((r) => {
+            const net = Number(r.net);
+            const closing = Number(r.closingBalance);
+            const transferIn = Number(r.transferIn);
+            const transferOut = Number(r.transferOut);
+            return (
+              <tr key={r.walletId}>
+                <Td data-label={t("colName")}>
+                  <span className="table-cell-icon">
+                    <WalletIcon /> {r.walletName}
+                  </span>
+                </Td>
+                <Td data-label={t("colOpening")} align="right" className={Number(r.openingBalance) < 0 ? "amount-expense" : undefined}>
+                  {formatCurrency(r.openingBalance, r.currency)}
+                </Td>
+                <Td data-label={t("colIncome")} align="right" className="amount-income">
+                  {formatCurrency(r.income, r.currency)}
+                </Td>
+                <Td data-label={t("colExpense")} align="right" className="amount-expense">
+                  {formatCurrency(r.expense, r.currency)}
+                </Td>
+                <Td data-label={t("colTransfers")} align="right">
+                  {transferIn === 0 && transferOut === 0
+                    ? "-"
+                    : `+${formatCurrency(transferIn, r.currency)} / -${formatCurrency(transferOut, r.currency)}`}
+                </Td>
+                <Td data-label={t("colNet")} align="right" className={signedClass(net)}>
+                  {signed(net, r.currency)}
+                </Td>
+                <Td data-label={t("colClosing")} align="right" className={closing < 0 ? "amount-expense" : undefined}>
+                  <strong>{formatCurrency(closing, r.currency)}</strong>
+                </Td>
+              </tr>
+            );
+          })}
+        </TBody>
+        {rows.length > 1 && (
+          <TFoot>
+            <tr>
               <Td data-label={t("colName")}>
-                <span className="table-cell-icon">
-                  <WalletIcon /> {r.walletName}
-                </span>
+                <strong>{rowsPage.pageData.totalPages > 1 ? t("totalRowAll") : t("totalRow")}</strong>
               </Td>
-              <Td data-label={t("colOpening")} align="right" className={Number(r.openingBalance) < 0 ? "amount-expense" : undefined}>
-                {formatCurrency(r.openingBalance, r.currency)}
-              </Td>
+              <Td data-label={t("colOpening")} align="right">{formatCurrency(totals.openingBalance, currency)}</Td>
               <Td data-label={t("colIncome")} align="right" className="amount-income">
-                {formatCurrency(r.income, r.currency)}
+                {formatCurrency(totals.income, currency)}
               </Td>
               <Td data-label={t("colExpense")} align="right" className="amount-expense">
-                {formatCurrency(r.expense, r.currency)}
+                {formatCurrency(totals.expense, currency)}
               </Td>
-              <Td data-label={t("colTransfers")} align="right">
-                {transferIn === 0 && transferOut === 0
-                  ? "-"
-                  : `+${formatCurrency(transferIn, r.currency)} / -${formatCurrency(transferOut, r.currency)}`}
+              <Td data-label={t("colTransfers")} align="right">-</Td>
+              <Td data-label={t("colNet")} align="right" className={signedClass(totals.net)}>
+                {signed(totals.net, currency)}
               </Td>
-              <Td data-label={t("colNet")} align="right" className={signedClass(net)}>
-                {signed(net, r.currency)}
-              </Td>
-              <Td data-label={t("colClosing")} align="right" className={closing < 0 ? "amount-expense" : undefined}>
-                <strong>{formatCurrency(closing, r.currency)}</strong>
+              <Td data-label={t("colClosing")} align="right" className={totals.closingBalance < 0 ? "amount-expense" : undefined}>
+                <strong>{formatCurrency(totals.closingBalance, currency)}</strong>
               </Td>
             </tr>
-          );
-        })}
-      </TBody>
-      {rows.length > 1 && (
-        <TFoot>
-          <tr>
-            <Td data-label={t("colName")}>
-              <strong>{t("totalRow")}</strong>
-            </Td>
-            <Td data-label={t("colOpening")} align="right">{formatCurrency(totals.openingBalance, currency)}</Td>
-            <Td data-label={t("colIncome")} align="right" className="amount-income">
-              {formatCurrency(totals.income, currency)}
-            </Td>
-            <Td data-label={t("colExpense")} align="right" className="amount-expense">
-              {formatCurrency(totals.expense, currency)}
-            </Td>
-            <Td data-label={t("colTransfers")} align="right">-</Td>
-            <Td data-label={t("colNet")} align="right" className={signedClass(totals.net)}>
-              {signed(totals.net, currency)}
-            </Td>
-            <Td data-label={t("colClosing")} align="right" className={totals.closingBalance < 0 ? "amount-expense" : undefined}>
-              <strong>{formatCurrency(totals.closingBalance, currency)}</strong>
-            </Td>
-          </tr>
-        </TFoot>
-      )}
-    </Table>
+          </TFoot>
+        )}
+      </Table>
+      <Pagination pageData={rowsPage.pageData} onPageChange={rowsPage.setPage} />
+    </>
   );
 }

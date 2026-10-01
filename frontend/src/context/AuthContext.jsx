@@ -45,8 +45,9 @@ export function AuthProvider({ children }) {
   // account has 2FA enabled (README "9. Không có 2FA") — the caller must then collect a
   // code from the user and call verifyTwoFactor() to actually get tokens.
   const login = useCallback(
-    async (email, password, remember = true) => {
-      const res = await client.post("/auth/login", { email, password });
+    // `identifier` is the account's email or its phone number — the backend tells them apart.
+    async (identifier, password, remember = true) => {
+      const res = await client.post("/auth/login", { identifier, password });
       const data = res.data.data;
       if (data.requiresTwoFactor) {
         return { requiresTwoFactor: true, twoFactorToken: data.twoFactorToken };
@@ -74,8 +75,8 @@ export function AuthProvider({ children }) {
     [persistTokens]
   );
 
-  const register = useCallback(async (familyName, email, password, displayName) => {
-    const res = await client.post("/auth/register", { familyName, email, password, displayName });
+  const register = useCallback(async (familyName, email, password, displayName, phone = null) => {
+    const res = await client.post("/auth/register", { familyName, email, password, displayName, phone });
     // Backend no longer logs the user in on register — the account stays inactive
     // until they click the verification link emailed to them (see auth-service
     // AuthService.register()). Just hand back the confirmation message.

@@ -92,6 +92,22 @@ class TransactionImportServiceTest {
     }
 
     @Test
+    void importFile_reportsRow_belowTenThousand_andImportsTheRest() {
+        when(walletService.listByFamily(1L)).thenReturn(List.of(wallet(10L, "Ví chính")));
+        when(categoryService.listByFamily(1L)).thenReturn(List.of(category(20L, "Ăn uống", "EXPENSE")));
+        MockMultipartFile file = csvFile(
+                "Thời gian,Ví,Danh mục,Loại,Số tiền,Ghi chú\n"
+                        + "2026-01-05,Ví chính,Ăn uống,Chi tiêu,5000,\n"
+                        + "2026-01-06,Ví chính,Ăn uống,Chi tiêu,10000,\n");
+
+        var result = importService.importFile(1L, 100L, "a@b.com", "An", file);
+
+        assertThat(result.importedCount()).isEqualTo(1);
+        assertThat(result.errors()).singleElement()
+                .satisfies(e -> assertThat(e.message()).startsWith("Số tiền giao dịch tối thiểu là 10.000đ"));
+    }
+
+    @Test
     void importFile_reportsError_whenWalletNotFound() {
         when(walletService.listByFamily(1L)).thenReturn(List.of());
         when(categoryService.listByFamily(1L)).thenReturn(List.of(category(20L, "Ăn uống", "EXPENSE")));

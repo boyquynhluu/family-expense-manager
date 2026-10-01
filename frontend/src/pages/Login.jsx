@@ -7,6 +7,7 @@ import { EyeIcon, EyeOffIcon, FacebookIcon, GithubIcon, GoogleIcon, KeyIcon, Mai
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuth } from "../hooks/useAuth";
 import { LIMITS } from "../utils/inputLimits";
+import { isValidLoginIdentifier, looksLikeEmail } from "../utils/phone";
 import { Button, IconButton } from "../components/ui/Button";
 import { Field } from "../components/ui/Field";
 import { Input } from "../components/ui/Input";
@@ -16,7 +17,8 @@ export default function Login() {
   const { login, verifyTwoFactor } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [email, setEmail] = useState("");
+  // Email or phone number — the backend tells them apart.
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
@@ -59,7 +61,7 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      const result = await login(email, password, rememberMe);
+      const result = await login(identifier.trim(), password, rememberMe);
       if (result.requiresTwoFactor) {
         setTwoFactorToken(result.twoFactorToken);
       } else {
@@ -75,11 +77,12 @@ export default function Login() {
   // Must match AuthService.NOT_VERIFIED_MESSAGE on the backend.
   const showResendVerification = error.includes("chưa được xác thực");
 
+  // Only offered when the user logged in with their email — the endpoint looks the account up by email.
   async function handleResendVerification() {
-    if (!email) return;
+    if (!looksLikeEmail(identifier)) return;
     setResending(true);
     try {
-      const res = await client.post("/auth/resend-verification", { email });
+      const res = await client.post("/auth/resend-verification", { email: identifier.trim() });
       toast.success(res.data.data?.message || t("resendVerificationSent"));
     } catch (err) {
       toast.error(err.response?.data?.message || t("resendVerificationFailed"));
@@ -156,23 +159,29 @@ export default function Login() {
           <p className="auth-card-subtitle">{t("subtitle")}</p>
 
           {error && <p className="error-text">{error}</p>}
-          {showResendVerification && (
-            <Button variant="link" onClick={handleResendVerification} disabled={resending}>
-              {resending ? t("resendVerificationSending") : t("resendVerification")}
-            </Button>
-          )}
+          {showResendVerification &&
+            (looksLikeEmail(identifier) ? (
+              <Button variant="link" onClick={handleResendVerification} disabled={resending}>
+                {resending ? t("resendVerificationSending") : t("resendVerification")}
+              </Button>
+            ) : (
+              <p className="text-sm text-slate-500">{t("resendNeedsEmail")}</p>
+            ))}
 
           <Field as="div" className="auth-input-group no-required-mark" errorPlacement="after">
             <span className="auth-input-icon">
               <MailIcon />
             </span>
             <Input variant="bare"
-              type="email"
-              value={email}
+              type="text"
+              inputMode="email"
+              autoComplete="username"
+              value={identifier}
               maxLength={LIMITS.email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => setIdentifier(e.target.value)}
+              validate={(v) => (v.trim() && !isValidLoginIdentifier(v) ? t("validation:loginIdentifierInvalid") : "")}
               placeholder={t("emailPlaceholder")}
-              aria-label="Email"
+              aria-label={t("emailPlaceholder")}
               required
             />
           </Field>

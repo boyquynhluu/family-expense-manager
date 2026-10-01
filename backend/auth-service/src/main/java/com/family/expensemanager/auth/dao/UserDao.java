@@ -27,6 +27,10 @@ public interface UserDao {
     @Select
     Optional<User> selectByEmail(String email);
 
+    /** {@code phone} must already be normalised (PhoneNumbers.normalize). */
+    @Select
+    Optional<User> selectByPhone(String phone);
+
     @Select
     List<User> selectByFamilyId(Long familyId);
 

@@ -8,6 +8,7 @@ import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.expense.dao.BudgetDao;
 import com.family.expensemanager.expense.dao.TransactionDao;
+import com.family.expensemanager.expense.domain.TransactionAmounts;
 import com.family.expensemanager.expense.domain.entity.Budget;
 import com.family.expensemanager.expense.domain.entity.Category;
 import com.family.expensemanager.expense.domain.entity.Transaction;
@@ -101,6 +102,10 @@ public class TransactionService {
                                           boolean callerIsOwner, TransactionRequest request) {
         try {
             log.info("create - start, familyId={}, userId={}", familyId, userId);
+            // Here rather than on the request: import and the recurring scheduler create through this path too.
+            if (TransactionAmounts.isBelowMinimum(request.amount())) {
+                throw logged(log, new BadRequestException(TransactionAmounts.BELOW_MIN_MESSAGE));
+            }
             Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
             walletService.requireUsableBy(wallet, userId, callerIsOwner);
             Category category = categoryService.requireOwnedByFamily(request.categoryId(), familyId, request.type());
@@ -252,6 +257,12 @@ public class TransactionService {
             Transaction transaction = requireOwnedByFamily(transactionId, familyId, callerUserId);
             requireCanModify(transaction, callerUserId, callerIsOwner);
             TransactionSnapshot before = TransactionSnapshot.of(transaction);
+            // Only when the amount CHANGES: entries made before the 10.000đ floor can still get their note,
+            // date or category fixed without being forced up to the minimum.
+            if (transaction.getAmount().compareTo(request.amount()) != 0
+                    && TransactionAmounts.isBelowMinimum(request.amount())) {
+                throw logged(log, new BadRequestException(TransactionAmounts.BELOW_MIN_MESSAGE));
+            }
             Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
             // Only when MOVING the transaction to another wallet: a member can still fix the amount/note of
             // their own past entry in a wallet that has since been assigned to someone else.

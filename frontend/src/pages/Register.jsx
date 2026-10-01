@@ -2,7 +2,7 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { EyeIcon, EyeOffIcon, HomeIcon, KeyIcon, MailIcon, UserIcon } from "../components/AuthIcons";
+import { EyeIcon, EyeOffIcon, HomeIcon, KeyIcon, MailIcon, PhoneIcon, UserIcon } from "../components/AuthIcons";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuth } from "../hooks/useAuth";
 import { LIMITS } from "../utils/inputLimits";
@@ -10,6 +10,7 @@ import { Button, IconButton } from "../components/ui/Button";
 import { Field } from "../components/ui/Field";
 import { Checkbox, Input } from "../components/ui/Input";
 import { useCleanText } from "../utils/textQuality";
+import { isValidPhone, normalizePhone } from "../utils/phone";
 
 export default function Register() {
   const { t } = useTranslation("register");
@@ -19,6 +20,8 @@ export default function Register() {
   const [familyName, setFamilyName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
+  // Optional — lets the user log in with the phone number instead of the email.
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -29,7 +32,7 @@ export default function Register() {
     setError("");
     setLoading(true);
     try {
-      const message = await register(familyName, email, password, displayName);
+      const message = await register(familyName, email, password, displayName, normalizePhone(phone));
       toast.success(message || t("registerSuccess"), {
         duration: 6000,
       });
@@ -93,6 +96,22 @@ export default function Register() {
               placeholder={t("emailPlaceholder")}
               aria-label="Email"
               required
+            />
+          </Field>
+
+          <Field as="div" className="auth-input-group" errorPlacement="after">
+            <span className="auth-input-icon">
+              <PhoneIcon />
+            </span>
+            <Input variant="bare"
+              type="tel"
+              autoComplete="tel"
+              value={phone}
+              maxLength={LIMITS.phone}
+              onChange={(e) => setPhone(e.target.value)}
+              validate={(v) => (v.trim() && !isValidPhone(v) ? t("validation:phoneInvalid") : "")}
+              placeholder={t("phonePlaceholder")}
+              aria-label={t("phonePlaceholder")}
             />
           </Field>
 

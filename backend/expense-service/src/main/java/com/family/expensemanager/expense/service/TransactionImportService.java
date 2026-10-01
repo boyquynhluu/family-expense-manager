@@ -2,6 +2,7 @@ package com.family.expensemanager.expense.service;
 
 import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
+import com.family.expensemanager.expense.domain.TransactionAmounts;
 import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.common.validation.TextQuality;
 import com.family.expensemanager.expense.dto.CategoryResponse;
@@ -187,6 +188,11 @@ public class TransactionImportService {
             }
         } catch (NumberFormatException e) {
             errors.add(new ImportRowError(rowNumber, "Số tiền không hợp lệ: \"" + amountStr + "\""));
+            return;
+        }
+        // TransactionService.create would reject it too, but as a whole-request 400 rather than a per-row error.
+        if (TransactionAmounts.isBelowMinimum(amount)) {
+            errors.add(new ImportRowError(rowNumber, TransactionAmounts.BELOW_MIN_MESSAGE + ": \"" + amountStr + "\""));
             return;
         }
 

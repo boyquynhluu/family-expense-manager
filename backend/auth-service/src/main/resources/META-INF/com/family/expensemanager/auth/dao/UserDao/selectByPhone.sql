@@ -26,4 +26,4 @@ SELECT
 FROM
     USERS
 WHERE
-    id = /* id */0
+    phone = /* phone */'+84912345678'

@@ -7,6 +7,7 @@ import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.expense.dao.RecurringTransactionDao;
+import com.family.expensemanager.expense.domain.TransactionAmounts;
 import com.family.expensemanager.expense.domain.entity.Category;
 import com.family.expensemanager.expense.domain.entity.RecurringTransaction;
 import com.family.expensemanager.expense.domain.entity.Wallet;
@@ -90,6 +91,7 @@ public class RecurringTransactionService {
         try {
             log.info("create - start, familyId={}, walletId={}, categoryId={}",
                     familyId, request.walletId(), request.categoryId());
+            requireMinimumAmount(request);
             Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
             walletService.requireUsableBy(wallet, userId, callerIsOwner);
             categoryService.requireOwnedByFamily(request.categoryId(), familyId, request.type());
@@ -146,6 +148,7 @@ public class RecurringTransactionService {
             log.info("update - start, id={}, familyId={}", id, familyId);
             RecurringTransaction r = requireOwnedByFamily(id, familyId);
             requireCanModify(r, callerUserId, callerIsOwner);
+            requireMinimumAmount(request);
             Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
             if (!request.walletId().equals(r.getWalletId())) {
                 walletService.requireUsableBy(wallet, callerUserId, callerIsOwner);
@@ -393,6 +396,13 @@ public class RecurringTransactionService {
     /** Clamps to the last day of the month for a dayOfMonth beyond it (e.g. 31 in February). */
     private static LocalDate withClampedDay(LocalDate month, int dayOfMonth) {
         return month.withDayOfMonth(Math.min(dayOfMonth, month.lengthOfMonth()));
+    }
+
+    /** Always, also on update: a rule below the floor would make every scheduled run fail in TransactionService.create. */
+    private void requireMinimumAmount(CreateRecurringTransactionRequest request) {
+        if (TransactionAmounts.isBelowMinimum(request.amount())) {
+            throw logged(log, new BadRequestException(TransactionAmounts.BELOW_MIN_MESSAGE));
+        }
     }
 
     private void requireCanModify(RecurringTransaction r, Long callerUserId, boolean callerIsOwner) {

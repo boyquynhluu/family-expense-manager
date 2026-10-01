@@ -64,5 +64,6 @@
   "colTransfers": "Chuyển vào / ra",
   "colNet": "Dư / Âm",
   "colClosing": "Cuối tháng",
-  "totalRow": "Tổng"
+  "totalRow": "Tổng",
+  "totalRowAll": "Tổng (tất cả ví)"
 }

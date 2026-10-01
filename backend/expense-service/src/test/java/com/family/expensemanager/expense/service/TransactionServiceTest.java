@@ -146,8 +146,54 @@ class TransactionServiceTest {
 
         var response = transactionService.update(1L, 1L, CREATOR_ID, "An", false, updateRequest());
 
-        assertThat(response.amount()).isEqualByComparingTo("99");
+        assertThat(response.amount()).isEqualByComparingTo("99000");
         verify(transactionDao).update(target);
+    }
+
+    @Test
+    void create_rejectsAmountBelowTenThousand_beforeTouchingAnything() {
+        assertThatThrownBy(() -> transactionService.create(1L, CREATOR_ID, "user@b.com", "Chủ hộ",
+                new TransactionRequest(5L, 7L, "EXPENSE", new BigDecimal("9999"), LocalDateTime.now(), null), null))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Số tiền giao dịch tối thiểu là 10.000đ");
+        verify(transactionDao, never()).insert(any(Transaction.class));
+    }
+
+    @Test
+    void create_acceptsExactlyTenThousand() {
+        Wallet wallet = new Wallet();
+        wallet.setId(5L);
+        Category category = new Category();
+        category.setId(7L);
+        when(walletService.requireOwnedByFamily(5L, 1L)).thenReturn(wallet);
+        when(categoryService.requireOwnedByFamily(eq(7L), eq(1L), anyString())).thenReturn(category);
+
+        assertThatCode(() -> transactionService.create(1L, CREATOR_ID, "user@b.com", "Chủ hộ",
+                new TransactionRequest(5L, 7L, "EXPENSE", new BigDecimal("10000"), LocalDateTime.now(), null), null))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void update_keepsAnOldSmallAmount_whenOnlyOtherFieldsChange() {
+        Transaction target = transaction(1L); // amount 10, from before the floor existed
+        stubUpdateDependencies(target);
+
+        var response = transactionService.update(1L, 1L, CREATOR_ID, "An", false,
+                new TransactionRequest(5L, 7L, "EXPENSE", new BigDecimal("10.00"), LocalDateTime.now(), "sửa ghi chú"));
+
+        assertThat(response.note()).isEqualTo("sửa ghi chú");
+        verify(transactionDao).update(target);
+    }
+
+    @Test
+    void update_rejectsChangingTheAmountToBelowTenThousand() {
+        Transaction target = transaction(1L);
+        when(transactionDao.selectById(1L)).thenReturn(Optional.of(target));
+
+        assertThatThrownBy(() -> transactionService.update(1L, 1L, CREATOR_ID, "An", false,
+                new TransactionRequest(5L, 7L, "EXPENSE", new BigDecimal("5000"), LocalDateTime.now(), null)))
+                .isInstanceOf(BadRequestException.class);
+        verify(transactionDao, never()).update(any(Transaction.class));
     }
 
     @Test
@@ -282,7 +328,7 @@ class TransactionServiceTest {
         Transaction mine = transaction(1L);
         stubUpdateDependencies(mine);
         TransactionRequest makePrivate =
-                new TransactionRequest(5L, 7L, "EXPENSE", new BigDecimal("99"), LocalDateTime.now(), "sửa", true);
+                new TransactionRequest(5L, 7L, "EXPENSE", new BigDecimal("99000"), LocalDateTime.now(), "sửa", true);
 
         transactionService.update(1L, 1L, CREATOR_ID, "An", false, makePrivate);
         assertThat(mine.getIsPrivate()).isTrue();
@@ -322,7 +368,7 @@ class TransactionServiceTest {
                 .when(walletService).requireUsableBy(wallet, OTHER_USER_ID, false);
 
         assertForbidden(() -> transactionService.create(1L, OTHER_USER_ID, "m@b.com", "Member", false,
-                new TransactionRequest(5L, 7L, "INCOME", BigDecimal.TEN, LocalDateTime.now(), null), null));
+                new TransactionRequest(5L, 7L, "INCOME", BigDecimal.valueOf(50000), LocalDateTime.now(), null), null));
         verify(transactionDao, never()).insert(any());
     }
 
@@ -338,7 +384,7 @@ class TransactionServiceTest {
         verify(auditService).record(eq(TransactionAuditService.ACTION_UPDATED), eq(1L), eq(1L), before.capture(),
                 after.capture(), eq(CREATOR_ID), eq("An"));
         assertThat(before.getValue().amount()).isEqualByComparingTo("10");
-        assertThat(after.getValue().amount()).isEqualByComparingTo("99");
+        assertThat(after.getValue().amount()).isEqualByComparingTo("99000");
     }
 
     @Test
@@ -667,7 +713,7 @@ class TransactionServiceTest {
     }
 
     private static TransactionRequest updateRequest() {
-        return new TransactionRequest(5L, 7L, "EXPENSE", new BigDecimal("99"), LocalDateTime.now(), "sửa");
+        return new TransactionRequest(5L, 7L, "EXPENSE", new BigDecimal("99000"), LocalDateTime.now(), "sửa");
     }
 
     private static void assertForbidden(ThrowableAssert.ThrowingCallable call) {
@@ -692,21 +738,21 @@ class TransactionServiceTest {
     @Test
     void create_publishesBudgetWarning_whenCategorySpendingCrossesEightyPercent() {
         List<ExpenseEvent> events = createExpenseAndCollectBudgetEvents(
-                budget(7L, "1000"), "700", null, null, "100");
+                budget(7L, "1000000"), "700000", null, null, "100000");
 
         assertThat(events).hasSize(1);
         ExpenseEvent warning = events.get(0);
         assertThat(warning.eventType()).isEqualTo(ExpenseEvent.BUDGET_WARNING);
         assertThat(warning.categoryId()).isEqualTo(7L);
         assertThat(warning.categoryName()).isEqualTo("Ăn uống");
-        assertThat(warning.totalSpent()).isEqualByComparingTo("800");
-        assertThat(warning.limitAmount()).isEqualByComparingTo("1000");
+        assertThat(warning.totalSpent()).isEqualByComparingTo("800000");
+        assertThat(warning.limitAmount()).isEqualByComparingTo("1000000");
     }
 
     @Test
     void create_publishesOnlyBudgetExceeded_whenOneTransactionJumpsFromBelowEightyPercentPastLimit() {
         List<ExpenseEvent> events = createExpenseAndCollectBudgetEvents(
-                budget(7L, "1000"), "700", null, null, "400");
+                budget(7L, "1000000"), "700000", null, null, "400000");
 
         assertThat(events).extracting(ExpenseEvent::eventType).containsExactly(ExpenseEvent.BUDGET_EXCEEDED);
     }
@@ -714,7 +760,7 @@ class TransactionServiceTest {
     @Test
     void create_publishesNothing_whenSpendingWasAlreadyAboveEightyPercent() {
         List<ExpenseEvent> events = createExpenseAndCollectBudgetEvents(
-                budget(7L, "1000"), "850", null, null, "50");
+                budget(7L, "1000000"), "850000", null, null, "50000");
 
         assertThat(events).isEmpty();
     }
@@ -722,7 +768,7 @@ class TransactionServiceTest {
     @Test
     void create_publishesNothing_whenSpendingStaysBelowEightyPercent() {
         List<ExpenseEvent> events = createExpenseAndCollectBudgetEvents(
-                budget(7L, "1000"), "100", null, null, "100");
+                budget(7L, "1000000"), "100000", null, null, "100000");
 
         assertThat(events).isEmpty();
     }
@@ -730,7 +776,7 @@ class TransactionServiceTest {
     @Test
     void create_publishesBudgetWarning_whenSpendingLandsExactlyOnLimit() {
         List<ExpenseEvent> events = createExpenseAndCollectBudgetEvents(
-                budget(7L, "1000"), "700", null, null, "300");
+                budget(7L, "1000000"), "700000", null, null, "300000");
 
         assertThat(events).extracting(ExpenseEvent::eventType).containsExactly(ExpenseEvent.BUDGET_WARNING);
     }
@@ -738,33 +784,33 @@ class TransactionServiceTest {
     @Test
     void create_publishesOverallBudgetWarning_withNullCategory() {
         List<ExpenseEvent> events = createExpenseAndCollectBudgetEvents(
-                null, "0", overallBudget("1000"), "850", "100");
+                null, "0000", overallBudget("1000000"), "850000", "100000");
 
         assertThat(events).hasSize(1);
         ExpenseEvent warning = events.get(0);
         assertThat(warning.eventType()).isEqualTo(ExpenseEvent.BUDGET_WARNING);
         assertThat(warning.categoryId()).isNull();
         assertThat(warning.categoryName()).isEqualTo("Tổng chi tiêu");
-        assertThat(warning.totalSpent()).isEqualByComparingTo("850");
+        assertThat(warning.totalSpent()).isEqualByComparingTo("850000");
     }
 
     @Test
     void create_publishesOverallBudgetExceeded_withNullCategory() {
         List<ExpenseEvent> events = createExpenseAndCollectBudgetEvents(
-                null, "0", overallBudget("1000"), "1050", "100");
+                null, "0000", overallBudget("1000000"), "1050000", "100000");
 
         assertThat(events).hasSize(1);
         ExpenseEvent exceeded = events.get(0);
         assertThat(exceeded.eventType()).isEqualTo(ExpenseEvent.BUDGET_EXCEEDED);
         assertThat(exceeded.categoryId()).isNull();
         assertThat(exceeded.categoryName()).isEqualTo("Tổng chi tiêu");
-        assertThat(exceeded.totalSpent()).isEqualByComparingTo("1050");
+        assertThat(exceeded.totalSpent()).isEqualByComparingTo("1050000");
     }
 
     @Test
     void create_publishesNothing_whenOverallBudgetWasAlreadyExceeded() {
         List<ExpenseEvent> events = createExpenseAndCollectBudgetEvents(
-                null, "0", overallBudget("1000"), "1200", "100");
+                null, "0000", overallBudget("1000000"), "1200000", "100000");
 
         assertThat(events).isEmpty();
     }
@@ -772,7 +818,7 @@ class TransactionServiceTest {
     @Test
     void create_publishesBothCategoryAndOverallEvents_whenBothBudgetsCrossed() {
         List<ExpenseEvent> events = createExpenseAndCollectBudgetEvents(
-                budget(7L, "1000"), "950", overallBudget("5000"), "4050", "100");
+                budget(7L, "1000000"), "950000", overallBudget("5000000"), "4050000", "100000");
 
         assertThat(events).extracting(ExpenseEvent::eventType)
                 .containsExactly(ExpenseEvent.BUDGET_EXCEEDED, ExpenseEvent.BUDGET_WARNING);
@@ -845,7 +891,7 @@ class TransactionServiceTest {
         when(categoryService.requireOwnedByFamily(eq(7L), eq(1L), anyString())).thenReturn(category);
 
         TransactionResponse response = transactionService.create(1L, CREATOR_ID, "user@b.com", userDisplayName,
-                new TransactionRequest(5L, 7L, "INCOME", BigDecimal.TEN, LocalDateTime.of(2026, 1, 15, 10, 0), null), null);
+                new TransactionRequest(5L, 7L, "INCOME", BigDecimal.valueOf(50000), LocalDateTime.of(2026, 1, 15, 10, 0), null), null);
 
         ArgumentCaptor<Transaction> captor = ArgumentCaptor.forClass(Transaction.class);
         verify(transactionDao).insert(captor.capture());

@@ -34,12 +34,23 @@ function format(raw) {
  * digits are capped at 16 before / 2 after the decimal point (a plain `maxLength` can't do this:
  * it would count the "," and "." the display inserts).
  */
-export default function AmountInput({ value, onChange, positive = false, ...props }) {
+export default function AmountInput({ value, onChange, positive = false, min, ...props }) {
   const inputRef = useRef(null);
   const { t } = useTranslation("validation");
   // `positive`: the backend's @DecimalMin("0.01") on transaction/transfer/budget amounts —
   // "0" passes `required`, so it needs its own rule (shown like any other field error).
-  const validate = positive ? (display) => (display !== "" && Number(toRaw(display)) <= 0 ? t("amountPositive") : "") : undefined;
+  // `min`: a business floor on top of that (e.g. 10,000 for a transaction). Not the native
+  // attribute — this is a type="text" input, so the browser wouldn't enforce it.
+  const validate =
+    positive || min != null
+      ? (display) => {
+          if (display === "") return "";
+          const amount = Number(toRaw(display));
+          if (positive && amount <= 0) return t("amountPositive");
+          if (min != null && amount < min) return t("amountMin", { min: format(String(min)) });
+          return "";
+        }
+      : undefined;
 
   function handleChange(e) {
     const input = e.target;

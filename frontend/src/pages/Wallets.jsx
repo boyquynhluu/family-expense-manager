@@ -9,6 +9,7 @@ import SeedDefaultsButton from "../components/SeedDefaultsButton";
 import WalletMonthlyTable from "../components/WalletMonthlyTable";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
+import { useClientPage } from "../hooks/useClientPage";
 import { confirmDialog } from "../utils/confirm";
 import { maxDateTime, minDateTime } from "../utils/dateLimits";
 import { formatCurrency } from "../utils/format";
@@ -43,6 +44,8 @@ export default function Wallets() {
   const { role, userId } = useAuth();
   const isOwner = role === "OWNER";
   const [wallets, setWallets] = useState([]);
+  // Paged on the client: the full list is still needed for the wallet selects and owner checks.
+  const walletsPage = useClientPage(wallets);
   const {
     pageData: transfersPage,
     page: transfersPageIndex,
@@ -320,7 +323,7 @@ export default function Wallets() {
               </tr>
             </THead>
             <TBody>
-              {wallets.map((w) => (
+              {walletsPage.rows.map((w) => (
                 <tr key={w.id}>
                   <Td data-label={t("wallets:colName")}>
                     <span className="table-cell-icon">
@@ -362,6 +365,7 @@ export default function Wallets() {
             </TBody>
           </Table>
         )}
+        <Pagination pageData={walletsPage.pageData} onPageChange={walletsPage.setPage} />
       </div>
 
       <div className="section-card">
