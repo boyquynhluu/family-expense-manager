@@ -47,6 +47,5 @@ WHERE
     AND amount <= /* maxAmount */0
 /*%end*/
 ORDER BY
-    CASE WHEN is_private = TRUE AND user_id <> /* viewerUserId */0 THEN 1 ELSE 0 END,
     occurred_at DESC, id DESC
 LIMIT /* limit */20 OFFSET /* offset */0

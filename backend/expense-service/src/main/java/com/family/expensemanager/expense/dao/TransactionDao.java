@@ -53,7 +53,7 @@ public interface TransactionDao {
      */
     @Select
     long countFilteredAhead(
-            Long familyId, Long viewerUserId, Long walletId, Long categoryId, String type,
+            Long familyId, Long viewerUserId, boolean showOthersPrivate, Long walletId, Long categoryId, String type,
             LocalDate fromDate, LocalDate toDate, String notePattern, BigDecimal minAmount, BigDecimal maxAmount,
             LocalDateTime occurredAt, Long targetId);
 

@@ -66,6 +66,27 @@ class WalletServiceTest {
     }
 
     @Test
+    void transfers_goFromTheSendersOwnWallet_toAnotherMembersOrASharedWallet() {
+        Wallet shared = ownedWallet(null);
+        Wallet mine = ownedWallet(7L);
+        Wallet spouses = ownedWallet(8L);
+
+        walletService.requireTransferSource(mine, 7L);
+        assertForbidden(() -> walletService.requireTransferSource(shared, 7L));
+        assertForbidden(() -> walletService.requireTransferSource(spouses, 7L));
+
+        walletService.requireTransferDestination(spouses, 7L);
+        walletService.requireTransferDestination(shared, 7L);
+        assertThatThrownBy(() -> walletService.requireTransferDestination(mine, 7L))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    private static void assertForbidden(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
+        assertThatThrownBy(call).isInstanceOfSatisfying(ApiException.class,
+                e -> assertThat(e.getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
+    }
+
+    @Test
     void create_storesTheOwner_andSharedWhenNoneGiven() {
         when(walletDao.selectByFamilyId(1L)).thenReturn(List.of());
 

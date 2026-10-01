@@ -58,25 +58,25 @@ public class WalletTransferService {
      */
     public WalletTransferResponse create(Long familyId, Long userId, String userEmail, String userDisplayName,
                                           CreateWalletTransferRequest request, String idempotencyKey) {
-        // Trusted callers only (no wallet-ownership check) — user requests go through the overload below.
         return create(familyId, userId, userEmail, userDisplayName, ROLE_OWNER, request, idempotencyKey);
     }
 
     /**
-     * @param role the caller's family role — a plain member may only move money OUT of their own wallet or a
-     *             shared one; the destination can be anyone's (e.g. giving money to a spouse's wallet).
+     * A transfer moves money from the sender's OWN private wallet into another member's private wallet or a
+     * shared one (see {@link #requireValidWallets}) — the same rule for the family OWNER, so {@code role} plays
+     * no part in it (it is kept for callers' symmetry with {@link #update}).
      */
     public WalletTransferResponse create(Long familyId, Long userId, String userEmail, String userDisplayName,
                                           String role, CreateWalletTransferRequest request, String idempotencyKey) {
         return idempotencyGuard.runOnce(familyId, IDEMPOTENCY_SCOPE, idempotencyKey, WalletTransferResponse.class,
-                () -> doCreate(familyId, userId, userEmail, userDisplayName, role, request));
+                () -> doCreate(familyId, userId, userEmail, userDisplayName, request));
     }
 
     private WalletTransferResponse doCreate(Long familyId, Long userId, String userEmail, String userDisplayName,
-                                            String role, CreateWalletTransferRequest request) {
+                                            CreateWalletTransferRequest request) {
         try {
             log.info("create - start, familyId={}, from={}, to={}", familyId, request.fromWalletId(), request.toWalletId());
-            Wallet[] wallets = requireValidWallets(familyId, request, null, userId, ROLE_OWNER.equals(role));
+            Wallet[] wallets = requireValidWallets(familyId, request, null, userId);
 
             WalletTransfer transfer = new WalletTransfer();
             transfer.setFamilyId(familyId);
@@ -108,7 +108,9 @@ public class WalletTransferService {
             log.info("update - start, familyId={}, userId={}, transferId={}", familyId, userId, transferId);
             WalletTransfer transfer = requireOwnedByFamily(transferId, familyId);
             requireCreatorOrOwner(transfer, userId, role, "sửa");
-            Wallet[] wallets = requireValidWallets(familyId, request, transfer, userId, ROLE_OWNER.equals(role));
+            // The rule is about whose transfer it is — so an OWNER fixing a member's transfer is checked
+            // against that member's wallets, not the OWNER's own.
+            Wallet[] wallets = requireValidWallets(familyId, request, transfer, transfer.getCreatedByUserId());
 
             transfer.setFromWalletId(wallets[0].getId());
             transfer.setToWalletId(wallets[1].getId());
@@ -129,20 +131,24 @@ public class WalletTransferService {
      *                 the wallets' current balances, so it must be taken out before checking the new amount.
      */
     private Wallet[] requireValidWallets(Long familyId, CreateWalletTransferRequest request, WalletTransfer existing,
-                                         Long userId, boolean callerIsOwner) {
+                                         Long senderUserId) {
         if (request.fromWalletId().equals(request.toWalletId())) {
             throw logged(log, new BadRequestException("Ví nguồn và ví đích phải khác nhau"));
         }
         if (request.amount().compareTo(MIN_AMOUNT) < 0) {
             throw logged(log, new BadRequestException("Số tiền chuyển phải >= 0.01"));
         }
+        // From the sender's own private wallet, to another member's private wallet or a shared one. On edit, a side
+        // is only re-checked when it changes — fixing the amount/note of an older transfer (made before this rule,
+        // e.g. out of a shared wallet) stays possible.
         Wallet from = walletService.requireOwnedByFamily(request.fromWalletId(), familyId);
-        // Only the SOURCE is restricted (nobody can take money out of someone else's wallet). On edit, only
-        // when the source changes — the creator can still fix the amount/note of their own earlier transfer.
         if (existing == null || !request.fromWalletId().equals(existing.getFromWalletId())) {
-            walletService.requireUsableBy(from, userId, callerIsOwner);
+            walletService.requireTransferSource(from, senderUserId);
         }
         Wallet to = walletService.requireOwnedByFamily(request.toWalletId(), familyId);
+        if (existing == null || !request.toWalletId().equals(existing.getToWalletId())) {
+            walletService.requireTransferDestination(to, senderUserId);
+        }
         if (!from.getCurrency().equals(to.getCurrency())) {
             throw logged(log, new BadRequestException("Hai ví phải cùng loại tiền tệ"));
         }

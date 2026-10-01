@@ -20,5 +20,7 @@
   "endDateAfterStart": "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu",
   "monthsMustDiffer": "Tháng nguồn và tháng đích phải khác nhau",
   "walletsMustDiffer": "Ví đích phải khác ví nguồn",
-  "codeDigits": "Mã gồm {{count}} chữ số"
+  "codeDigits": "Mã gồm {{count}} chữ số",
+  "textProfanity": "Nội dung có từ ngữ không phù hợp",
+  "textJunk": "Nội dung không có ý nghĩa (ví dụ: test, xxx, asdf) — vui lòng nhập nội dung thật"
 }

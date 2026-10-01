@@ -14,13 +14,13 @@ import { maxDateTime, minDateTime } from "../utils/dateLimits";
 import { formatCurrency } from "../utils/format";
 import { LIMITS } from "../utils/inputLimits";
 import { notifyTrashChanged } from "../utils/trashEvents";
-import { usableWallets } from "../utils/walletAccess";
 
 
 import { Table, THead, TBody, Th, Td } from "../components/ui/Table";
 import { Button, IconButton } from "../components/ui/Button";
 import { Input, Select } from "../components/ui/Input";
 import { Field } from "../components/ui/Field";
+import { useCleanText } from "../utils/textQuality";
 // <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" in the browser's local time.
 function nowForDateTimeInput() {
   const now = new Date();
@@ -39,6 +39,7 @@ function emptyTransferForm() {
 
 export default function Wallets() {
   const { t } = useTranslation(["common", "wallets"]);
+  const cleanText = useCleanText();
   const { role, userId } = useAuth();
   const isOwner = role === "OWNER";
   const [wallets, setWallets] = useState([]);
@@ -83,12 +84,18 @@ export default function Wallets() {
     return members.find((m) => String(m.id) === String(id))?.displayName ?? t("wallets:formerMember");
   }
 
-  // Only the wallets this member may move money OUT of; the destination can be anyone's.
-  const transferSourceWallets = usableWallets(
-    wallets,
-    { role, userId },
-    editingTransferId ? transfers.find((tr) => tr.id === editingTransferId)?.fromWalletId : null
-  );
+  // Transfers go from the sender's OWN private wallet to another member's private wallet or a shared one
+  // (same rule as the backend, the OWNER included). When editing, the sender is the transfer's creator, and the
+  // wallets it already uses stay selectable (an older transfer may predate the rule).
+  const editingTransfer = editingTransferId ? transfers.find((tr) => tr.id === editingTransferId) : null;
+  const senderId = editingTransfer ? editingTransfer.createdByUserId : userId;
+  const isSendersOwn = (w) => w.ownerUserId != null && String(w.ownerUserId) === String(senderId);
+  const transferSourceWallets = wallets.filter((w) => isSendersOwn(w) || w.id === editingTransfer?.fromWalletId);
+  const transferDestinationWallets = wallets.filter((w) => !isSendersOwn(w) || w.id === editingTransfer?.toWalletId);
+
+  function walletOptionLabel(w) {
+    return `${w.name} — ${w.ownerUserId == null ? t("wallets:sharedBadge") : ownerName(w.ownerUserId)}`;
+  }
 
   function startEdit(wallet) {
     setEditingId(wallet.id);
@@ -238,7 +245,7 @@ export default function Wallets() {
               </span>
               <Input
                 placeholder={t("wallets:namePlaceholder")}
-                value={name}
+                value={name} validate={cleanText}
                 maxLength={LIMITS.walletName}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -372,8 +379,10 @@ export default function Wallets() {
       <div className="section-card" ref={transferFormRef}>
         <h2>{editingTransferId ? t("wallets:transferEditTitle") : t("wallets:transferTitle")}</h2>
         <p className="page-header-subtitle">{t("wallets:transferSubtitle")}</p>
-        {wallets.length < 2 ? (
-          <p className="empty-state">{t("wallets:transferNeedTwoWallets")}</p>
+        {transferSourceWallets.length === 0 ? (
+          <p className="empty-state">{t("wallets:transferNoOwnWallet")}</p>
+        ) : transferDestinationWallets.length === 0 ? (
+          <p className="empty-state">{t("wallets:transferNoDestination")}</p>
         ) : (
           <form className="inline-form" onSubmit={handleTransferSubmit}>
             <Field>
@@ -389,7 +398,7 @@ export default function Wallets() {
                 <option value="">{t("wallets:selectWallet")}</option>
                 {transferSourceWallets.map((w) => (
                   <option key={w.id} value={w.id}>
-                    {w.name}
+                    {walletOptionLabel(w)}
                   </option>
                 ))}
               </Select>
@@ -406,11 +415,11 @@ export default function Wallets() {
                 validate={(v) => (v && v === transferForm.fromWalletId ? t("validation:walletsMustDiffer") : "")}
               >
                 <option value="">{t("wallets:selectWallet")}</option>
-                {wallets
+                {transferDestinationWallets
                   .filter((w) => String(w.id) !== transferForm.fromWalletId)
                   .map((w) => (
                     <option key={w.id} value={w.id}>
-                      {w.name}
+                      {walletOptionLabel(w)}
                     </option>
                   ))}
               </Select>
@@ -440,7 +449,7 @@ export default function Wallets() {
               {t("wallets:transferNoteLabel")}
               <Input
                 placeholder={t("wallets:transferNotePlaceholder")}
-                value={transferForm.note}
+                value={transferForm.note} validate={cleanText}
                 maxLength={LIMITS.transferNote}
                 onChange={(e) => updateTransferField("note", e.target.value)}
               />

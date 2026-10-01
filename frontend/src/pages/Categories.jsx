@@ -10,9 +10,13 @@ import { notifyTrashChanged } from "../utils/trashEvents";
 import { Button, IconButton } from "../components/ui/Button";
 import { Input, Select } from "../components/ui/Input";
 import { Field } from "../components/ui/Field";
+import { useCleanText } from "../utils/textQuality";
 
 export default function Categories() {
   const { t } = useTranslation(["common", "categories"]);
+  const cleanText = useCleanText();
+  // Icon = short code/emoji ("AI", "DX"): profanity only, like the backend's @CleanText(junk = false).
+  const cleanIcon = useCleanText({ junk: false });
   const { role } = useAuth();
   const isOwner = role === "OWNER";
   const [categories, setCategories] = useState([]);
@@ -94,7 +98,7 @@ export default function Categories() {
               </span>
               <Input
                 placeholder={t("categories:namePlaceholder")}
-                value={name}
+                value={name} validate={cleanText}
                 maxLength={LIMITS.categoryName}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -109,7 +113,13 @@ export default function Categories() {
             </Field>
             <Field>
               {t("categories:iconLabel")}
-              <Input placeholder={t("categories:iconPlaceholder")} value={icon} maxLength={LIMITS.categoryIcon} onChange={(e) => setIcon(e.target.value)} />
+              <Input
+                placeholder={t("categories:iconPlaceholder")}
+                value={icon}
+                validate={cleanIcon}
+                maxLength={LIMITS.categoryIcon}
+                onChange={(e) => setIcon(e.target.value)}
+              />
             </Field>
             <Field>
               {t("categories:colorLabel")}

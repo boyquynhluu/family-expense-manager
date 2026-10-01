@@ -30,13 +30,14 @@ public record TransactionResponse(
     }
 
     /**
-     * Another member's private transaction as shown in the Trash: only that it exists, who deleted it and
-     * when. Wallet/category/type/amount/date/note/receipt are all withheld (the client renders "***").
+     * Another member's private transaction as listed to everyone else: that it exists, who made it and WHEN
+     * (so date filtering/sorting works for it), plus deletion info in the Trash. Wallet/category/type/amount/
+     * note/receipt are withheld (the client renders "***").
      */
     public static TransactionResponse masked(Transaction transaction) {
         return new TransactionResponse(
                 transaction.getId(), null, null, transaction.getFamilyId(), transaction.getUserId(),
-                transaction.getCreatedByName(), null, null, null, null, false,
+                transaction.getCreatedByName(), null, null, transaction.getOccurredAt(), null, false,
                 transaction.getDeletedAt(), transaction.getDeletedByName(), true);
     }
 

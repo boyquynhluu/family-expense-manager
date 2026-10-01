@@ -172,7 +172,8 @@ export default function Trash() {
                       </span>
                     )}
                   </Td>
-                  <Td data-label={t("colOccurredAt")}>{masked ? MASK : formatDateTime(t2.occurredAt)}</Td>
+                  {/* The date of a private transaction is public (only its details are masked). */}
+                  <Td data-label={t("colOccurredAt")}>{formatDateTime(t2.occurredAt)}</Td>
                   <Td data-label={t("colNote")}>{masked ? MASK : t2.note || "-"}</Td>
                   <Td data-label={t("colDeletedAt")}>{formatDateTime(t2.deletedAt)}</Td>
                   {/* Null for rows deleted before "who deleted it" was recorded (V12). */}

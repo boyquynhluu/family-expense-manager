@@ -3,6 +3,7 @@ package com.family.expensemanager.expense.service;
 import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ServiceException;
+import com.family.expensemanager.common.validation.TextQuality;
 import com.family.expensemanager.expense.dto.CategoryResponse;
 import com.family.expensemanager.expense.dto.ImportResult;
 import com.family.expensemanager.expense.dto.ImportRowError;
@@ -38,6 +39,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -185,6 +187,15 @@ public class TransactionImportService {
             }
         } catch (NumberFormatException e) {
             errors.add(new ImportRowError(rowNumber, "Số tiền không hợp lệ: \"" + amountStr + "\""));
+            return;
+        }
+
+        // Rows are created straight through TransactionService, bypassing the request's @CleanText — same rule here.
+        Optional<TextQuality.Problem> noteProblem = TextQuality.check(note);
+        if (noteProblem.isPresent()) {
+            errors.add(new ImportRowError(rowNumber, noteProblem.get() == TextQuality.Problem.PROFANITY
+                    ? "Ghi chú có từ ngữ không phù hợp"
+                    : "Ghi chú không có ý nghĩa (ví dụ: test, xxx, asdf): \"" + note + "\""));
             return;
         }
 

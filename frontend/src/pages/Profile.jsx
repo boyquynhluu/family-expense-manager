@@ -19,6 +19,7 @@ import { Table, THead, TBody, Th, Td } from "../components/ui/Table";
 import { Button, IconButton } from "../components/ui/Button";
 import { Input, Select } from "../components/ui/Input";
 import { Field } from "../components/ui/Field";
+import { useCleanText } from "../utils/textQuality";
 // The stored value is always this fixed Vietnamese word regardless of UI language —
 // only the displayed label is translated (see relationshipLabelFor below) — otherwise
 // switching languages would change what gets saved to the DB and orphan existing data
@@ -128,6 +129,7 @@ function PendingInvitesSection({ reloadSignal }) {
 
 export default function Profile() {
   const { t } = useTranslation(["profile", "common"]);
+  const cleanText = useCleanText();
   const { familyId, loginWithTokens } = useAuth();
 
   function relationshipLabelFor(value) {
@@ -523,7 +525,7 @@ export default function Profile() {
               {t("displayNameLabel")}
               <span className="required-mark" aria-hidden="true"> *</span>
             </span>
-            <Input value={displayName} maxLength={LIMITS.displayName} onChange={(e) => setDisplayName(e.target.value)} required />
+            <Input value={displayName} validate={cleanText} maxLength={LIMITS.displayName} onChange={(e) => setDisplayName(e.target.value)} required />
           </Field>
           <Field>
             {t("relationshipLabel")}
@@ -645,7 +647,7 @@ export default function Profile() {
                 {t("familyNameLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <Input value={familyName} onChange={(e) => setFamilyName(e.target.value)} maxLength={LIMITS.familyName} required />
+              <Input value={familyName} validate={cleanText} onChange={(e) => setFamilyName(e.target.value)} maxLength={LIMITS.familyName} required />
             </Field>
             <Button type="submit" disabled={renamingFamily || !familyName.trim()}>
               {renamingFamily ? t("common:saving") : t("renameFamilyButton")}

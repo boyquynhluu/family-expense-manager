@@ -9,9 +9,11 @@ import { LIMITS } from "../utils/inputLimits";
 import { Button, IconButton } from "../components/ui/Button";
 import { Field } from "../components/ui/Field";
 import { Input } from "../components/ui/Input";
+import { useCleanText } from "../utils/textQuality";
 
 export default function AcceptInvite() {
   const { t } = useTranslation("acceptInvite");
+  const cleanText = useCleanText();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get("token");
@@ -89,7 +91,7 @@ export default function AcceptInvite() {
                       <UserIcon />
                     </span>
                     <Input variant="bare"
-                      value={displayName}
+                      value={displayName} validate={cleanText}
                       maxLength={LIMITS.displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
                       placeholder={t("displayNamePlaceholder")}

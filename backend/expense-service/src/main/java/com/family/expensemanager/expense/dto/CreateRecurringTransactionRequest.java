@@ -1,5 +1,6 @@
 package com.family.expensemanager.expense.dto;
 
+import com.family.expensemanager.common.validation.CleanText;
 import com.family.expensemanager.common.validation.ReasonableDate;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -17,7 +18,7 @@ public record CreateRecurringTransactionRequest(
         @NotNull Long categoryId,
         @NotNull @Pattern(regexp = "INCOME|EXPENSE") String type,
         @NotNull @DecimalMin(value = "0.01") @Digits(integer = 16, fraction = 2) BigDecimal amount,
-        @Size(max = 500) String note,
+        @Size(max = 500) @CleanText String note,
         @Pattern(regexp = "MONTHLY|WEEKLY|YEARLY") String frequency,
         @Min(1) @Max(31) Integer dayOfMonth,
         @Min(1) @Max(7) Integer dayOfWeek,

@@ -27,9 +27,13 @@ public record TransactionReportFilter(
     }
 
     /** LIKE pattern for the note column; pair with {@code ESCAPE '!'} in SQL. */
-    /** No criterion set at all — e.g. the Transactions page with every filter cleared. */
-    public boolean isEmpty() {
-        return walletId == null && categoryId == null && type == null && fromDate == null && toDate == null
+    /**
+     * No criterion that would reveal something about a private transaction it matched: anything but the
+     * date range (wallet, category, type, note search, amount). A private transaction's DATE is shown to
+     * everyone, so filtering by date leaks nothing.
+     */
+    public boolean filtersOnlyByDate() {
+        return walletId == null && categoryId == null && type == null
                 && normalizedQuery() == null && minAmount == null && maxAmount == null;
     }
 

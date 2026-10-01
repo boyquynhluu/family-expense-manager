@@ -9,9 +9,11 @@ import { LIMITS } from "../utils/inputLimits";
 import { Button, IconButton } from "../components/ui/Button";
 import { Field } from "../components/ui/Field";
 import { Checkbox, Input } from "../components/ui/Input";
+import { useCleanText } from "../utils/textQuality";
 
 export default function Register() {
   const { t } = useTranslation("register");
+  const cleanText = useCleanText();
   const { register } = useAuth();
   const navigate = useNavigate();
   const [familyName, setFamilyName] = useState("");
@@ -56,7 +58,7 @@ export default function Register() {
               <HomeIcon />
             </span>
             <Input variant="bare"
-              value={familyName}
+              value={familyName} validate={cleanText}
               maxLength={LIMITS.familyName}
               onChange={(e) => setFamilyName(e.target.value)}
               placeholder={t("familyNamePlaceholder")}
@@ -70,7 +72,7 @@ export default function Register() {
               <UserIcon />
             </span>
             <Input variant="bare"
-              value={displayName}
+              value={displayName} validate={cleanText}
               maxLength={LIMITS.displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder={t("displayNamePlaceholder")}

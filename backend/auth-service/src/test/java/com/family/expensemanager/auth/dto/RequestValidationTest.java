@@ -48,8 +48,19 @@ class RequestValidationTest {
         assertThat(validator.validate(new RegisterRequest("F", "a@b.com", "p".repeat(72), "D"))).isEmpty();
         // Over both limits at once (73 chars AND 73 bytes).
         assertThat(validator.validate(new RegisterRequest("F", "a@b.com", "p".repeat(73), "D"))).hasSize(2);
-        assertThat(validator.validate(new RegisterRequest("F".repeat(101), "a@b.com", "password1", "D"))).hasSize(1);
-        assertThat(validator.validate(new RegisterRequest("F", "a@b.com", "password1", "D".repeat(101)))).hasSize(1);
+        // Real-looking text over 100 characters (a single repeated letter like "FFF..." would also be junk → 2 errors).
+        String over100 = "Gia đình Nguyễn ".repeat(7);
+        assertThat(validator.validate(new RegisterRequest(over100, "a@b.com", "password1", "D"))).hasSize(1);
+        assertThat(validator.validate(new RegisterRequest("F", "a@b.com", "password1", over100))).hasSize(1);
+    }
+
+    @Test
+    void names_rejectProfanityAndJunk_butAcceptNormalNames() {
+        assertThat(validator.validate(new RegisterRequest("Nhà Tài", "a@b.com", "password1", "Đức Tài"))).isEmpty();
+        assertThat(validator.validate(new RegisterRequest("test", "a@b.com", "password1", "Đức Tài")))
+                .singleElement().satisfies(v -> assertThat(v.getMessage()).contains("không có ý nghĩa"));
+        assertThat(validator.validate(new RegisterRequest("Nhà Tài", "a@b.com", "password1", "đồ l.ồ.n")))
+                .singleElement().satisfies(v -> assertThat(v.getMessage()).isEqualTo("Nội dung có từ ngữ không phù hợp"));
     }
 
     @Test
@@ -81,7 +92,13 @@ class RequestValidationTest {
     @Test
     void profileAndInvite_optionalFieldsAreBoundedWhenPresent() {
         assertThat(validator.validate(new UpdateProfileRequest("Tên", "Bố"))).isEmpty();
-        assertThat(validator.validate(new UpdateProfileRequest("Tên", "r".repeat(51)))).hasSize(1);
+        // Too long AND not one of the fixed choices.
+        assertThat(validator.validate(new UpdateProfileRequest("Tên", "r".repeat(51)))).hasSize(2);
+        assertThat(validator.validate(new UpdateProfileRequest("Tên", null))).isEmpty();
+        assertThat(validator.validate(new UpdateProfileRequest("Tên", ""))).isEmpty();
+        // Only the Profile page's fixed choices — no free text (profanity included) via the API.
+        assertThat(validator.validate(new UpdateProfileRequest("Tên", "fuck"))).singleElement()
+                .satisfies(v -> assertThat(v.getMessage()).isEqualTo("Quan hệ trong gia đình không hợp lệ"));
         assertThat(validator.validate(new AcceptInviteRequest(null, null))).isEmpty();
         assertThat(validator.validate(new AcceptInviteRequest("D", "p".repeat(73)))).hasSize(2); // over both @Size and @MaxUtf8Bytes
     }

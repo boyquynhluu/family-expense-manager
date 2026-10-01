@@ -232,6 +232,26 @@ public class WalletService {
         }
     }
 
+    /** Transfers go OUT of the sender's own private wallet only — not a shared one, not another member's. */
+    void requireTransferSource(Wallet wallet, Long senderUserId) {
+        if (wallet.getOwnerUserId() == null) {
+            throw logged(log, new ApiException(HttpStatus.FORBIDDEN,
+                    "Không chuyển tiền từ ví chung \"" + wallet.getName() + "\" — chỉ chuyển được từ ví riêng của bạn"));
+        }
+        if (!wallet.getOwnerUserId().equals(senderUserId)) {
+            throw logged(log, new ApiException(HttpStatus.FORBIDDEN,
+                    "Ví \"" + wallet.getName() + "\" không phải ví riêng của bạn — chỉ chuyển được từ ví riêng của bạn"));
+        }
+    }
+
+    /** ...and INTO someone else's private wallet or a shared one — never back into one of the sender's own. */
+    void requireTransferDestination(Wallet wallet, Long senderUserId) {
+        if (wallet.getOwnerUserId() != null && wallet.getOwnerUserId().equals(senderUserId)) {
+            throw logged(log, new BadRequestException(
+                    "Không chuyển vào ví của chính bạn (\"" + wallet.getName() + "\") — hãy chọn ví của thành viên khác hoặc ví chung"));
+        }
+    }
+
     Wallet requireOwnedByFamily(Long walletId, Long familyId) {
         log.info("requireOwnedByFamily - start, walletId={}, familyId={}", walletId, familyId);
         Wallet wallet = walletDao.selectById(walletId)

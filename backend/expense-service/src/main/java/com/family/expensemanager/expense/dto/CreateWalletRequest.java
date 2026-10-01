@@ -1,5 +1,6 @@
 package com.family.expensemanager.expense.dto;
 
+import com.family.expensemanager.common.validation.CleanText;
 import com.family.expensemanager.common.validation.IsoCurrency;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
@@ -16,7 +17,7 @@ import java.math.BigDecimal;
  *                    cross-check it against.
  */
 public record CreateWalletRequest(
-        @NotBlank @Size(max = 255) String name,
+        @NotBlank @Size(max = 255) @CleanText String name,
         @NotBlank @IsoCurrency String currency,
         @NotNull @Digits(integer = 16, fraction = 2) BigDecimal initialBalance,
         @Positive Long ownerUserId) {

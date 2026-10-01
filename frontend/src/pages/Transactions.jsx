@@ -30,6 +30,7 @@ import { Table, THead, TBody, Th, Td } from "../components/ui/Table";
 import { Button, IconButton } from "../components/ui/Button";
 import { Checkbox, Input, Select } from "../components/ui/Input";
 import { Field } from "../components/ui/Field";
+import { useCleanText } from "../utils/textQuality";
 // Shown in place of every detail of another member's private transaction.
 const MASK = "***";
 
@@ -94,6 +95,7 @@ const emptyPage = { content: [], page: 0, size: PAGE_SIZE, totalElements: 0, tot
 
 export default function Transactions() {
   const { t } = useTranslation(["common", "transactions"]);
+  const cleanText = useCleanText();
   const { role, userId } = useAuth();
   const [pageData, setPageData] = useState(emptyPage);
   const [wallets, setWallets] = useState([]);
@@ -609,7 +611,7 @@ export default function Transactions() {
               {t("transactions:noteLabel")}
               <Input
                 placeholder={t("transactions:notePlaceholder")}
-                value={form.note}
+                value={form.note} validate={cleanText}
                 maxLength={LIMITS.transactionNote}
                 onChange={(e) => updateField("note", e.target.value)}
               />
@@ -851,13 +853,16 @@ export default function Transactions() {
             </THead>
             <TBody>
               {pageData.content.map((row) => isMasked(row) ? (
-                // Another member's private transaction: the API sent no details, only that it exists and
-                // whose it is (and only on the unfiltered list, sorted last). Nothing to act on.
+                // Another member's private transaction: the API sent only who made it and when (and lists it
+                // only while filtering by date at most). Nothing to act on.
                 <tr key={row.id}>
                   <Td>
                     <Checkbox disabled aria-label={t("transactions:selectRowAria")} />
                   </Td>
-                  <Td data-label={t("transactions:timeLabel")}>{MASK}</Td>
+                  <Td data-label={t("transactions:timeLabel")}>
+                    <span className="whitespace-nowrap">{row.occurredAt.slice(0, 10)}</span>{" "}
+                    <span className="whitespace-nowrap">{row.occurredAt.slice(11)}</span>
+                  </Td>
                   <Td data-label={t("transactions:walletLabel")}>{MASK}</Td>
                   <Td data-label={t("transactions:categoryLabel")}>{MASK}</Td>
                   <Td data-label={t("transactions:typeLabel")}>{MASK}</Td>

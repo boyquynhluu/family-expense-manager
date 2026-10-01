@@ -151,10 +151,10 @@ public class TransactionService {
      * family and left filtering/paging to client-side JS, which didn't scale).
      */
     /**
-     * @param viewerUserId other members' private transactions appear MASKED (only that they exist + who made
-     *                     them) — and only on the unfiltered list, sorted after everything else. Any filter would
-     *                     leak through what it matched (a note search hitting a "***" row reveals its note), and a
-     *                     date-sorted position would reveal roughly when it happened.
+     * @param viewerUserId other members' private transactions appear MASKED (who made them and when — nothing
+     *                     else), in their normal date position, but only while the list is filtered by date at
+     *                     most: any other filter would leak through what it matched (a note search hitting a
+     *                     "***" row reveals its note, a wallet filter its wallet...).
      */
     public PageResponse<TransactionResponse> listByFamilyPaged(
             Long familyId, Long viewerUserId, TransactionReportFilter filter, int page, int size) {
@@ -168,7 +168,7 @@ public class TransactionService {
             }
             validateFilter(filter);
             String notePattern = filter.noteLikePattern();
-            boolean showOthersPrivate = filter.isEmpty();
+            boolean showOthersPrivate = filter.filtersOnlyByDate();
             long totalElements = transactionDao.countByFamilyIdFiltered(
                     familyId, viewerUserId, showOthersPrivate, filter.walletId(), filter.categoryId(), filter.type(),
                     filter.fromDate(), filter.toDate(), notePattern, filter.minAmount(), filter.maxAmount());
@@ -190,8 +190,8 @@ public class TransactionService {
 
     /**
      * Page of the filtered list holding {@code transactionId} (one the viewer sees in full — e.g. the entry they
-     * just saved). Mirrors {@link #listByFamilyPaged}'s order; masked rows are sorted last there, so they never
-     * come before it.
+     * just saved). Mirrors {@link #listByFamilyPaged}: same order, and other members' masked rows count as
+     * "ahead" exactly when that list shows them.
      */
     public TransactionLocation locate(Long familyId, Long viewerUserId, TransactionReportFilter filter,
                                       Long transactionId, int size) {
@@ -210,7 +210,7 @@ public class TransactionService {
                 return new TransactionLocation(false, 0);
             }
             long ahead = transactionDao.countFilteredAhead(
-                    familyId, viewerUserId, filter.walletId(), filter.categoryId(), filter.type(), filter.fromDate(),
+                    familyId, viewerUserId, filter.filtersOnlyByDate(), filter.walletId(), filter.categoryId(), filter.type(), filter.fromDate(),
                     filter.toDate(), notePattern, filter.minAmount(), filter.maxAmount(),
                     transaction.getOccurredAt(), transactionId);
             return new TransactionLocation(true, (int) (ahead / size));

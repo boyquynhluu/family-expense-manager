@@ -348,6 +348,36 @@ class WalletTransferServiceTest {
     }
 
     @Test
+    void create_checksSourceAndDestinationAgainstTheSender() {
+        Wallet from = wallet(1L, 7L, "VND");
+        Wallet to = wallet(2L, 7L, "VND");
+        when(walletService.requireOwnedByFamily(1L, 7L)).thenReturn(from);
+        when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(to);
+        when(walletService.currentBalanceOf(from)).thenReturn(new BigDecimal("100"));
+
+        service.create(7L, 42L, "a@b.com", "An", "OWNER", request(1L, 2L, "10"), null);
+
+        // Even for the OWNER: the rule is the sender's own wallet → someone else's / shared.
+        verify(walletService).requireTransferSource(from, 42L);
+        verify(walletService).requireTransferDestination(to, 42L);
+    }
+
+    @Test
+    void update_byOwner_checksTheNewSourceAgainstTheTransfersCreator_andSkipsAnUnchangedDestination() {
+        WalletTransfer existing = transfer(5L, 7L, 42L); // 1 -> 2, made by member 42
+        Wallet newSource = wallet(3L, 7L, "VND");
+        when(walletTransferDao.selectById(5L)).thenReturn(Optional.of(existing));
+        when(walletService.requireOwnedByFamily(3L, 7L)).thenReturn(newSource);
+        when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "VND"));
+        when(walletService.currentBalanceOf(newSource)).thenReturn(new BigDecimal("100"));
+
+        service.update(7L, 99L, "OWNER", 5L, request(3L, 2L, "10"));
+
+        verify(walletService).requireTransferSource(newSource, 42L);
+        verify(walletService, never()).requireTransferDestination(any(), any());
+    }
+
+    @Test
     void update_throwsAccessDenied_forOtherMember() {
         when(walletTransferDao.selectById(5L)).thenReturn(Optional.of(transfer(5L, 7L, 42L)));
 

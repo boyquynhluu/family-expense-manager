@@ -20,5 +20,7 @@
   "endDateAfterStart": "End date must be on or after the start date",
   "monthsMustDiffer": "Source and target months must be different",
   "walletsMustDiffer": "Destination wallet must differ from the source wallet",
-  "codeDigits": "The code is {{count}} digits"
+  "codeDigits": "The code is {{count}} digits",
+  "textProfanity": "This contains inappropriate language",
+  "textJunk": "This isn't meaningful (e.g. test, xxx, asdf) — please enter real content"
 }

@@ -16,6 +16,7 @@ import { Table, THead, TBody, Th, Td } from "../components/ui/Table";
 import { Button, IconButton } from "../components/ui/Button";
 import { Input, Select } from "../components/ui/Input";
 import { Field } from "../components/ui/Field";
+import { useCleanText } from "../utils/textQuality";
 const emptyForm = {
   walletId: "",
   categoryId: "",
@@ -32,6 +33,7 @@ const emptyForm = {
 
 export default function RecurringTransactions() {
   const { t } = useTranslation(["common", "recurringTransactions"]);
+  const cleanText = useCleanText();
   const { role, userId } = useAuth();
   const isOwner = role === "OWNER";
   const { pageData, setPage, reload } = usePagedList("/expenses/recurring-transactions");
@@ -322,7 +324,7 @@ export default function RecurringTransactions() {
               {t("recurringTransactions:noteLabel")}
               <Input
                 placeholder={t("recurringTransactions:optionalPlaceholder")}
-                value={form.note}
+                value={form.note} validate={cleanText}
                 maxLength={LIMITS.transactionNote}
                 onChange={(e) => updateField("note", e.target.value)}
               />

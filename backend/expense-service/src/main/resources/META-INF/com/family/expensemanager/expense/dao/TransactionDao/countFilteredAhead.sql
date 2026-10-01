@@ -5,7 +5,7 @@ FROM
 WHERE
     family_id = /* familyId */0
     AND deleted_at IS NULL
-    AND (is_private = FALSE OR user_id = /* viewerUserId */0)
+    AND (is_private = FALSE OR user_id = /* viewerUserId */0/*%if showOthersPrivate */ OR TRUE/*%end*/)
 /*%if walletId != null */
     AND wallet_id = /* walletId */0
 /*%end*/

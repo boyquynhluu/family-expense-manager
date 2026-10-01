@@ -184,7 +184,7 @@ class TransactionServiceTest {
         assertThat(asOther.amount()).isNull();
         assertThat(asOther.note()).isNull();
         assertThat(asOther.type()).isNull();
-        assertThat(asOther.occurredAt()).isNull();
+        assertThat(asOther.occurredAt()).isEqualTo(secret.getOccurredAt()); // the date is public
         assertThat(asOther.walletId()).isNull();
         assertThat(asOther.categoryId()).isNull();
         assertThat(asOther.deletedAt()).isNotNull();
@@ -193,7 +193,7 @@ class TransactionServiceTest {
     }
 
     @Test
-    void listByFamilyPaged_showsOthersPrivateTransactionsMasked_onlyWhenNothingIsFiltered() {
+    void listByFamilyPaged_showsOthersPrivateTransactionsMasked_withTheirDate_unlessFilteredByMoreThanDate() {
         Transaction secret = transaction(1L); // created by CREATOR_ID
         secret.setIsPrivate(true);
         secret.setNote("Quà sinh nhật");
@@ -211,9 +211,14 @@ class TransactionServiceTest {
         assertThat(row.isPrivate()).isTrue();
         assertThat(row.note()).isNull();
         assertThat(row.amount()).isNull();
-        assertThat(row.occurredAt()).isNull();
+        assertThat(row.occurredAt()).isEqualTo(secret.getOccurredAt());
         assertThat(row.walletId()).isNull();
         assertThat(row.createdByName()).isEqualTo(secret.getCreatedByName());
+        TransactionReportFilter septemberOnly = new TransactionReportFilter(null, null, null,
+                java.time.LocalDate.of(2026, 9, 1), java.time.LocalDate.of(2026, 9, 30), null, null, null);
+        transactionService.listByFamilyPaged(1L, OTHER_USER_ID, septemberOnly, 0, 10);
+        verify(transactionDao).countByFamilyIdFiltered(eq(1L), eq(OTHER_USER_ID), eq(true), any(), any(), any(),
+                eq(java.time.LocalDate.of(2026, 9, 1)), eq(java.time.LocalDate.of(2026, 9, 30)), any(), any(), any());
         // A note search must not let a "***" row through (its match would reveal the note).
         verify(transactionDao).countByFamilyIdFiltered(
                 eq(1L), eq(OTHER_USER_ID), eq(false), any(), any(), any(), any(), any(), eq("%quà%"), any(), any());
@@ -227,7 +232,7 @@ class TransactionServiceTest {
         when(transactionDao.countFilteredMatchingId(
                 1L, CREATOR_ID, null, null, null, null, null, null, null, null, 1L)).thenReturn(1L);
         when(transactionDao.countFilteredAhead(
-                1L, CREATOR_ID, null, null, null, null, null, null, null, null, backDated.getOccurredAt(), 1L))
+                1L, CREATOR_ID, true, null, null, null, null, null, null, null, null, backDated.getOccurredAt(), 1L))
                 .thenReturn(12L); // 12 newer rows → 13th row → page index 2 with 5 per page
 
         var location = transactionService.locate(1L, CREATOR_ID, none, 1L, 5);
@@ -247,7 +252,7 @@ class TransactionServiceTest {
         var location = transactionService.locate(1L, CREATOR_ID, octoberOnly, 1L, 5);
 
         assertThat(location.inList()).isFalse();
-        verify(transactionDao, never()).countFilteredAhead(any(), any(), any(), any(), any(), any(), any(), any(), any(),
+        verify(transactionDao, never()).countFilteredAhead(any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any());
     }
 
