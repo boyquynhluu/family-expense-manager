@@ -9,6 +9,9 @@ import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { usePagedList } from "../hooks/usePagedList";
 import { LIMITS } from "../utils/inputLimits";
 
+import { Table, THead, TBody, Th, Td } from "../components/ui/Table";
+import { Button } from "../components/ui/Button";
+import { Input } from "../components/ui/Input";
 function formatDate(value) {
   if (!value) return "-";
   return value.replace("T", " ").slice(0, 16);
@@ -35,7 +38,9 @@ export default function AdminPanel() {
     const confirmMessage = nextValue
       ? t("grantAdminConfirm", { email: user.email })
       : t("revokeAdminConfirm", { email: user.email });
-    if (!(await confirmDialog(confirmMessage, { title: t("swalTitle") }))) return;
+    if (!(await confirmDialog(confirmMessage, { title: t("swalTitle"), tone: nextValue ? "primary" : "warning" }))) {
+      return;
+    }
     try {
       await client.put(`/admin/users/${user.id}/system-admin`, { isSystemAdmin: nextValue });
       toast.success(t("updateAdminSuccess"));
@@ -51,7 +56,7 @@ export default function AdminPanel() {
       ? t("lockConfirm", { email: user.email })
       : t("unlockConfirm", { email: user.email });
     const title = nextValue ? t("lockSwalTitle") : t("unlockSwalTitle");
-    if (!(await confirmDialog(confirmMessage, { title }))) return;
+    if (!(await confirmDialog(confirmMessage, { title, tone: nextValue ? "danger" : "primary" }))) return;
     try {
       await client.put(`/admin/users/${user.id}/locked`, { locked: nextValue });
       toast.success(nextValue ? t("lockSuccess") : t("unlockSuccess"));
@@ -73,7 +78,7 @@ export default function AdminPanel() {
       <div className="section-card">
         <div className="table-toolbar">
           <h2>{t("familyListTitle", { count: familiesPage.totalElements })}</h2>
-          <input
+          <Input
             type="search"
             className="table-search"
             value={familyQuery}
@@ -86,28 +91,28 @@ export default function AdminPanel() {
         {families.length === 0 ? (
           <p className="empty-state">{familySearch ? t("noSearchResults") : t("noFamilies")}</p>
         ) : (
-          <table>
-            <thead>
+          <Table>
+            <THead>
               <tr>
-                <th>{t("familyNameHeader")}</th>
-                <th>{t("ownerHeader")}</th>
-                <th>{t("memberCountHeader")}</th>
-                <th>{t("createdAtHeader")}</th>
+                <Th>{t("familyNameHeader")}</Th>
+                <Th>{t("ownerHeader")}</Th>
+                <Th align="right">{t("memberCountHeader")}</Th>
+                <Th>{t("createdAtHeader")}</Th>
               </tr>
-            </thead>
-            <tbody>
+            </THead>
+            <TBody>
               {families.map((f) => (
                 <tr key={f.id}>
-                  <td data-label={t("familyNameHeader")}>{f.name}</td>
-                  <td data-label={t("ownerHeader")}>
+                  <Td data-label={t("familyNameHeader")}>{f.name}</Td>
+                  <Td data-label={t("ownerHeader")}>
                     {f.ownerDisplayName} ({f.ownerEmail})
-                  </td>
-                  <td data-label={t("memberCountHeader")}>{f.memberCount}</td>
-                  <td data-label={t("createdAtHeader")}>{formatDate(f.createdAt)}</td>
+                  </Td>
+                  <Td data-label={t("memberCountHeader")} align="right">{f.memberCount}</Td>
+                  <Td data-label={t("createdAtHeader")}>{formatDate(f.createdAt)}</Td>
                 </tr>
               ))}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         )}
         <Pagination pageData={familiesPage} onPageChange={setFamiliesPage} />
       </div>
@@ -115,7 +120,7 @@ export default function AdminPanel() {
       <div className="section-card">
         <div className="table-toolbar">
           <h2>{t("userListTitle", { count: usersPage.totalElements })}</h2>
-          <input
+          <Input
             type="search"
             className="table-search"
             value={userQuery}
@@ -128,26 +133,26 @@ export default function AdminPanel() {
         {users.length === 0 ? (
           <p className="empty-state">{userSearch ? t("noSearchResults") : t("noUsers")}</p>
         ) : (
-          <table>
-            <thead>
+          <Table>
+            <THead>
               <tr>
-                <th>{t("emailHeader")}</th>
-                <th>{t("displayNameHeader")}</th>
-                <th>{t("familyHeader")}</th>
-                <th>{t("roleHeader")}</th>
-                <th>{t("statusHeader")}</th>
-                <th>{t("systemAdminHeader")}</th>
-                <th></th>
+                <Th>{t("emailHeader")}</Th>
+                <Th>{t("displayNameHeader")}</Th>
+                <Th>{t("familyHeader")}</Th>
+                <Th>{t("roleHeader")}</Th>
+                <Th>{t("statusHeader")}</Th>
+                <Th>{t("systemAdminHeader")}</Th>
+                <Th></Th>
               </tr>
-            </thead>
-            <tbody>
+            </THead>
+            <TBody>
               {users.map((u) => (
                 <tr key={u.id}>
-                  <td data-label={t("emailHeader")}>{u.email}</td>
-                  <td data-label={t("displayNameHeader")}>{u.displayName}</td>
-                  <td data-label={t("familyHeader")}>{u.familyName ?? `#${u.familyId}`}</td>
-                  <td data-label={t("roleHeader")}>{u.role}</td>
-                  <td data-label={t("statusHeader")}>
+                  <Td data-label={t("emailHeader")}>{u.email}</Td>
+                  <Td data-label={t("displayNameHeader")}>{u.displayName}</Td>
+                  <Td data-label={t("familyHeader")}>{u.familyName ?? `#${u.familyId}`}</Td>
+                  <Td data-label={t("roleHeader")}>{u.role}</Td>
+                  <Td data-label={t("statusHeader")}>
                     {u.locked ? (
                       <span className="badge badge-expense">{t("locked")}</span>
                     ) : (
@@ -155,30 +160,26 @@ export default function AdminPanel() {
                         {u.active ? t("activated") : t("notActivated")}
                       </span>
                     )}
-                  </td>
-                  <td data-label={t("systemAdminHeader")}>{u.isSystemAdmin ? t("common:yes") : t("common:no")}</td>
-                  <td className="row-actions">
-                    <button
-                      type="button"
-                      className="btn-secondary"
+                  </Td>
+                  <Td data-label={t("systemAdminHeader")}>{u.isSystemAdmin ? t("common:yes") : t("common:no")}</Td>
+                  <Td actions>
+                    <Button variant={u.isSystemAdmin ? "warning-outline" : "secondary"} size="sm"
                       onClick={() => toggleSystemAdmin(u)}
                       disabled={String(u.id) === String(userId) && u.isSystemAdmin}
                     >
                       {u.isSystemAdmin ? t("revokeAdminButton") : t("grantAdminButton")}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
+                    </Button>
+                    <Button variant={u.locked ? "success-outline" : "danger-outline"} size="sm"
                       onClick={() => toggleLocked(u)}
                       disabled={!u.locked && (u.isSystemAdmin || String(u.id) === String(userId))}
                     >
                       {u.locked ? t("unlockButton") : t("lockButton")}
-                    </button>
-                  </td>
+                    </Button>
+                  </Td>
                 </tr>
               ))}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         )}
         <Pagination pageData={usersPage} onPageChange={setUsersPage} />
       </div>

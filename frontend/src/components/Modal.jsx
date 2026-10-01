@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { CloseIcon } from "./AppIcons";
+import { IconButton } from "./ui/Button";
 
 /**
  * Accessible dialog rendered into <body>: Esc and a click on the backdrop close it (unless
@@ -79,9 +80,9 @@ export default function Modal({
             <h2 id={titleId}>{title}</h2>
             {subtitle && <p>{subtitle}</p>}
           </div>
-          <button type="button" className="modal-close" onClick={onClose} disabled={!dismissible} aria-label={closeLabel}>
+          <IconButton variant="ghost" onClick={onClose} disabled={!dismissible} aria-label={closeLabel}>
             <CloseIcon />
-          </button>
+          </IconButton>
         </div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-footer">{footer}</div>}

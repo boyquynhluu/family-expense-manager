@@ -7,6 +7,8 @@ import { useAuth } from "../hooks/useAuth";
 import { confirmDialog } from "../utils/confirm";
 import { LIMITS } from "../utils/inputLimits";
 import { notifyTrashChanged } from "../utils/trashEvents";
+import { Button, IconButton } from "../components/ui/Button";
+import { Input, Select } from "../components/ui/Input";
 
 export default function Categories() {
   const { t } = useTranslation(["common", "categories"]);
@@ -89,7 +91,7 @@ export default function Categories() {
                 {t("categories:nameLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <input
+              <Input
                 placeholder={t("categories:namePlaceholder")}
                 value={name}
                 maxLength={LIMITS.categoryName}
@@ -99,24 +101,24 @@ export default function Categories() {
             </label>
             <label className="field">
               {t("categories:typeLabel")}
-              <select value={type} onChange={(e) => setType(e.target.value)}>
+              <Select value={type} onChange={(e) => setType(e.target.value)}>
                 <option value="EXPENSE">{t("categories:typeExpense")}</option>
                 <option value="INCOME">{t("categories:typeIncome")}</option>
-              </select>
+              </Select>
             </label>
             <label className="field">
               {t("categories:iconLabel")}
-              <input placeholder={t("categories:iconPlaceholder")} value={icon} maxLength={LIMITS.categoryIcon} onChange={(e) => setIcon(e.target.value)} />
+              <Input placeholder={t("categories:iconPlaceholder")} value={icon} maxLength={LIMITS.categoryIcon} onChange={(e) => setIcon(e.target.value)} />
             </label>
             <label className="field">
               {t("categories:colorLabel")}
-              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
+              <Input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
             </label>
-            <button type="submit">{editingId ? t("categories:submitUpdate") : t("categories:submitAdd")}</button>
+            <Button type="submit">{editingId ? t("categories:submitUpdate") : t("categories:submitAdd")}</Button>
             {editingId && (
-              <button type="button" className="btn-secondary" onClick={cancelEdit}>
+              <Button variant="secondary" onClick={cancelEdit}>
                 {t("common:cancel")}
-              </button>
+              </Button>
             )}
           </form>
           {error && <p className="error-text">{error}</p>}
@@ -150,17 +152,15 @@ export default function Categories() {
                 </div>
                 {isOwner && (
                   <div className="row-actions">
-                    <button type="button" className="icon-btn" onClick={() => startEdit(c)} aria-label={t("common:edit")}>
+                    <IconButton onClick={() => startEdit(c)} aria-label={t("common:edit")}>
                       <EditIcon />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn icon-btn-danger"
+                    </IconButton>
+                    <IconButton variant="danger"
                       onClick={() => handleDelete(c.id)}
                       aria-label={t("common:delete")}
                     >
                       <TrashIcon />
-                    </button>
+                    </IconButton>
                   </div>
                 )}
               </div>

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { LIMITS } from "../utils/inputLimits";
+import { Button } from "../components/ui/Button";
 
 // Landed on from the verification link emailed after registration (see
 // notification-service UserVerificationEventListener). Calls the API to activate the
@@ -81,9 +82,9 @@ export default function Verify() {
                     required
                   />
                 </div>
-                <button type="submit" className="auth-submit" disabled={resending}>
+                <Button variant="hero" size="lg" className="mt-1 w-full" type="submit" disabled={resending}>
                   {resending ? t("resendSending") : t("resendButton")}
-                </button>
+                </Button>
               </form>
             )}
             <p className="auth-footer-text">

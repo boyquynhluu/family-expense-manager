@@ -3,7 +3,16 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import AmountInput from "../components/AmountInput";
-import { CloseIcon, EditIcon, HistoryIcon, ImageIcon, TrashIcon } from "../components/AppIcons";
+import {
+  CloseIcon,
+  EditIcon,
+  FileTextIcon,
+  FileSpreadsheetIcon,
+  HistoryIcon,
+  ImageIcon,
+  TrashIcon,
+  UploadIcon,
+} from "../components/AppIcons";
 import Pagination from "../components/Pagination";
 import SeedDefaultsButton from "../components/SeedDefaultsButton";
 import TransactionHistoryModal from "../components/TransactionHistoryModal";
@@ -15,6 +24,9 @@ import { formatCurrency } from "../utils/format";
 import { LIMITS } from "../utils/inputLimits";
 import { notifyTrashChanged } from "../utils/trashEvents";
 
+import { Table, THead, TBody, Th, Td } from "../components/ui/Table";
+import { Button, IconButton } from "../components/ui/Button";
+import { Checkbox, Input, Select } from "../components/ui/Input";
 const emptyForm = {
   walletId: "",
   categoryId: "",
@@ -433,33 +445,33 @@ export default function Transactions() {
                 {t("transactions:walletLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <select value={form.walletId} onChange={(e) => updateField("walletId", e.target.value)} required>
+              <Select value={form.walletId} onChange={(e) => updateField("walletId", e.target.value)} required>
                 {wallets.map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span>
                 {t("transactions:categoryLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <select value={form.categoryId} onChange={(e) => updateField("categoryId", e.target.value)} required>
+              <Select value={form.categoryId} onChange={(e) => updateField("categoryId", e.target.value)} required>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               {t("transactions:typeLabel")}
-              <select value={form.type} onChange={(e) => updateField("type", e.target.value)}>
+              <Select value={form.type} onChange={(e) => updateField("type", e.target.value)}>
                 <option value="EXPENSE">{t("transactions:typeExpense")}</option>
                 <option value="INCOME">{t("transactions:typeIncome")}</option>
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span>
@@ -473,7 +485,7 @@ export default function Transactions() {
                 {t("transactions:timeLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <input
+              <Input
                 type="datetime-local"
                 value={form.occurredAt}
                 onChange={(e) => updateField("occurredAt", e.target.value)}
@@ -484,7 +496,7 @@ export default function Transactions() {
             </label>
             <label className="field">
               {t("transactions:noteLabel")}
-              <input
+              <Input
                 placeholder={t("transactions:notePlaceholder")}
                 value={form.note}
                 maxLength={LIMITS.transactionNote}
@@ -507,9 +519,7 @@ export default function Transactions() {
                   </span>
                 </label>
                 {receiptFile && (
-                  <button
-                    type="button"
-                    className="file-picker-clear"
+                  <IconButton variant="ghost-danger" size="sm" className="mr-1"
                     onClick={() => {
                       setReceiptFile(null);
                       setReceiptInputKey((k) => k + 1);
@@ -518,15 +528,15 @@ export default function Transactions() {
                     title={t("transactions:clearReceipt")}
                   >
                     <CloseIcon />
-                  </button>
+                  </IconButton>
                 )}
               </div>
             </div>
-            <button type="submit">{editingId ? t("transactions:submitUpdate") : t("transactions:submitAdd")}</button>
+            <Button type="submit">{editingId ? t("transactions:submitUpdate") : t("transactions:submitAdd")}</Button>
             {editingId && (
-              <button type="button" className="btn-secondary" onClick={cancelEdit}>
+              <Button variant="secondary" onClick={cancelEdit}>
                 {t("common:cancel")}
-              </button>
+              </Button>
             )}
           </form>
         )}
@@ -556,57 +566,62 @@ export default function Transactions() {
         <div className="page-header">
           <h2>{t("transactions:historyTitle")}</h2>
           <div className="row-actions">
-            <button type="button" className="btn-secondary" onClick={triggerImport} disabled={importing}>
+            <Button variant="import" onClick={triggerImport} disabled={importing}>
+              <UploadIcon />
               {importing ? t("transactions:importing") : t("transactions:importButton")}
-            </button>
+            </Button>
             {pageData.totalElements > 0 && (
               <>
-                <button type="button" className="btn-secondary" onClick={() => exportReport("CSV")}>
+                <Button variant="csv" onClick={() => exportReport("CSV")}>
+                  <FileTextIcon />
                   {t("transactions:exportCsv")}
-                </button>
-                <button type="button" className="btn-secondary" onClick={() => exportReport("EXCEL")}>
+                </Button>
+                <Button variant="excel" onClick={() => exportReport("EXCEL")}>
+                  <FileSpreadsheetIcon />
                   {t("transactions:exportExcel")}
-                </button>
+                </Button>
               </>
             )}
           </div>
         </div>
-        <p className="page-header-subtitle">{t("transactions:importHint")}</p>
+        <p className="page-header-subtitle" style={{ marginBottom: "1rem" }}>
+          {t("transactions:importHint")}
+        </p>
 
         <form className="inline-form filter-bar" onSubmit={(e) => e.preventDefault()}>
           <label className="field">
             {t("transactions:walletLabel")}
-            <select value={filter.walletId} onChange={(e) => updateFilter("walletId", e.target.value)}>
+            <Select value={filter.walletId} onChange={(e) => updateFilter("walletId", e.target.value)}>
               <option value="">{t("transactions:allOption")}</option>
               {wallets.map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="field">
             {t("transactions:categoryLabel")}
-            <select value={filter.categoryId} onChange={(e) => updateFilter("categoryId", e.target.value)}>
+            <Select value={filter.categoryId} onChange={(e) => updateFilter("categoryId", e.target.value)}>
               <option value="">{t("transactions:allOption")}</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="field">
             {t("transactions:typeLabel")}
-            <select value={filter.type} onChange={(e) => updateFilter("type", e.target.value)}>
+            <Select value={filter.type} onChange={(e) => updateFilter("type", e.target.value)}>
               <option value="">{t("transactions:allOption")}</option>
               <option value="EXPENSE">{t("transactions:typeExpense")}</option>
               <option value="INCOME">{t("transactions:typeIncome")}</option>
-            </select>
+            </Select>
           </label>
           <label className="field">
             {t("transactions:searchLabel")}
-            <input
+            <Input
               type="search"
               placeholder={t("transactions:searchPlaceholder")}
               value={filter.q}
@@ -624,16 +639,16 @@ export default function Transactions() {
           </label>
           <label className="field">
             {t("transactions:fromDateLabel")}
-            <input type="date" value={filter.fromDate} onChange={(e) => updateFilter("fromDate", e.target.value)} />
+            <Input type="date" value={filter.fromDate} onChange={(e) => updateFilter("fromDate", e.target.value)} />
           </label>
           <label className="field">
             {t("transactions:toDateLabel")}
-            <input type="date" value={filter.toDate} onChange={(e) => updateFilter("toDate", e.target.value)} />
+            <Input type="date" value={filter.toDate} onChange={(e) => updateFilter("toDate", e.target.value)} />
           </label>
           {hasActiveFilter && (
-            <button type="button" className="btn-secondary" onClick={clearFilter}>
+            <Button variant="secondary" onClick={clearFilter}>
               {t("transactions:clearFilter")}
-            </button>
+            </Button>
           )}
         </form>
 
@@ -642,18 +657,15 @@ export default function Transactions() {
             <span className="page-header-subtitle">
               {t("transactions:selectedCount", { count: selectedIds.size })}
             </span>
-            <button
-              type="button"
-              className="btn-secondary"
-              style={{ color: "#dc2626" }}
+            <Button variant="danger"
               onClick={handleBulkDelete}
               disabled={bulkDeleting}
             >
               {t("transactions:bulkDeleteButton")}
-            </button>
-            <button type="button" className="btn-secondary" onClick={() => setSelectedIds(new Set())}>
+            </Button>
+            <Button variant="ghost" onClick={() => setSelectedIds(new Set())}>
               {t("transactions:clearSelection")}
-            </button>
+            </Button>
           </div>
         )}
 
@@ -662,132 +674,121 @@ export default function Transactions() {
             {hasActiveFilter ? t("transactions:noMatchFilter") : t("transactions:emptyState")}
           </p>
         ) : (
-          <table>
-            <thead>
+          <Table>
+            <THead>
               <tr>
-                <th>
-                  <input
-                    type="checkbox"
+                <Th>
+                  <Checkbox
                     checked={allSelectableSelected}
                     disabled={selectableRows.length === 0}
                     onChange={toggleSelectAll}
                     aria-label={t("transactions:selectAllAria")}
                   />
-                </th>
-                <th>{t("transactions:timeLabel")}</th>
-                <th>{t("transactions:walletLabel")}</th>
-                <th>{t("transactions:categoryLabel")}</th>
-                <th>{t("transactions:typeLabel")}</th>
-                <th>{t("transactions:amountLabel")}</th>
-                <th>{t("transactions:noteLabel")}</th>
-                <th>{t("transactions:creatorLabel")}</th>
-                <th></th>
+                </Th>
+                <Th>{t("transactions:timeLabel")}</Th>
+                <Th>{t("transactions:walletLabel")}</Th>
+                <Th>{t("transactions:categoryLabel")}</Th>
+                <Th>{t("transactions:typeLabel")}</Th>
+                <Th align="right">{t("transactions:amountLabel")}</Th>
+                <Th>{t("transactions:noteLabel")}</Th>
+                <Th>{t("transactions:creatorLabel")}</Th>
+                <Th></Th>
               </tr>
-            </thead>
-            <tbody>
+            </THead>
+            <TBody>
               {pageData.content.map((row) => (
                 <tr key={row.id}>
-                  <td>
-                    <input
-                      type="checkbox"
+                  <Td>
+                    <Checkbox
                       checked={selectedIds.has(row.id)}
                       disabled={!canModify(row)}
                       onChange={() => toggleSelected(row.id)}
                       aria-label={t("transactions:selectRowAria")}
                     />
-                  </td>
-                  <td data-label={t("transactions:timeLabel")}>{row.occurredAt.replace("T", " ")}</td>
-                  <td data-label={t("transactions:walletLabel")}>{walletName(row.walletId)}</td>
-                  <td data-label={t("transactions:categoryLabel")}>{categoryName(row.categoryId)}</td>
-                  <td data-label={t("transactions:typeLabel")}>
+                  </Td>
+                  <Td data-label={t("transactions:timeLabel")}>
+                    {/* Break only between date and time — never inside "2026-09-22" at a hyphen. */}
+                    <span className="whitespace-nowrap">{row.occurredAt.slice(0, 10)}</span>{" "}
+                    <span className="whitespace-nowrap">{row.occurredAt.slice(11)}</span>
+                  </Td>
+                  <Td data-label={t("transactions:walletLabel")}>{walletName(row.walletId)}</Td>
+                  <Td data-label={t("transactions:categoryLabel")}>{categoryName(row.categoryId)}</Td>
+                  <Td data-label={t("transactions:typeLabel")}>
                     <span className={`badge ${row.type === "EXPENSE" ? "badge-expense" : "badge-income"}`}>
                       {row.type === "EXPENSE" ? t("transactions:typeExpense") : t("transactions:typeIncome")}
                     </span>
-                  </td>
-                  <td
+                  </Td>
+                  <Td
                     data-label={t("transactions:amountLabel")}
+                    align="right"
                     className={row.type === "EXPENSE" ? "amount-expense" : "amount-income"}
                   >
                     {row.type === "EXPENSE" ? "-" : "+"}
                     {formatCurrency(row.amount)}
-                  </td>
-                  <td data-label={t("transactions:noteLabel")}>{row.note}</td>
-                  <td data-label={t("transactions:creatorLabel")}>{memberName(row)}</td>
-                  <td className="row-actions">
+                  </Td>
+                  <Td data-label={t("transactions:noteLabel")}>{row.note}</Td>
+                  <Td data-label={t("transactions:creatorLabel")}>{memberName(row)}</Td>
+                  <Td actions>
                     {row.hasReceipt && (
-                      <button
-                        type="button"
-                        className="icon-btn"
+                      <IconButton
                         onClick={() => viewReceipt(row.id)}
                         aria-label={t("transactions:viewReceiptAria")}
                         title={t("transactions:viewReceiptAria")}
                       >
                         <ImageIcon />
-                      </button>
+                      </IconButton>
                     )}
-                    <button
-                      type="button"
-                      className="icon-btn"
+                    <IconButton
                       onClick={() => startDuplicate(row)}
                       aria-label={t("transactions:duplicateAria")}
                       title={t("transactions:duplicateAria")}
                     >
                       <CopyIcon />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn"
+                    </IconButton>
+                    <IconButton
                       onClick={() => setHistoryTransactionId(row.id)}
                       aria-label={t("transactions:historyAria")}
                       title={t("transactions:historyAria")}
                     >
                       <HistoryIcon />
-                    </button>
+                    </IconButton>
                     {canModify(row) && (
                       <>
                         {row.hasReceipt ? (
-                          <button
-                            type="button"
-                            className="icon-btn icon-btn-danger"
+                          <IconButton variant="danger"
                             onClick={() => handleDeleteReceipt(row.id)}
                             aria-label={t("transactions:deleteReceiptAria")}
                           >
                             <CloseIcon />
-                          </button>
+                          </IconButton>
                         ) : (
-                          <button
-                            type="button"
-                            className="icon-btn"
+                          <IconButton
                             onClick={() => triggerUpload(row.id)}
                             aria-label={t("transactions:attachReceiptAria")}
                             title={t("transactions:attachReceiptAria")}
                           >
                             <ImageIcon />
-                          </button>
+                          </IconButton>
                         )}
-                        <button
-                          type="button"
-                          className="icon-btn"
+                        <IconButton
                           onClick={() => startEdit(row)}
                           aria-label={t("common:edit")}
                         >
                           <EditIcon />
-                        </button>
-                        <button
-                          type="button"
-                          className="icon-btn icon-btn-danger"
+                        </IconButton>
+                        <IconButton variant="danger"
                           onClick={() => handleDelete(row.id)}
                           aria-label={t("common:delete")}
                         >
                           <TrashIcon />
-                        </button>
+                        </IconButton>
                       </>
                     )}
-                  </td>
+                  </Td>
                 </tr>
               ))}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         )}
 
         <Pagination pageData={pageData} onPageChange={setPage} />

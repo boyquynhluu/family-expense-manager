@@ -6,6 +6,7 @@ import client from "../api/client";
 import { EyeIcon, EyeOffIcon, KeyIcon, UserIcon } from "../components/AuthIcons";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { LIMITS } from "../utils/inputLimits";
+import { Button, IconButton } from "../components/ui/Button";
 
 export default function AcceptInvite() {
   const { t } = useTranslation("acceptInvite");
@@ -108,25 +109,23 @@ export default function AcceptInvite() {
                       placeholder={t("passwordPlaceholder")}
                       aria-label={t("passwordLabel")}
                     />
-                    <button
-                      type="button"
-                      className="auth-input-toggle"
+                    <IconButton variant="bare" className="auth-input-toggle"
                       onClick={() => setShowPassword((v) => !v)}
                       aria-label={showPassword ? t("hidePassword") : t("showPassword")}
                     >
                       {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-                    </button>
+                    </IconButton>
                   </div>
                 </>
               )}
 
-              <button type="submit" className="auth-submit" disabled={loading}>
+              <Button variant="hero" size="lg" className="mt-1 w-full" type="submit" disabled={loading}>
                 {loading
                   ? t("joining")
                   : invite.isExistingAccount
                   ? t("confirmJoin")
                   : t("joinFamily")}
-              </button>
+              </Button>
             </>
           )}
         </div>

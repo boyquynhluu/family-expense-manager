@@ -11,6 +11,9 @@ import { maxDate, minDate } from "../utils/dateLimits";
 import { formatCurrency } from "../utils/format";
 import { LIMITS } from "../utils/inputLimits";
 
+import { Table, THead, TBody, Th, Td } from "../components/ui/Table";
+import { Button, IconButton } from "../components/ui/Button";
+import { Input, Select } from "../components/ui/Input";
 const emptyForm = {
   walletId: "",
   categoryId: "",
@@ -118,6 +121,7 @@ export default function RecurringTransactions() {
     const action = rule.active ? "pause" : "activate";
     const confirmed = await confirmDialog(t(`recurringTransactions:${action}Confirm`), {
       confirmButtonText: t(`recurringTransactions:${action}Button`),
+      tone: rule.active ? "warning" : "primary",
     });
     if (!confirmed) return;
     setError("");
@@ -182,33 +186,33 @@ export default function RecurringTransactions() {
                 {t("recurringTransactions:walletLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <select value={form.walletId} onChange={(e) => updateField("walletId", e.target.value)} required>
+              <Select value={form.walletId} onChange={(e) => updateField("walletId", e.target.value)} required>
                 {wallets.map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span>
                 {t("recurringTransactions:categoryLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <select value={form.categoryId} onChange={(e) => updateField("categoryId", e.target.value)} required>
+              <Select value={form.categoryId} onChange={(e) => updateField("categoryId", e.target.value)} required>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               {t("recurringTransactions:typeLabel")}
-              <select value={form.type} onChange={(e) => updateField("type", e.target.value)}>
+              <Select value={form.type} onChange={(e) => updateField("type", e.target.value)}>
                 <option value="EXPENSE">{t("recurringTransactions:typeExpense")}</option>
                 <option value="INCOME">{t("recurringTransactions:typeIncome")}</option>
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span>
@@ -222,11 +226,11 @@ export default function RecurringTransactions() {
                 {t("recurringTransactions:frequencyLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <select value={form.frequency} onChange={(e) => updateField("frequency", e.target.value)} required>
+              <Select value={form.frequency} onChange={(e) => updateField("frequency", e.target.value)} required>
                 <option value="MONTHLY">{t("recurringTransactions:frequencyMonthly")}</option>
                 <option value="WEEKLY">{t("recurringTransactions:frequencyWeekly")}</option>
                 <option value="YEARLY">{t("recurringTransactions:frequencyYearly")}</option>
-              </select>
+              </Select>
             </label>
             {form.frequency === "WEEKLY" && (
               <label className="field">
@@ -234,13 +238,13 @@ export default function RecurringTransactions() {
                   {t("recurringTransactions:dayOfWeekLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
-                <select value={form.dayOfWeek} onChange={(e) => updateField("dayOfWeek", e.target.value)} required>
+                <Select value={form.dayOfWeek} onChange={(e) => updateField("dayOfWeek", e.target.value)} required>
                   {[1, 2, 3, 4, 5, 6, 7].map((d) => (
                     <option key={d} value={d}>
                       {t(`recurringTransactions:weekday${d}`)}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             )}
             {form.frequency === "YEARLY" && (
@@ -249,13 +253,13 @@ export default function RecurringTransactions() {
                   {t("recurringTransactions:monthOfYearLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
-                <select value={form.monthOfYear} onChange={(e) => updateField("monthOfYear", e.target.value)} required>
+                <Select value={form.monthOfYear} onChange={(e) => updateField("monthOfYear", e.target.value)} required>
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
                     <option key={m} value={m}>
                       {t("recurringTransactions:monthOption", { month: m })}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             )}
             {form.frequency !== "WEEKLY" && (
@@ -264,7 +268,7 @@ export default function RecurringTransactions() {
                   {t("recurringTransactions:dayOfMonthLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
-                <input
+                <Input
                   type="number"
                   min="1"
                   max="31"
@@ -279,7 +283,7 @@ export default function RecurringTransactions() {
                 {t("recurringTransactions:startDateLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <input
+              <Input
                 type="date"
                 value={form.startDate}
                 onChange={(e) => updateField("startDate", e.target.value)}
@@ -290,7 +294,7 @@ export default function RecurringTransactions() {
             </label>
             <label className="field">
               {t("recurringTransactions:endDateLabel")}
-              <input
+              <Input
                 type="date"
                 value={form.endDate}
                 onChange={(e) => updateField("endDate", e.target.value)}
@@ -300,20 +304,20 @@ export default function RecurringTransactions() {
             </label>
             <label className="field">
               {t("recurringTransactions:noteLabel")}
-              <input
+              <Input
                 placeholder={t("recurringTransactions:optionalPlaceholder")}
                 value={form.note}
                 maxLength={LIMITS.transactionNote}
                 onChange={(e) => updateField("note", e.target.value)}
               />
             </label>
-            <button type="submit">
+            <Button type="submit">
               {editingId ? t("recurringTransactions:updateButton") : t("recurringTransactions:addButton")}
-            </button>
+            </Button>
             {editingId && (
-              <button type="button" className="btn-secondary" onClick={cancelEdit}>
+              <Button variant="secondary" onClick={cancelEdit}>
                 {t("common:cancel")}
-              </button>
+              </Button>
             )}
           </form>
         )}
@@ -325,80 +329,77 @@ export default function RecurringTransactions() {
         {rules.length === 0 ? (
           <p className="empty-state">{t("recurringTransactions:noRules")}</p>
         ) : (
-          <table>
-            <thead>
+          <Table>
+            <THead>
               <tr>
-                <th>{t("recurringTransactions:walletLabel")}</th>
-                <th>{t("recurringTransactions:categoryLabel")}</th>
-                <th>{t("recurringTransactions:typeLabel")}</th>
-                <th>{t("recurringTransactions:amountLabel")}</th>
-                <th>{t("recurringTransactions:scheduleLabel")}</th>
-                <th>{t("recurringTransactions:nextRunLabel")}</th>
-                <th>{t("recurringTransactions:executionStatusLabel")}</th>
-                <th>{t("recurringTransactions:statusLabel")}</th>
-                <th></th>
+                <Th>{t("recurringTransactions:walletLabel")}</Th>
+                <Th>{t("recurringTransactions:categoryLabel")}</Th>
+                <Th>{t("recurringTransactions:typeLabel")}</Th>
+                <Th align="right">{t("recurringTransactions:amountLabel")}</Th>
+                <Th>{t("recurringTransactions:scheduleLabel")}</Th>
+                <Th>{t("recurringTransactions:nextRunLabel")}</Th>
+                <Th>{t("recurringTransactions:executionStatusLabel")}</Th>
+                <Th>{t("recurringTransactions:statusLabel")}</Th>
+                <Th></Th>
               </tr>
-            </thead>
-            <tbody>
+            </THead>
+            <TBody>
               {rules.map((r) => (
                 <tr key={r.id}>
-                  <td data-label={t("recurringTransactions:walletLabel")}>{walletName(r.walletId)}</td>
-                  <td data-label={t("recurringTransactions:categoryLabel")}>{categoryName(r.categoryId)}</td>
-                  <td data-label={t("recurringTransactions:typeLabel")}>
+                  <Td data-label={t("recurringTransactions:walletLabel")}>{walletName(r.walletId)}</Td>
+                  <Td data-label={t("recurringTransactions:categoryLabel")}>{categoryName(r.categoryId)}</Td>
+                  <Td data-label={t("recurringTransactions:typeLabel")}>
                     <span className={`badge ${r.type === "EXPENSE" ? "badge-expense" : "badge-income"}`}>
                       {r.type === "EXPENSE" ? t("recurringTransactions:typeExpense") : t("recurringTransactions:typeIncome")}
                     </span>
-                  </td>
-                  <td
+                  </Td>
+                  <Td
                     data-label={t("recurringTransactions:amountLabel")}
+                    align="right"
                     className={r.type === "EXPENSE" ? "amount-expense" : "amount-income"}
                   >
                     {r.type === "EXPENSE" ? "-" : "+"}
                     {formatCurrency(r.amount)}
-                  </td>
-                  <td data-label={t("recurringTransactions:scheduleLabel")}>{scheduleText(r)}</td>
-                  <td data-label={t("recurringTransactions:nextRunLabel")}>{r.active ? r.nextRunDate : "-"}</td>
-                  <td data-label={t("recurringTransactions:executionStatusLabel")}>
+                  </Td>
+                  <Td data-label={t("recurringTransactions:scheduleLabel")}>{scheduleText(r)}</Td>
+                  <Td data-label={t("recurringTransactions:nextRunLabel")}>{r.active ? r.nextRunDate : "-"}</Td>
+                  <Td data-label={t("recurringTransactions:executionStatusLabel")}>
                     <span className={`badge ${r.lastRunDate ? "badge-income" : "badge-neutral"}`}>
                       {r.lastRunDate
                         ? t("recurringTransactions:executionCompleted")
                         : t("recurringTransactions:executionPending")}
                     </span>
-                  </td>
-                  <td data-label={t("recurringTransactions:statusLabel")}>
+                  </Td>
+                  <Td data-label={t("recurringTransactions:statusLabel")}>
                     <span className={`badge ${r.active ? "badge-income" : "badge-expense"}`}>
                       {r.active ? t("recurringTransactions:statusActive") : t("recurringTransactions:statusPaused")}
                     </span>
-                  </td>
-                  <td className="row-actions">
+                  </Td>
+                  <Td actions>
                     {canModify(r) && (
                       <>
-                        <button type="button" className="btn-secondary" onClick={() => toggleActive(r)}>
+                        <Button variant={r.active ? "warning-outline" : "success-outline"} size="sm" onClick={() => toggleActive(r)}>
                           {r.active ? t("recurringTransactions:pauseButton") : t("recurringTransactions:activateButton")}
-                        </button>
-                        <button
-                          type="button"
-                          className="icon-btn"
+                        </Button>
+                        <IconButton
                           onClick={() => startEdit(r)}
                           aria-label={t("common:edit")}
                         >
                           <EditIcon />
-                        </button>
-                        <button
-                          type="button"
-                          className="icon-btn icon-btn-danger"
+                        </IconButton>
+                        <IconButton variant="danger"
                           onClick={() => handleDelete(r.id)}
                           aria-label={t("common:delete")}
                         >
                           <TrashIcon />
-                        </button>
+                        </IconButton>
                       </>
                     )}
-                  </td>
+                  </Td>
                 </tr>
               ))}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         )}
         <Pagination pageData={pageData} onPageChange={setPage} />
       </div>

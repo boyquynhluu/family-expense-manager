@@ -6,6 +6,7 @@ import { EyeIcon, EyeOffIcon, HomeIcon, KeyIcon, MailIcon, UserIcon } from "../c
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuth } from "../hooks/useAuth";
 import { LIMITS } from "../utils/inputLimits";
+import { Button, IconButton } from "../components/ui/Button";
 
 export default function Register() {
   const { t } = useTranslation("register");
@@ -105,14 +106,12 @@ export default function Register() {
               aria-label={t("passwordLabel")}
               required
             />
-            <button
-              type="button"
-              className="auth-input-toggle"
+            <IconButton variant="bare" className="auth-input-toggle"
               onClick={() => setShowPassword((v) => !v)}
               aria-label={showPassword ? t("hidePassword") : t("showPassword")}
             >
               {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-            </button>
+            </IconButton>
           </div>
 
           <label className="auth-terms">
@@ -120,9 +119,9 @@ export default function Register() {
             {t("termsAgreement")}
           </label>
 
-          <button type="submit" className="auth-submit" disabled={loading}>
+          <Button variant="hero" size="lg" className="mt-1 w-full" type="submit" disabled={loading}>
             {loading ? t("registering") : t("submit")}
-          </button>
+          </Button>
         </div>
 
         <p className="auth-footer-text">

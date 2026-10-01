@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { LIMITS } from "../utils/inputLimits";
 import { ShieldIcon } from "./AppIcons";
 import Modal from "./Modal";
+import { Button } from "./ui/Button";
+import { Input } from "./ui/Input";
 
 const FORM_ID = "two-factor-setup-form";
 
@@ -39,12 +41,12 @@ export default function TwoFactorSetupModal({ setup, code, onCodeChange, onSubmi
       subtitle={t("twoFactorModalSubtitle")}
       footer={
         <>
-          <button type="button" className="btn-secondary" onClick={onClose} disabled={confirming}>
+          <Button variant="secondary" onClick={onClose} disabled={confirming}>
             {t("common:cancel")}
-          </button>
-          <button type="submit" form={FORM_ID} disabled={confirming || code.length !== LIMITS.totpCode}>
+          </Button>
+          <Button type="submit" form={FORM_ID} disabled={confirming || code.length !== LIMITS.totpCode}>
             {confirming ? t("confirmingTwoFactorLoading") : t("confirmAndEnableButton")}
-          </button>
+          </Button>
         </>
       }
     >
@@ -66,9 +68,9 @@ export default function TwoFactorSetupModal({ setup, code, onCodeChange, onSubmi
                 <div className="two-factor-manual">
                   <span className="two-factor-hint">{t("twoFactorManualEntryLabel")}</span>
                   <code className="two-factor-secret">{groupSecret(setup.secret)}</code>
-                  <button type="button" className="btn-secondary two-factor-copy" onClick={copySecret}>
+                  <Button variant="secondary" size="sm" className="self-start" onClick={copySecret}>
                     {t("copySecretButton")}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -79,7 +81,7 @@ export default function TwoFactorSetupModal({ setup, code, onCodeChange, onSubmi
             <form id={FORM_ID} className="two-factor-step-content" onSubmit={onSubmit}>
               <h3>{t("twoFactorStepVerifyTitle")}</h3>
               <p className="two-factor-hint">{t("twoFactorStepVerifyHint")}</p>
-              <input
+              <Input
                 className="two-factor-code-input"
                 value={code}
                 // Digits only, capped here rather than with maxLength: a pasted "123 456" is 7 characters,

@@ -19,5 +19,11 @@
   "colNote": "Note",
   "restoreButton": "Restore",
   "typeExpense": "Expense",
-  "typeIncome": "Income"
+  "typeIncome": "Income",
+  "restoreConfirm": "Are you sure you want to restore {{kind}}?",
+  "kind": {
+      "transactions": "transaction",
+      "categories": "category",
+      "wallets": "wallet"
+    }
 }

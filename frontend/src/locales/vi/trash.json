@@ -19,5 +19,11 @@
   "colNote": "Ghi chú",
   "restoreButton": "Khôi phục",
   "typeExpense": "Chi tiêu",
-  "typeIncome": "Thu nhập"
+  "typeIncome": "Thu nhập",
+  "restoreConfirm": "Bạn có chắc muốn khôi phục {{kind}} không?",
+  "kind": {
+      "transactions": "giao dịch",
+      "categories": "danh mục",
+      "wallets": "ví"
+    }
 }

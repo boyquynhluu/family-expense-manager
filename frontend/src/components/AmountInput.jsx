@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { Input } from "./ui/Input";
 
 // Matches the backend's @Digits(integer = 16, fraction = 2) on every amount field (DECIMAL(18, 2)).
 const MAX_INTEGER_DIGITS = 16;
@@ -61,6 +62,14 @@ export default function AmountInput({ value, onChange, ...props }) {
   }
 
   return (
-    <input {...props} ref={inputRef} type="text" inputMode="decimal" value={format(String(value ?? ""))} onChange={handleChange} />
+    <Input
+      {...props}
+      ref={inputRef}
+      type="text"
+      inputMode="decimal"
+      className="tabular-nums"
+      value={format(String(value ?? ""))}
+      onChange={handleChange}
+    />
   );
 }

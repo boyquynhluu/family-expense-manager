@@ -4,6 +4,7 @@ import client from "../api/client";
 import { formatCurrency } from "../utils/format";
 import { WalletIcon } from "./AppIcons";
 
+import { Table, THead, TBody, TFoot, Th, Td } from "./ui/Table";
 function signedClass(value) {
   if (value > 0) return "amount-income";
   if (value < 0) return "amount-expense";
@@ -52,19 +53,19 @@ export default function WalletMonthlyTable({ yearMonth, reloadKey = 0 }) {
   };
 
   return (
-    <table>
-      <thead>
+    <Table>
+      <THead>
         <tr>
-          <th>{t("colName")}</th>
-          <th>{t("colOpening")}</th>
-          <th>{t("colIncome")}</th>
-          <th>{t("colExpense")}</th>
-          <th>{t("colTransfers")}</th>
-          <th>{t("colNet")}</th>
-          <th>{t("colClosing")}</th>
+          <Th>{t("colName")}</Th>
+          <Th align="right">{t("colOpening")}</Th>
+          <Th align="right">{t("colIncome")}</Th>
+          <Th align="right">{t("colExpense")}</Th>
+          <Th align="right">{t("colTransfers")}</Th>
+          <Th align="right">{t("colNet")}</Th>
+          <Th align="right">{t("colClosing")}</Th>
         </tr>
-      </thead>
-      <tbody>
+      </THead>
+      <TBody>
         {rows.map((r) => {
           const net = Number(r.net);
           const closing = Number(r.closingBalance);
@@ -72,58 +73,58 @@ export default function WalletMonthlyTable({ yearMonth, reloadKey = 0 }) {
           const transferOut = Number(r.transferOut);
           return (
             <tr key={r.walletId}>
-              <td data-label={t("colName")}>
+              <Td data-label={t("colName")}>
                 <span className="table-cell-icon">
                   <WalletIcon /> {r.walletName}
                 </span>
-              </td>
-              <td data-label={t("colOpening")} className={Number(r.openingBalance) < 0 ? "amount-expense" : undefined}>
+              </Td>
+              <Td data-label={t("colOpening")} align="right" className={Number(r.openingBalance) < 0 ? "amount-expense" : undefined}>
                 {formatCurrency(r.openingBalance, r.currency)}
-              </td>
-              <td data-label={t("colIncome")} className="amount-income">
+              </Td>
+              <Td data-label={t("colIncome")} align="right" className="amount-income">
                 {formatCurrency(r.income, r.currency)}
-              </td>
-              <td data-label={t("colExpense")} className="amount-expense">
+              </Td>
+              <Td data-label={t("colExpense")} align="right" className="amount-expense">
                 {formatCurrency(r.expense, r.currency)}
-              </td>
-              <td data-label={t("colTransfers")}>
+              </Td>
+              <Td data-label={t("colTransfers")} align="right">
                 {transferIn === 0 && transferOut === 0
                   ? "-"
                   : `+${formatCurrency(transferIn, r.currency)} / -${formatCurrency(transferOut, r.currency)}`}
-              </td>
-              <td data-label={t("colNet")} className={signedClass(net)}>
+              </Td>
+              <Td data-label={t("colNet")} align="right" className={signedClass(net)}>
                 {signed(net, r.currency)}
-              </td>
-              <td data-label={t("colClosing")} className={closing < 0 ? "amount-expense" : undefined}>
+              </Td>
+              <Td data-label={t("colClosing")} align="right" className={closing < 0 ? "amount-expense" : undefined}>
                 <strong>{formatCurrency(closing, r.currency)}</strong>
-              </td>
+              </Td>
             </tr>
           );
         })}
-      </tbody>
+      </TBody>
       {rows.length > 1 && (
-        <tfoot>
+        <TFoot>
           <tr>
-            <td data-label={t("colName")}>
+            <Td data-label={t("colName")}>
               <strong>{t("totalRow")}</strong>
-            </td>
-            <td data-label={t("colOpening")}>{formatCurrency(totals.openingBalance, currency)}</td>
-            <td data-label={t("colIncome")} className="amount-income">
+            </Td>
+            <Td data-label={t("colOpening")} align="right">{formatCurrency(totals.openingBalance, currency)}</Td>
+            <Td data-label={t("colIncome")} align="right" className="amount-income">
               {formatCurrency(totals.income, currency)}
-            </td>
-            <td data-label={t("colExpense")} className="amount-expense">
+            </Td>
+            <Td data-label={t("colExpense")} align="right" className="amount-expense">
               {formatCurrency(totals.expense, currency)}
-            </td>
-            <td data-label={t("colTransfers")}>-</td>
-            <td data-label={t("colNet")} className={signedClass(totals.net)}>
+            </Td>
+            <Td data-label={t("colTransfers")} align="right">-</Td>
+            <Td data-label={t("colNet")} align="right" className={signedClass(totals.net)}>
               {signed(totals.net, currency)}
-            </td>
-            <td data-label={t("colClosing")} className={totals.closingBalance < 0 ? "amount-expense" : undefined}>
+            </Td>
+            <Td data-label={t("colClosing")} align="right" className={totals.closingBalance < 0 ? "amount-expense" : undefined}>
               <strong>{formatCurrency(totals.closingBalance, currency)}</strong>
-            </td>
+            </Td>
           </tr>
-        </tfoot>
+        </TFoot>
       )}
-    </table>
+    </Table>
   );
 }

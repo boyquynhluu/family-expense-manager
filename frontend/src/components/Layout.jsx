@@ -22,6 +22,7 @@ import {
 } from "./AppIcons";
 import FamilySwitcher from "./FamilySwitcher";
 import LanguageSwitcher from "./LanguageSwitcher";
+import { Button, IconButton } from "./ui/Button";
 
 export default function Layout() {
   const { t } = useTranslation("layout");
@@ -55,14 +56,12 @@ export default function Layout() {
   return (
     <div className="app-shell">
       <header className="mobile-topbar">
-        <button
-          type="button"
-          className="mobile-menu-btn"
+        <IconButton variant="dark" className="mobile-menu-btn"
           onClick={() => setSidebarOpen(true)}
           aria-label={t("openMenu")}
         >
           <MenuIcon />
-        </button>
+        </IconButton>
         <div className="brand">
           <span className="brand-icon">💰</span>
           <span>{t("brand")}</span>
@@ -77,14 +76,12 @@ export default function Layout() {
             <span className="brand-icon">💰</span>
             <span>{t("brand")}</span>
           </div>
-          <button
-            type="button"
-            className="sidebar-close-btn"
+          <IconButton variant="dark" className="sidebar-close-btn"
             onClick={() => setSidebarOpen(false)}
             aria-label={t("closeMenu")}
           >
             <CloseIcon />
-          </button>
+          </IconButton>
         </div>
         <FamilySwitcher />
         <LanguageSwitcher />
@@ -113,10 +110,10 @@ export default function Layout() {
             <span>{displayName}</span>
           </div>
         )}
-        <button type="button" className="logout-btn" onClick={logout}>
+        <Button variant="dark-outline" className="mt-3 w-full" onClick={logout}>
           <LogoutIcon />
           {t("logout")}
-        </button>
+        </Button>
       </nav>
       <main className="content">
         <Outlet />

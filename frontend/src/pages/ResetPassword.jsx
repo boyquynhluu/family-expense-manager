@@ -5,6 +5,7 @@ import client from "../api/client";
 import { EyeIcon, EyeOffIcon, KeyIcon } from "../components/AuthIcons";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { LIMITS } from "../utils/inputLimits";
+import { Button, IconButton } from "../components/ui/Button";
 
 export default function ResetPassword() {
   const { t } = useTranslation("resetPassword");
@@ -58,19 +59,17 @@ export default function ResetPassword() {
                   aria-label={t("newPasswordLabel")}
                   required
                 />
-                <button
-                  type="button"
-                  className="auth-input-toggle"
+                <IconButton variant="bare" className="auth-input-toggle"
                   onClick={() => setShowPassword((v) => !v)}
                   aria-label={showPassword ? t("hidePassword") : t("showPassword")}
                 >
                   {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-                </button>
+                </IconButton>
               </div>
 
-              <button type="submit" className="auth-submit" disabled={loading}>
+              <Button variant="hero" size="lg" className="mt-1 w-full" type="submit" disabled={loading}>
                 {loading ? t("saving") : t("submit")}
-              </button>
+              </Button>
             </>
           )}
         </div>

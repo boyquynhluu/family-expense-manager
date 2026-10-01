@@ -2,9 +2,12 @@ import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
-import { BalanceIcon, TrendDownIcon, TrendUpIcon } from "../components/AppIcons";
+import { BalanceIcon, FileTextIcon, TrendDownIcon, TrendUpIcon } from "../components/AppIcons";
 import { formatCurrency } from "../utils/format";
 
+import { Table, THead, TBody, Th, Td } from "../components/ui/Table";
+import { Button } from "../components/ui/Button";
+import { Input, Select } from "../components/ui/Input";
 const INCOME_COLOR = "#16a34a";
 const EXPENSE_COLOR = "#dc2626";
 const CATEGORY_COLORS = ["#4f46e5", "#0ea5e9", "#f59e0b", "#16a34a", "#db2777", "#7c3aed", "#dc2626", "#0891b2"];
@@ -183,19 +186,19 @@ function RangeFilter({ from, to, onChange }) {
             {t("fromLabel")}
             <span className="required-mark" aria-hidden="true"> *</span>
           </span>
-          <input type="date" value={from} onChange={(e) => onChange(e.target.value, to)} required />
+          <Input type="date" value={from} onChange={(e) => onChange(e.target.value, to)} required />
         </label>
         <label className="field">
           <span>
             {t("toLabel")}
             <span className="required-mark" aria-hidden="true"> *</span>
           </span>
-          <input type="date" value={to} onChange={(e) => onChange(from, e.target.value)} required />
+          <Input type="date" value={to} onChange={(e) => onChange(from, e.target.value)} required />
         </label>
         {quickButtons.map(([kind, label]) => (
-          <button key={kind} type="button" className="btn-secondary" onClick={() => onChange(...quickRange(kind))}>
+          <Button variant="secondary" className="self-end" key={kind} onClick={() => onChange(...quickRange(kind))}>
             {label}
-          </button>
+          </Button>
         ))}
       </div>
       {from && to && from > to && <p className="error-text">{t("invalidRange")}</p>}
@@ -268,13 +271,13 @@ function YearTab() {
               {t("yearLabel")}
               <span className="required-mark" aria-hidden="true"> *</span>
             </span>
-            <select value={year} onChange={(e) => setYear(Number(e.target.value))} required>
+            <Select value={year} onChange={(e) => setYear(Number(e.target.value))} required>
               {years.map((y) => (
                 <option key={y} value={y}>
                   {y}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         </div>
       </div>
@@ -289,29 +292,35 @@ function YearTab() {
             <IncomeExpenseChart data={chartRows} />
           </div>
           <div className="section-card">
-            <table>
-              <thead>
+            <Table>
+              <THead>
                 <tr>
-                  <th>{t("month")}</th>
-                  <th>{t("income")}</th>
-                  <th>{t("expense")}</th>
-                  <th>{t("net")}</th>
+                  <Th>{t("month")}</Th>
+                  <Th align="right">{t("income")}</Th>
+                  <Th align="right">{t("expense")}</Th>
+                  <Th align="right">{t("net")}</Th>
                 </tr>
-              </thead>
-              <tbody>
+              </THead>
+              <TBody>
                 {data.months.map((m) => {
                   const net = Number(m.income) - Number(m.expense);
                   return (
                     <tr key={m.yearMonth}>
-                      <td>{m.yearMonth}</td>
-                      <td className="amount-income">{formatCurrency(m.income)}</td>
-                      <td className="amount-expense">{formatCurrency(m.expense)}</td>
-                      <td className={net < 0 ? "amount-expense" : "amount-income"}>{formatCurrency(net)}</td>
+                      <Td data-label={t("month")}>{m.yearMonth}</Td>
+                      <Td data-label={t("income")} align="right" className="amount-income">
+                        {formatCurrency(m.income)}
+                      </Td>
+                      <Td data-label={t("expense")} align="right" className="amount-expense">
+                        {formatCurrency(m.expense)}
+                      </Td>
+                      <Td data-label={t("net")} align="right" className={net < 0 ? "amount-expense" : "amount-income"}>
+                        {formatCurrency(net)}
+                      </Td>
                     </tr>
                   );
                 })}
-              </tbody>
-            </table>
+              </TBody>
+            </Table>
           </div>
         </>
       )}
@@ -335,29 +344,35 @@ function MemberTab({ from, to, onChange }) {
           {rows.length === 0 ? (
             <p className="empty-state">{t("noData")}</p>
           ) : (
-            <table>
-              <thead>
+            <Table>
+              <THead>
                 <tr>
-                  <th>{t("member")}</th>
-                  <th>{t("income")}</th>
-                  <th>{t("expense")}</th>
-                  <th>{t("net")}</th>
+                  <Th>{t("member")}</Th>
+                  <Th align="right">{t("income")}</Th>
+                  <Th align="right">{t("expense")}</Th>
+                  <Th align="right">{t("net")}</Th>
                 </tr>
-              </thead>
-              <tbody>
+              </THead>
+              <TBody>
                 {rows.map((row) => {
                   const net = Number(row.income) - Number(row.expense);
                   return (
                     <tr key={row.userId}>
-                      <td>{row.displayName || t("formerMember")}</td>
-                      <td className="amount-income">{formatCurrency(row.income)}</td>
-                      <td className="amount-expense">{formatCurrency(row.expense)}</td>
-                      <td className={net < 0 ? "amount-expense" : "amount-income"}>{formatCurrency(net)}</td>
+                      <Td data-label={t("member")}>{row.displayName || t("formerMember")}</Td>
+                      <Td data-label={t("income")} align="right" className="amount-income">
+                        {formatCurrency(row.income)}
+                      </Td>
+                      <Td data-label={t("expense")} align="right" className="amount-expense">
+                        {formatCurrency(row.expense)}
+                      </Td>
+                      <Td data-label={t("net")} align="right" className={net < 0 ? "amount-expense" : "amount-income"}>
+                        {formatCurrency(net)}
+                      </Td>
                     </tr>
                   );
                 })}
-              </tbody>
-            </table>
+              </TBody>
+            </Table>
           )}
         </div>
       )}
@@ -393,14 +408,14 @@ function CompareTab({ categoryName }) {
               {t("monthLabel")}
               <span className="required-mark" aria-hidden="true"> *</span>
             </span>
-            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} required />
+            <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} required />
           </label>
           <label className="field">
             <span>
               {t("withMonthLabel")}
               <span className="required-mark" aria-hidden="true"> *</span>
             </span>
-            <input type="month" value={withMonth} onChange={(e) => setWithMonth(e.target.value)} required />
+            <Input type="month" value={withMonth} onChange={(e) => setWithMonth(e.target.value)} required />
           </label>
         </div>
       </div>
@@ -439,29 +454,35 @@ function CompareTab({ categoryName }) {
             {data.categories.length === 0 ? (
               <p className="empty-state">{t("noExpense")}</p>
             ) : (
-              <table>
-                <thead>
+              <Table>
+                <THead>
                   <tr>
-                    <th>{t("category")}</th>
-                    <th>{data.current.yearMonth}</th>
-                    <th>{data.previous.yearMonth}</th>
-                    <th>{t("delta")}</th>
+                    <Th>{t("category")}</Th>
+                    <Th align="right">{data.current.yearMonth}</Th>
+                    <Th align="right">{data.previous.yearMonth}</Th>
+                    <Th align="right">{t("delta")}</Th>
                   </tr>
-                </thead>
-                <tbody>
+                </THead>
+                <TBody>
                   {data.categories.map((c) => {
                     const delta = Number(c.delta);
                     return (
                       <tr key={c.categoryId}>
-                        <td>{categoryName(c.categoryId)}</td>
-                        <td>{formatCurrency(c.current)}</td>
-                        <td>{formatCurrency(c.previous)}</td>
-                        <td className={deltaClass(delta, true)}>{signedCurrency(delta)}</td>
+                        <Td data-label={t("category")}>{categoryName(c.categoryId)}</Td>
+                        <Td data-label={data.current.yearMonth} align="right">
+                          {formatCurrency(c.current)}
+                        </Td>
+                        <Td data-label={data.previous.yearMonth} align="right">
+                          {formatCurrency(c.previous)}
+                        </Td>
+                        <Td data-label={t("delta")} align="right" className={deltaClass(delta, true)}>
+                          {signedCurrency(delta)}
+                        </Td>
                       </tr>
                     );
                   })}
-                </tbody>
-              </table>
+                </TBody>
+              </Table>
             )}
           </div>
         </>
@@ -491,23 +512,24 @@ export default function Reports() {
           <h1>{t("title")}</h1>
           <p className="page-header-subtitle">{t("subtitle")}</p>
         </div>
-        <button type="button" className="btn-secondary no-print" onClick={() => window.print()}>
+        <Button variant="pdf" className="no-print" onClick={() => window.print()}>
+          <FileTextIcon />
           {t("printButton")}
-        </button>
+        </Button>
       </div>
 
       <div className="report-tabs no-print" role="tablist">
         {TABS.map((key) => (
-          <button
+          <Button
             key={key}
-            type="button"
+            variant={tab === key ? "primary" : "secondary"}
+            pill
             role="tab"
             aria-selected={tab === key}
-            className={`report-tab ${tab === key ? "is-active" : ""}`}
             onClick={() => setTab(key)}
           >
             {t(`tabs.${key}`)}
-          </button>
+          </Button>
         ))}
       </div>
 

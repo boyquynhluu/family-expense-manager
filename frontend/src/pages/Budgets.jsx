@@ -9,6 +9,8 @@ import { confirmDialog } from "../utils/confirm";
 import { formatCurrency } from "../utils/format";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
+import { Button, IconButton } from "../components/ui/Button";
+import { Input, Select } from "../components/ui/Input";
 
 function currentYearMonth() {
   const now = new Date();
@@ -188,21 +190,21 @@ export default function Budgets() {
             <form className="inline-form" onSubmit={handleSubmit}>
               <label className="field">
                 {t("budgets:categoryLabel")}
-                <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
                   <option value="">{t("budgets:overallOption")}</option>
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="field">
                 <span>
                   {t("budgets:monthLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
-                <input type="month" value={periodMonth} onChange={(e) => setPeriodMonth(e.target.value)} required />
+                <Input type="month" value={periodMonth} onChange={(e) => setPeriodMonth(e.target.value)} required />
               </label>
               <label className="field">
                 <span>
@@ -211,11 +213,11 @@ export default function Budgets() {
                 </span>
                 <AmountInput placeholder="0" value={limitAmount} onChange={setLimitAmount} required />
               </label>
-              <button type="submit">{editingId ? t("budgets:updateButton") : t("budgets:createButton")}</button>
+              <Button type="submit">{editingId ? t("budgets:updateButton") : t("budgets:createButton")}</Button>
               {editingId && (
-                <button type="button" className="btn-secondary" onClick={cancelEdit}>
+                <Button variant="secondary" onClick={cancelEdit}>
                   {t("common:cancel")}
-                </button>
+                </Button>
               )}
             </form>
             {error && <p className="error-text">{error}</p>}
@@ -230,18 +232,18 @@ export default function Budgets() {
                   {t("budgets:copyFromLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
-                <input type="month" value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)} required />
+                <Input type="month" value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)} required />
               </label>
               <label className="field">
                 <span>
                   {t("budgets:copyToLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
-                <input type="month" value={copyTo} onChange={(e) => setCopyTo(e.target.value)} required />
+                <Input type="month" value={copyTo} onChange={(e) => setCopyTo(e.target.value)} required />
               </label>
-              <button type="submit" disabled={copying}>
+              <Button type="submit" disabled={copying}>
                 {t("budgets:copyButton")}
-              </button>
+              </Button>
             </form>
           </div>
         </>
@@ -276,22 +278,18 @@ export default function Budgets() {
                       {formatCurrency(spent)} / {formatCurrency(b.limitAmount)}
                       {isOwner && (
                         <span className="row-actions">
-                          <button
-                            type="button"
-                            className="icon-btn"
+                          <IconButton
                             onClick={() => startEdit(b)}
                             aria-label={t("common:edit")}
                           >
                             <EditIcon />
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-btn icon-btn-danger"
+                          </IconButton>
+                          <IconButton variant="danger"
                             onClick={() => handleDelete(b.id)}
                             aria-label={t("common:delete")}
                           >
                             <TrashIcon />
-                          </button>
+                          </IconButton>
                         </span>
                       )}
                     </span>

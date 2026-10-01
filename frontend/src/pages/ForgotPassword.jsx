@@ -5,6 +5,7 @@ import client from "../api/client";
 import { MailIcon } from "../components/AuthIcons";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { LIMITS } from "../utils/inputLimits";
+import { Button } from "../components/ui/Button";
 
 export default function ForgotPassword() {
   const { t } = useTranslation("forgotPassword");
@@ -58,9 +59,9 @@ export default function ForgotPassword() {
                 />
               </div>
 
-              <button type="submit" className="auth-submit" disabled={loading}>
+              <Button variant="hero" size="lg" className="mt-1 w-full" type="submit" disabled={loading}>
                 {loading ? t("sending") : t("submit")}
-              </button>
+              </Button>
             </>
           )}
         </div>

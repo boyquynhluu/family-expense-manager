@@ -4,9 +4,12 @@ import client from "../api/client";
 import Pagination from "../components/Pagination";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
+import { confirmDialog } from "../utils/confirm";
 import { formatCurrency, formatServerDateTime } from "../utils/format";
 import { notifyTrashChanged } from "../utils/trashEvents";
 
+import { Button } from "../components/ui/Button";
+import { Table, TBody, Td, Th, THead } from "../components/ui/Table";
 export default function Trash() {
   const { t } = useTranslation("trash");
   const { role, userId } = useAuth();
@@ -24,6 +27,9 @@ export default function Trash() {
   const transactions = transactionsPage.content;
 
   async function handleRestore(kind, id, reload) {
+    const kindLabel = t(`trash:kind.${kind}`);
+    if (!(await confirmDialog(t("trash:restoreConfirm", {kind: kindLabel})))) return;
+
     try {
       await client.post(`/expenses/${kind}/${id}/restore`);
       notifyTrashChanged();
@@ -53,32 +59,32 @@ export default function Trash() {
         {wallets.length === 0 ? (
           <p className="empty-state">{t("walletsEmpty")}</p>
         ) : (
-          <table>
-            <thead>
+          <Table>
+            <THead>
               <tr>
-                <th>{t("colName")}</th>
-                <th>{t("colCurrency")}</th>
-                <th>{t("colDeletedAt")}</th>
-                {isOwner && <th></th>}
+                <Th>{t("colName")}</Th>
+                <Th>{t("colCurrency")}</Th>
+                <Th>{t("colDeletedAt")}</Th>
+                {isOwner && <Th></Th>}
               </tr>
-            </thead>
-            <tbody>
+            </THead>
+            <TBody>
               {wallets.map((w) => (
                 <tr key={w.id}>
-                  <td data-label={t("colName")}>{w.name}</td>
-                  <td data-label={t("colCurrency")}>{w.currency}</td>
-                  <td data-label={t("colDeletedAt")}>{formatDateTime(w.deletedAt)}</td>
+                  <Td data-label={t("colName")}>{w.name}</Td>
+                  <Td data-label={t("colCurrency")}>{w.currency}</Td>
+                  <Td data-label={t("colDeletedAt")}>{formatDateTime(w.deletedAt)}</Td>
                   {isOwner && (
-                    <td className="row-actions">
-                      <button type="button" onClick={() => handleRestore("wallets", w.id, loadWallets)}>
+                    <Td actions>
+                      <Button variant="success-outline" size="sm" onClick={() => handleRestore("wallets", w.id, loadWallets)}>
                         {t("restoreButton")}
-                      </button>
-                    </td>
+                      </Button>
+                    </Td>
                   )}
                 </tr>
               ))}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         )}
         <Pagination pageData={walletsPage} onPageChange={setWalletsPage} />
       </div>
@@ -88,32 +94,32 @@ export default function Trash() {
         {categories.length === 0 ? (
           <p className="empty-state">{t("categoriesEmpty")}</p>
         ) : (
-          <table>
-            <thead>
+          <Table>
+            <THead>
               <tr>
-                <th>{t("colName")}</th>
-                <th>{t("colType")}</th>
-                <th>{t("colDeletedAt")}</th>
-                {isOwner && <th></th>}
+                <Th>{t("colName")}</Th>
+                <Th>{t("colType")}</Th>
+                <Th>{t("colDeletedAt")}</Th>
+                {isOwner && <Th></Th>}
               </tr>
-            </thead>
-            <tbody>
+            </THead>
+            <TBody>
               {categories.map((c) => (
                 <tr key={c.id}>
-                  <td data-label={t("colName")}>{c.name}</td>
-                  <td data-label={t("colType")}>{c.type === "EXPENSE" ? t("typeExpense") : t("typeIncome")}</td>
-                  <td data-label={t("colDeletedAt")}>{formatDateTime(c.deletedAt)}</td>
+                  <Td data-label={t("colName")}>{c.name}</Td>
+                  <Td data-label={t("colType")}>{c.type === "EXPENSE" ? t("typeExpense") : t("typeIncome")}</Td>
+                  <Td data-label={t("colDeletedAt")}>{formatDateTime(c.deletedAt)}</Td>
                   {isOwner && (
-                    <td className="row-actions">
-                      <button type="button" onClick={() => handleRestore("categories", c.id, loadCategories)}>
+                    <Td actions>
+                      <Button variant="success-outline" size="sm" onClick={() => handleRestore("categories", c.id, loadCategories)}>
                         {t("restoreButton")}
-                      </button>
-                    </td>
+                      </Button>
+                    </Td>
                   )}
                 </tr>
               ))}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         )}
         <Pagination pageData={categoriesPage} onPageChange={setCategoriesPage} />
       </div>
@@ -123,39 +129,39 @@ export default function Trash() {
         {transactions.length === 0 ? (
           <p className="empty-state">{t("transactionsEmpty")}</p>
         ) : (
-          <table>
-            <thead>
+          <Table>
+            <THead>
               <tr>
-                <th>{t("colAmount")}</th>
-                <th>{t("colType")}</th>
-                <th>{t("colOccurredAt")}</th>
-                <th>{t("colNote")}</th>
-                <th>{t("colDeletedAt")}</th>
-                <th>{t("colDeletedBy")}</th>
-                <th></th>
+                <Th align="right">{t("colAmount")}</Th>
+                <Th>{t("colType")}</Th>
+                <Th>{t("colOccurredAt")}</Th>
+                <Th>{t("colNote")}</Th>
+                <Th>{t("colDeletedAt")}</Th>
+                <Th>{t("colDeletedBy")}</Th>
+                <Th></Th>
               </tr>
-            </thead>
-            <tbody>
+            </THead>
+            <TBody>
               {transactions.map((t2) => (
                 <tr key={t2.id}>
-                  <td data-label={t("colAmount")}>{formatCurrency(t2.amount)}</td>
-                  <td data-label={t("colType")}>{t2.type === "EXPENSE" ? t("typeExpense") : t("typeIncome")}</td>
-                  <td data-label={t("colOccurredAt")}>{formatDateTime(t2.occurredAt)}</td>
-                  <td data-label={t("colNote")}>{t2.note || "-"}</td>
-                  <td data-label={t("colDeletedAt")}>{formatDateTime(t2.deletedAt)}</td>
+                  <Td data-label={t("colAmount")} align="right">{formatCurrency(t2.amount)}</Td>
+                  <Td data-label={t("colType")}>{t2.type === "EXPENSE" ? t("typeExpense") : t("typeIncome")}</Td>
+                  <Td data-label={t("colOccurredAt")}>{formatDateTime(t2.occurredAt)}</Td>
+                  <Td data-label={t("colNote")}>{t2.note || "-"}</Td>
+                  <Td data-label={t("colDeletedAt")}>{formatDateTime(t2.deletedAt)}</Td>
                   {/* Null for rows deleted before "who deleted it" was recorded (V12). */}
-                  <td data-label={t("colDeletedBy")}>{t2.deletedByName || "-"}</td>
-                  <td className="row-actions">
+                  <Td data-label={t("colDeletedBy")}>{t2.deletedByName || "-"}</Td>
+                  <Td actions>
                     {(isOwner || String(t2.userId) === String(userId)) && (
-                      <button type="button" onClick={() => handleRestore("transactions", t2.id, loadTransactions)}>
+                      <Button variant="success-outline" size="sm" onClick={() => handleRestore("transactions", t2.id, loadTransactions)}>
                         {t("restoreButton")}
-                      </button>
+                      </Button>
                     )}
-                  </td>
+                  </Td>
                 </tr>
               ))}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         )}
         <Pagination pageData={transactionsPage} onPageChange={setTransactionsPage} />
       </div>

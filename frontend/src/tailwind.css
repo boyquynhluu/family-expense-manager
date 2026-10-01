@@ -1,0 +1,8 @@
+/* Tailwind v4 WITHOUT preflight: the app's own index.css already styles buttons, forms,
+   headings, etc., and Tailwind's global reset would restyle all of them. Only the theme
+   tokens and utility classes are pulled in, so utilities are opt-in per element.
+   index.css is unlayered and therefore beats these layered utilities — keep any rule
+   there from targeting elements styled with Tailwind (e.g. table/th/td). */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);

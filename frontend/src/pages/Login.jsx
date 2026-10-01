@@ -7,6 +7,7 @@ import { EyeIcon, EyeOffIcon, FacebookIcon, GithubIcon, GoogleIcon, KeyIcon, Mai
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuth } from "../hooks/useAuth";
 import { LIMITS } from "../utils/inputLimits";
+import { Button, IconButton } from "../components/ui/Button";
 
 export default function Login() {
   const { t } = useTranslation("login");
@@ -127,15 +128,15 @@ export default function Login() {
               />
             </div>
 
-            <button type="submit" className="auth-submit" disabled={loading}>
+            <Button variant="hero" size="lg" className="mt-1 w-full" type="submit" disabled={loading}>
               {loading ? t("verifying") : t("confirm")}
-            </button>
+            </Button>
           </div>
 
           <p className="auth-footer-text">
-            <button type="button" className="auth-forgot" onClick={() => setTwoFactorToken(null)}>
+            <Button variant="link" onClick={() => setTwoFactorToken(null)}>
               {t("backToLogin")}
-            </button>
+            </Button>
           </p>
         </form>
       </div>
@@ -154,9 +155,9 @@ export default function Login() {
 
           {error && <p className="error-text">{error}</p>}
           {showResendVerification && (
-            <button type="button" className="auth-forgot" onClick={handleResendVerification} disabled={resending}>
+            <Button variant="link" onClick={handleResendVerification} disabled={resending}>
               {resending ? t("resendVerificationSending") : t("resendVerification")}
-            </button>
+            </Button>
           )}
 
           <div className="auth-input-group no-required-mark">
@@ -187,14 +188,12 @@ export default function Login() {
               aria-label={t("passwordPlaceholder")}
               required
             />
-            <button
-              type="button"
-              className="auth-input-toggle"
+            <IconButton variant="bare" className="auth-input-toggle"
               onClick={() => setShowPassword((v) => !v)}
               aria-label={showPassword ? t("hidePassword") : t("showPassword")}
             >
               {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-            </button>
+            </IconButton>
           </div>
 
           <div className="auth-options">
@@ -210,9 +209,9 @@ export default function Login() {
             </Link>
           </div>
 
-          <button type="submit" className="auth-submit" disabled={loading}>
+          <Button variant="hero" size="lg" className="mt-1 w-full" type="submit" disabled={loading}>
             {loading ? t("loggingIn") : t("submit")}
-          </button>
+          </Button>
         </div>
 
         <div className="auth-divider">
