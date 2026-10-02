@@ -53,3 +53,28 @@ export async function confirmDialog(text, options = {}) {
   });
   return result.isConfirmed;
 }
+
+/**
+ * Like confirmDialog, but the user must type `word` (e.g. "XOÁ") before the confirm button
+ * does anything — for actions that can't be undone and touch many rows at once (emptying the trash).
+ */
+export async function confirmTypedDialog(text, word, options = {}) {
+  const result = await Swal.fire({
+    title: options.title ?? i18n.t("common:confirmTitle"),
+    text,
+    icon: options.icon ?? "warning",
+    input: "text",
+    inputPlaceholder: word,
+    inputAttributes: { autocapitalize: "characters", autocomplete: "off", "aria-label": word },
+    inputValidator: (value) =>
+      value.trim().toLocaleUpperCase() === word.toLocaleUpperCase()
+        ? undefined
+        : i18n.t("common:typeToConfirm", { word }),
+    showCancelButton: true,
+    confirmButtonText: options.confirmButtonText ?? i18n.t("common:confirm"),
+    cancelButtonText: options.cancelButtonText ?? i18n.t("common:cancel"),
+    customClass: { ...swalCustomClass(options.tone ?? "danger"), input: "custom-swal-input" },
+    buttonsStyling: false,
+  });
+  return result.isConfirmed;
+}

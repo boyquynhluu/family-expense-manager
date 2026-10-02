@@ -19,7 +19,11 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Sanity-checks the transaction-report-template.xlsx resource against the shared report generators. */
+/**
+ * Sanity-checks the transaction-report-template.xlsx resource against the shared report generators.
+ *
+ * @author boyquynhluu
+ */
 class TransactionReportTemplateTest {
 
     private record Row(LocalDateTime occurredAt, String wallet, BigDecimal amount) {

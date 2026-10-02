@@ -35,6 +35,8 @@ import java.time.LocalDate;
  * listed family-wide, so the publisher already leaves the details OUT of such an event (amount/date/note/
  * category/transactionId null) — nothing private ever reaches notification-service, not even its stored
  * payload — and the consumer phrases the message generically. Null (older producers) = not private.
+ *
+ * @author boyquynhluu
  */
 public record ExpenseEvent(
         String eventType,

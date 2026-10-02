@@ -11,6 +11,8 @@ import java.util.Map;
 /**
  * Aggregate report queries over TRANSACTIONS. All date bounds are [fromDate, toExclusive)
  * on occurred_at; soft-deleted rows are excluded and wallet transfers are never involved.
+ *
+ * @author boyquynhluu
  */
 @Dao
 public interface ReportDao {

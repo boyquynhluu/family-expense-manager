@@ -29,6 +29,9 @@ import lombok.extern.slf4j.Slf4j;
 
 import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
 
+/**
+ * @author boyquynhluu
+ */
 @Service
 @Transactional
 @RequiredArgsConstructor

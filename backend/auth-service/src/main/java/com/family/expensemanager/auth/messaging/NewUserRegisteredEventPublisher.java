@@ -14,6 +14,8 @@ import lombok.extern.slf4j.Slf4j;
  * Sends {@link NewUserRegisteredEvent}s to Kafka {@code AFTER_COMMIT}, so admins are never told about
  * a sign-up that rolled back. {@code fallbackExecution} keeps it working when the OAuth2 login flow
  * calls the service outside a transaction.
+ *
+ * @author boyquynhluu
  */
 @Component
 @Slf4j(topic = "NewUserRegisteredEventPublisher")

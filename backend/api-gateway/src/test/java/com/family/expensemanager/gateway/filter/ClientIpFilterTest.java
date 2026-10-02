@@ -10,6 +10,9 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * @author boyquynhluu
+ */
 class ClientIpFilterTest {
 
     private final ClientIpFilter filter = new ClientIpFilter();

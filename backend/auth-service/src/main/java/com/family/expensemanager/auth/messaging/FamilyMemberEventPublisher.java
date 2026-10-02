@@ -15,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
  * from within {@code AuthService.acceptInvite()}/{@code leaveFamily()}/{@code removeMember()},
  * and only actually sends to Kafka {@code AFTER_COMMIT} — same pattern as
  * {@link FamilyInviteEventPublisher}.
+ *
+ * @author boyquynhluu
  */
 @Component
 @Slf4j(topic = "FamilyMemberEventPublisher")

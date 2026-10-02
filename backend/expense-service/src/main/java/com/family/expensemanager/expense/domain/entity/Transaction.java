@@ -11,6 +11,9 @@ import org.seasar.doma.Version;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * @author boyquynhluu
+ */
 @Entity
 @Table(name = "TRANSACTIONS")
 public class Transaction {

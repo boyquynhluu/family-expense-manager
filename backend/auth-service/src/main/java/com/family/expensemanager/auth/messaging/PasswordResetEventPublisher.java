@@ -14,6 +14,8 @@ import lombok.extern.slf4j.Slf4j;
  * Listens for {@link PasswordResetEvent}s raised (via {@code ApplicationEventPublisher})
  * from within {@code AuthService.forgotPassword()}, and only actually sends to Kafka
  * {@code AFTER_COMMIT} — same pattern as {@link UserVerificationEventPublisher}.
+ *
+ * @author boyquynhluu
  */
 @Component
 @Slf4j(topic = "PasswordResetEventPublisher")

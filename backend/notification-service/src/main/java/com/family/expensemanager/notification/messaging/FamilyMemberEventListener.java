@@ -17,6 +17,8 @@ import lombok.extern.slf4j.Slf4j;
  * Consumes {@code family-member-events} published by auth-service when someone joins a
  * family, leaves it, or is removed by the owner, and records an in-app {@link Notification}
  * for the whole family (no email).
+ *
+ * @author boyquynhluu
  */
 @Component
 @RequiredArgsConstructor

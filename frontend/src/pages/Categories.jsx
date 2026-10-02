@@ -3,14 +3,14 @@ import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { EditIcon, TrashIcon } from "../components/AppIcons";
 import SeedDefaultsButton from "../components/SeedDefaultsButton";
+import { Button, IconButton } from "../components/ui/Button";
+import { Field } from "../components/ui/Field";
+import { Input, Select } from "../components/ui/Input";
 import { useAuth } from "../hooks/useAuth";
 import { confirmDialog } from "../utils/confirm";
 import { LIMITS } from "../utils/inputLimits";
-import { notifyTrashChanged } from "../utils/trashEvents";
-import { Button, IconButton } from "../components/ui/Button";
-import { Input, Select } from "../components/ui/Input";
-import { Field } from "../components/ui/Field";
 import { useCleanText } from "../utils/textQuality";
+import { notifyTrashChanged } from "../utils/trashEvents";
 
 export default function Categories() {
   const { t } = useTranslation(["common", "categories"]);
@@ -55,8 +55,10 @@ export default function Categories() {
     const payload = { name, type, icon: icon || null, color: color || null };
     try {
       if (editingId) {
+        if (!(await confirmDialog(t(`categories:submitUpdateConfirm`, {cateName: name})))) return;
         await client.put(`/expenses/categories/${editingId}`, payload);
       } else {
+        if (!(await confirmDialog(t(`categories:submidAddConfirm`, {cateName: name})))) return;
         await client.post("/expenses/categories", payload);
       }
       cancelEdit();

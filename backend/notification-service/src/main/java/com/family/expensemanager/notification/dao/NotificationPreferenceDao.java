@@ -9,6 +9,9 @@ import org.seasar.doma.Update;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * @author boyquynhluu
+ */
 @Dao
 public interface NotificationPreferenceDao {
 

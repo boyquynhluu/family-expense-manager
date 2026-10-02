@@ -14,6 +14,8 @@ import jakarta.validation.Payload;
  * the first 72 BYTES and silently ignores the rest, while {@code @Size} counts characters — a 72-character
  * Vietnamese password ("ư", "ệ"... are 2-3 bytes each) can be well over 72 bytes, so two different passwords
  * sharing that prefix would both be accepted.
+ *
+ * @author boyquynhluu
  */
 @Documented
 @Constraint(validatedBy = MaxUtf8BytesValidator.class)

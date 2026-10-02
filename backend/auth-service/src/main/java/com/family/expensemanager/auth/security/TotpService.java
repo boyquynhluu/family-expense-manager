@@ -17,6 +17,8 @@ import org.springframework.stereotype.Component;
  * RFC 6238 TOTP (the "Google Authenticator" algorithm) — no external library needed,
  * it's just HMAC-SHA1 over a 30s time step, which the JDK already provides. Backs
  * README "9. Không có 2FA".
+ *
+ * @author boyquynhluu
  */
 @Component
 public class TotpService {

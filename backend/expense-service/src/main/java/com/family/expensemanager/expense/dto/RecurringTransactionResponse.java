@@ -5,6 +5,9 @@ import com.family.expensemanager.expense.domain.entity.RecurringTransaction;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
+/**
+ * @author boyquynhluu
+ */
 public record RecurringTransactionResponse(
         Long id,
         Long walletId,

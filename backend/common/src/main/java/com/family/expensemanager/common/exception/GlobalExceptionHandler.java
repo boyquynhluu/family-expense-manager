@@ -16,7 +16,11 @@ import com.family.expensemanager.common.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 
-/** Shared error-response mapping so every service returns the same {@link ErrorResponse} shape. */
+/**
+ * Shared error-response mapping so every service returns the same {@link ErrorResponse} shape.
+ *
+ * @author boyquynhluu
+ */
 @RestControllerAdvice
 @Slf4j(topic = "GlobalExceptionHandler")
 public class GlobalExceptionHandler {

@@ -8,8 +8,8 @@ import Pagination from "../components/Pagination";
 import SeedDefaultsButton from "../components/SeedDefaultsButton";
 import WalletMonthlyTable from "../components/WalletMonthlyTable";
 import { useAuth } from "../hooks/useAuth";
-import { usePagedList } from "../hooks/usePagedList";
 import { useClientPage } from "../hooks/useClientPage";
+import { usePagedList } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
 import { maxDateTime, minDateTime } from "../utils/dateLimits";
 import { formatCurrency } from "../utils/format";
@@ -17,10 +17,10 @@ import { LIMITS } from "../utils/inputLimits";
 import { notifyTrashChanged } from "../utils/trashEvents";
 
 
-import { Table, THead, TBody, Th, Td } from "../components/ui/Table";
 import { Button, IconButton } from "../components/ui/Button";
-import { Input, Select } from "../components/ui/Input";
 import { Field } from "../components/ui/Field";
+import { Input, Select } from "../components/ui/Input";
+import { Table, TBody, Td, Th, THead } from "../components/ui/Table";
 import { useCleanText } from "../utils/textQuality";
 // <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" in the browser's local time.
 function nowForDateTimeInput() {
@@ -118,7 +118,10 @@ export default function Wallets() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    const msgConfirm = editingId ? t("wallets:updateConfirm") : t("wallets:addConfirm");
+    if (!(await confirmDialog(`${msgConfirm} ${name}`, { tone: "primary", icon: "question" }))) return;
     setError("");
+
     const payload = {
       name,
       currency,
@@ -195,13 +198,19 @@ export default function Wallets() {
       occurredAt: transferForm.occurredAt,
       note: transferForm.note || null,
     };
+
     try {
+      const formattedAmount = Number(transferForm.amount).toLocaleString("vi-VN");
       if (editingTransferId) {
+        if (!(await confirmDialog(t("wallets:transferUpdateConfirm", {amount: `${formattedAmount} ₫`})))) return;
+
         await client.put(`/expenses/transfers/${editingTransferId}`, payload);
         toast.success(t("wallets:transferUpdated"));
         cancelTransferEdit();
         reloadTransfers();
       } else {
+        if (!(await confirmDialog(t("wallets:transferAddConfirm", {amount: `${formattedAmount} ₫`})))) return;
+
         await client.post("/expenses/transfers", payload);
         toast.success(t("wallets:transferSaved"));
         setTransferForm(emptyTransferForm());
@@ -267,6 +276,7 @@ export default function Wallets() {
                 pattern="[A-Z]{3}"
                 title={t("wallets:currencyPatternHint")}
                 required
+                disabled
               />
             </Field>
             <Field>

@@ -13,6 +13,9 @@ import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 
+/**
+ * @author boyquynhluu
+ */
 class KafkaSendLoggingTest {
 
     @Test

@@ -6,6 +6,8 @@ import java.time.Instant;
  * Published by auth-service to the {@code family-invite} Kafka topic (key = familyId)
  * when a family owner invites someone by email, and consumed by notification-service
  * to send the invite email.
+ *
+ * @author boyquynhluu
  */
 public record FamilyInviteEvent(
         Long familyId,

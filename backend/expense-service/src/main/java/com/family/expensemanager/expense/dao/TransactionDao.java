@@ -13,6 +13,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * @author boyquynhluu
+ */
 @Dao
 public interface TransactionDao {
 
@@ -91,4 +94,21 @@ public interface TransactionDao {
 
     @Update(sqlFile = true)
     int restore(Long id, Long familyId);
+
+    // --- Trash: permanent deletion (TrashService) ---
+
+    @Select
+    List<Transaction> selectDeletedByFamilyId(Long familyId);
+
+    /** Every family: rows that have sat in the trash since before {@code cutoff} (TrashRetentionScheduler). */
+    @Select
+    List<Transaction> selectDeletedBefore(LocalDateTime cutoff);
+
+    /** Unlike countByWalletId, also counts rows in the trash — they still hold the wallet foreign key. */
+    @Select
+    long countAllByWalletId(Long walletId);
+
+    /** Unlike countByCategoryId, also counts rows in the trash — they still hold the category foreign key. */
+    @Select
+    long countAllByCategoryId(Long categoryId);
 }

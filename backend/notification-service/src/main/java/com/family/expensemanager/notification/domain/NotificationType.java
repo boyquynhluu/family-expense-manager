@@ -1,6 +1,10 @@
 package com.family.expensemanager.notification.domain;
 
-/** Every type stored in NOTIFICATIONS.type; {@code emailSupported} marks the ones that also send an email. */
+/**
+ * Every type stored in NOTIFICATIONS.type; {@code emailSupported} marks the ones that also send an email.
+ *
+ * @author boyquynhluu
+ */
 public enum NotificationType {
     BUDGET_EXCEEDED(true),
     BUDGET_WARNING(false),

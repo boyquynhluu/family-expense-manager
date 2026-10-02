@@ -92,6 +92,8 @@ export default function RecurringTransactions() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    const confirmKey = editingId ? "recurringTransactions:updateConfirm" : "recurringTransactions:addConfirm";
+    if (!(await confirmDialog(t(confirmKey, { amount: formatCurrency(Number(form.amount)) }), { tone: "primary", icon: "question" }))) return;
     setError("");
     const payload = {
       walletId: Number(form.walletId),

@@ -3,7 +3,11 @@ package com.family.expensemanager.expense.dto;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/** One flattened, display-ready row of a transaction report — wallet/category ids already resolved to names. */
+/**
+ * One flattened, display-ready row of a transaction report — wallet/category ids already resolved to names.
+ *
+ * @author boyquynhluu
+ */
 public record TransactionReportRow(
         LocalDateTime occurredAt,
         String walletName,

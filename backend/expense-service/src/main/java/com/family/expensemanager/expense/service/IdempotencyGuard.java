@@ -31,6 +31,8 @@ import lombok.extern.slf4j.Slf4j;
  * genuinely failed attempt (e.g. validation error) doesn't permanently lock that key out from ever being
  * retried. A reservation whose owner crashed before finishing is only held for {@link #IN_FLIGHT_TIMEOUT}
  * before being treated as abandoned and reusable.
+ *
+ * @author boyquynhluu
  */
 @Component
 @RequiredArgsConstructor

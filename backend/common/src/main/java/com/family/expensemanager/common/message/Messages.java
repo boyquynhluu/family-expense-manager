@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
  * instead of scattering the same String literals across the code as class constants. Always
  * resolves Vietnamese — the backend has no per-request locale switching (only the frontend's own
  * i18n does), so there is exactly one bundle per service, no locale suffix needed.
+ *
+ * @author boyquynhluu
  */
 @Component
 @RequiredArgsConstructor

@@ -23,6 +23,8 @@ import lombok.extern.slf4j.Slf4j;
  * Consumes {@code user-verification} events published by auth-service right after
  * registration, and emails the user an HTML verification link to the frontend's
  * {@code /verify?token=...} page, which calls the API then routes to {@code /login}.
+ *
+ * @author boyquynhluu
  */
 @Component
 @Slf4j(topic = "UserVerificationEventListener")

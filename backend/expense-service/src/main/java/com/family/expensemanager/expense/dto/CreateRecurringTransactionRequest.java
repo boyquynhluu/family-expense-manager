@@ -13,6 +13,9 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
+/**
+ * @author boyquynhluu
+ */
 public record CreateRecurringTransactionRequest(
         @NotNull Long walletId,
         @NotNull Long categoryId,

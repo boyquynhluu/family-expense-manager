@@ -1229,6 +1229,26 @@ td .row-actions {
     margin: 4px auto 6px !important;
 }
 
+/* Type-to-confirm field (confirmTypedDialog): same look as components/ui/Input.jsx. */
+.custom-swal-input {
+    width: 100% !important;
+    height: 40px !important;
+    margin: 14px 0 0 !important;
+    padding: 0 12px !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.08em !important;
+    text-align: center !important;
+    box-shadow: none !important;
+}
+
+.custom-swal-input:focus {
+    border-color: #ef4444 !important;
+    outline: 2px solid rgba(239, 68, 68, 0.25) !important;
+}
+
 /* Confirm/cancel buttons of the dialog are Tailwind classes set in utils/confirm.js. */
 
 /* iOS Safari (and some Android browsers) auto-zoom the whole page when a focused

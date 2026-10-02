@@ -5,6 +5,9 @@ import org.springframework.mock.web.MockHttpServletRequest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * @author boyquynhluu
+ */
 class RequestMetadataUtilTest {
 
     @Test

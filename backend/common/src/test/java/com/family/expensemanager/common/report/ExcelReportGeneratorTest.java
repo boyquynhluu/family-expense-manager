@@ -15,6 +15,9 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 
+/**
+ * @author boyquynhluu
+ */
 class ExcelReportGeneratorTest {
 
     private record RowData(String note) {

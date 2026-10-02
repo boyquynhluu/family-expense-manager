@@ -2,6 +2,9 @@ package com.family.expensemanager.auth.dto;
 
 import com.family.expensemanager.auth.domain.entity.User;
 
+/**
+ * @author boyquynhluu
+ */
 public record UserAdminResponse(
         Long id,
         String email,

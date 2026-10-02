@@ -16,6 +16,8 @@ import lombok.RequiredArgsConstructor;
  * response to a stolen/replayed refresh token — killing every session — must survive that rollback.
  * {@code REQUIRES_NEW} only takes effect on a call that goes through the Spring proxy, so this can't be
  * a private method AuthService calls on itself.
+ *
+ * @author boyquynhluu
  */
 @Component
 @RequiredArgsConstructor

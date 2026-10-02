@@ -10,6 +10,8 @@ import org.springframework.data.redis.cache.RedisCacheConfiguration;
  * Makes cache keys come out exactly as documented in README ("Redis"):
  * {@code expense:summary:{familyId}:{yearMonth}} / {@code expense:report:category:{familyId}:{yearMonth}}
  * — Spring's default cache-name/key separator is "::"; this switches it to a single ":".
+ *
+ * @author boyquynhluu
  */
 @EnableCaching
 @Configuration

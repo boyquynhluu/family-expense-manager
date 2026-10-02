@@ -10,6 +10,9 @@ import org.seasar.doma.Table;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * @author boyquynhluu
+ */
 @Entity
 @Table(name = "WALLET_TRANSFERS")
 public class WalletTransfer {

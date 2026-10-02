@@ -5,6 +5,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+/**
+ * @author boyquynhluu
+ */
 public record CreateCategoryRequest(
         @NotBlank @Size(max = 255) @CleanText String name,
         @NotBlank @Pattern(regexp = "INCOME|EXPENSE") String type,

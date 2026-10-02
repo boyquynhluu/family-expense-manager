@@ -27,8 +27,20 @@
   "typeIncome": "Income",
   "restoreConfirm": "Are you sure you want to restore {{kind}}?",
   "kind": {
-      "transactions": "transaction",
-      "categories": "category",
-      "wallets": "wallet"
-    }
+    "transactions": "transaction",
+    "categories": "category",
+    "wallets": "wallet"
+  },
+  "retentionHint": "Items that have been in the trash for more than {{days}} days are deleted permanently.",
+  "purgeButton": "Delete permanently",
+  "purgeConfirm": "Permanently delete this {{kind}}? This CANNOT be undone.",
+  "purgeSuccess": "Deleted permanently",
+  "purgeFailed": "Permanent delete failed",
+  "emptyButton": "Empty trash",
+  "emptyTitle": "Empty the trash?",
+  "emptyConfirm": "All {{count}} items in the trash (members' private transactions included) will be deleted permanently and CANNOT be restored.",
+  "emptyConfirmWord": "DELETE",
+  "emptySuccess": "Permanently deleted {{count}} items",
+  "emptyPartial": "Permanently deleted {{count}} items. {{skipped}} kept because they are still in use (e.g. a wallet with a recurring rule or transfer history, a category with a budget).",
+  "emptyFailed": "Emptying the trash failed"
 }

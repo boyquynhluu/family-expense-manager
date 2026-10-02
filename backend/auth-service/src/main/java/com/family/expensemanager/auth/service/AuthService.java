@@ -94,6 +94,9 @@ import com.family.expensemanager.common.security.RevokedSessionStore;
 
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * @author boyquynhluu
+ */
 @Service
 @Transactional
 @Slf4j(topic = "AuthService")

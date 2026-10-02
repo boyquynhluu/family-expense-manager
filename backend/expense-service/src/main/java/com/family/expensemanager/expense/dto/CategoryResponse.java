@@ -4,6 +4,9 @@ import com.family.expensemanager.expense.domain.entity.Category;
 
 import java.time.LocalDateTime;
 
+/**
+ * @author boyquynhluu
+ */
 public record CategoryResponse(
         Long id, Long familyId, String name, String type, String icon, String color, LocalDateTime deletedAt) {
 

@@ -32,6 +32,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * Excluded from the fast {@code mvn test} unit-test loop (see maven-failsafe-plugin in
  * pom.xml) — runs via {@code mvn verify}, needs a local Docker daemon.
+ *
+ * @author boyquynhluu
  */
 @Testcontainers
 class ExpenseDaoIT {
@@ -163,6 +165,65 @@ class ExpenseDaoIT {
         assertThat(back.getDeletedByUserId()).isNull();
         assertThat(back.getDeletedByName()).isNull();
         assertThat(transactionDao.countByWalletId(wallet.getId())).isEqualTo(1);
+    }
+
+    @Test
+    void trashPurgeQueries_seeTrashedRows_andTheForeignKeysTheyStillHold() {
+        WalletDao walletDao = new WalletDaoImpl(domaConfig);
+        CategoryDao categoryDao = new CategoryDaoImpl(domaConfig);
+        TransactionDao transactionDao = new TransactionDaoImpl(domaConfig);
+        Long familyId = 500L;
+        LocalDateTime deletedAt = LocalDateTime.now().minusDays(40).withNano(0);
+
+        Wallet wallet = insertWallet(walletDao, familyId, "Ví Thùng Rác IT");
+        Category category = insertCategory(categoryDao, familyId, "Danh Mục Thùng Rác IT");
+        Transaction transaction = new Transaction();
+        transaction.setWalletId(wallet.getId());
+        transaction.setCategoryId(category.getId());
+        transaction.setFamilyId(familyId);
+        transaction.setUserId(1L);
+        transaction.setType("EXPENSE");
+        transaction.setAmount(new BigDecimal("50000.00"));
+        transaction.setOccurredAt(LocalDateTime.now().withNano(0));
+        transactionDao.insert(transaction);
+
+        transaction.setDeletedAt(deletedAt);
+        transactionDao.update(transaction);
+        wallet.setDeletedAt(deletedAt);
+        walletDao.update(wallet);
+        category.setDeletedAt(deletedAt);
+        categoryDao.update(category);
+
+        // The trashed transaction no longer counts for "can this wallet be deleted?"... but still holds the FK.
+        assertThat(transactionDao.countByWalletId(wallet.getId())).isZero();
+        assertThat(transactionDao.countAllByWalletId(wallet.getId())).isEqualTo(1);
+        assertThat(transactionDao.countAllByCategoryId(category.getId())).isEqualTo(1);
+
+        assertThat(walletDao.selectDeletedById(wallet.getId())).isPresent();
+        assertThat(categoryDao.selectDeletedById(category.getId())).isPresent();
+        assertThat(walletDao.selectDeletedByFamilyId(familyId)).extracting(Wallet::getId).containsExactly(wallet.getId());
+        assertThat(categoryDao.selectDeletedByFamilyId(familyId)).extracting(Category::getId)
+                .containsExactly(category.getId());
+        assertThat(transactionDao.selectDeletedByFamilyId(familyId)).extracting(Transaction::getId)
+                .containsExactly(transaction.getId());
+
+        // Retention cutoff: in the trash 40 days → picked by a 30-day cutoff, not by a 50-day one.
+        LocalDateTime cutoff30 = LocalDateTime.now().minusDays(30);
+        LocalDateTime cutoff50 = LocalDateTime.now().minusDays(50);
+        assertThat(transactionDao.selectDeletedBefore(cutoff30)).extracting(Transaction::getId).contains(transaction.getId());
+        assertThat(walletDao.selectDeletedBefore(cutoff30)).extracting(Wallet::getId).contains(wallet.getId());
+        assertThat(categoryDao.selectDeletedBefore(cutoff30)).extracting(Category::getId).contains(category.getId());
+        assertThat(transactionDao.selectDeletedBefore(cutoff50)).extracting(Transaction::getId)
+                .doesNotContain(transaction.getId());
+
+        // Transaction first, then the wallet/category it pointed at — the order TrashService sweeps in.
+        Transaction trashed = transactionDao.selectDeletedById(transaction.getId()).orElseThrow();
+        assertThat(transactionDao.delete(trashed)).isEqualTo(1);
+        assertThat(walletDao.delete(walletDao.selectDeletedById(wallet.getId()).orElseThrow())).isEqualTo(1);
+        assertThat(categoryDao.delete(categoryDao.selectDeletedById(category.getId()).orElseThrow())).isEqualTo(1);
+        assertThat(transactionDao.selectDeletedById(transaction.getId())).isEmpty();
+        assertThat(walletDao.selectDeletedById(wallet.getId())).isEmpty();
+        assertThat(categoryDao.selectDeletedById(category.getId())).isEmpty();
     }
 
     @Test

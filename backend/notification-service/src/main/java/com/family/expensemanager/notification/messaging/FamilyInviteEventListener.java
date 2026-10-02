@@ -23,6 +23,8 @@ import lombok.extern.slf4j.Slf4j;
  * Consumes {@code family-invite} events published by auth-service when a family owner
  * invites a new member, and emails them a link to the frontend's
  * {@code /accept-invite?token=...} page — same pattern as {@link PasswordResetEventListener}.
+ *
+ * @author boyquynhluu
  */
 @Component
 @Slf4j(topic = "FamilyInviteEventListener")

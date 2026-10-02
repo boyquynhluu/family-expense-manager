@@ -20,6 +20,8 @@ import lombok.extern.slf4j.Slf4j;
  * Writes and reads TRANSACTION_AUDIT_LOGS. {@link #record} joins the caller's transaction (default
  * propagation) on purpose: the log row commits or rolls back together with the change it describes, so the
  * history can never claim a change that didn't happen, nor miss one that did.
+ *
+ * @author boyquynhluu
  */
 @Service
 @Transactional
@@ -31,6 +33,8 @@ public class TransactionAuditService {
     public static final String ACTION_UPDATED = "UPDATED";
     public static final String ACTION_DELETED = "DELETED";
     public static final String ACTION_RESTORED = "RESTORED";
+    /** Removed from the trash for good (by hand or by TrashRetentionScheduler); the history itself is kept. */
+    public static final String ACTION_PURGED = "PURGED";
 
     private static final int MAX_ACTOR_NAME_LENGTH = 100;
 

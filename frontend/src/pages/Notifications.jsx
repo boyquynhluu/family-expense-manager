@@ -99,6 +99,7 @@ export default function Notifications() {
   }
 
   async function savePreferences() {
+    if (!(await confirmDialog(t("savePreferencesConfirm"), { tone: "primary", icon: "question" }))) return;
     setSavingPreferences(true);
     try {
       const body = preferences.map(({ type, inAppEnabled, emailEnabled }) => ({

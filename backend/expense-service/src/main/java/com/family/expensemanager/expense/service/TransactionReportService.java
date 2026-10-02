@@ -34,6 +34,8 @@ import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
 /**
  * Builds the transaction report row/column model once and hands it to whichever generator
  * matches the requested {@link ReportFormat} — the same data feeds both CSV and Excel exports.
+ *
+ * @author boyquynhluu
  */
 @Service
 @Transactional(readOnly = true)

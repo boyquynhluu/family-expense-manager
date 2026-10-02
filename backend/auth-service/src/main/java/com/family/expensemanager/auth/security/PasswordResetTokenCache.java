@@ -21,6 +21,8 @@ import lombok.RequiredArgsConstructor;
  * previous one had actually expired — the one downside is the previous link silently stops
  * working a little early, which is the same behaviour this whole feature already tolerates
  * for a token that's genuinely about to expire.
+ *
+ * @author boyquynhluu
  */
 @Component
 @RequiredArgsConstructor

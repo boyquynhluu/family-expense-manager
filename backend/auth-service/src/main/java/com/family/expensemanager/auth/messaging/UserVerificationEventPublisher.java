@@ -15,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
  * from within {@code AuthService.register()}, and only actually sends to Kafka
  * {@code AFTER_COMMIT} so the email is never sent for a registration that rolled back
  * — same pattern as expense-service's {@code ExpenseEventPublisher}.
+ *
+ * @author boyquynhluu
  */
 @Component
 @Slf4j(topic = "UserVerificationEventPublisher")

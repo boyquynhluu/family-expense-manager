@@ -22,6 +22,9 @@ import com.family.expensemanager.common.security.RevokedSessionStore;
 
 import lombok.RequiredArgsConstructor;
 
+/**
+ * @author boyquynhluu
+ */
 @Configuration
 @EnableMethodSecurity
 @RequiredArgsConstructor

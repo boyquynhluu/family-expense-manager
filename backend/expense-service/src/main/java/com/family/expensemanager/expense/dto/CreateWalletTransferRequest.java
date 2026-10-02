@@ -10,6 +10,9 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * @author boyquynhluu
+ */
 public record CreateWalletTransferRequest(
         @NotNull Long fromWalletId,
         @NotNull Long toWalletId,

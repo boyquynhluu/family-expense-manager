@@ -5,7 +5,11 @@ import com.family.expensemanager.expense.domain.entity.Wallet;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/** @param ownerUserId the member who owns it, or null for a wallet shared by the whole family. */
+/**
+ * @param ownerUserId the member who owns it, or null for a wallet shared by the whole family.
+ *
+ * @author boyquynhluu
+ */
 public record WalletResponse(
         Long id, Long familyId, String name, String currency, BigDecimal initialBalance, BigDecimal currentBalance,
         LocalDateTime deletedAt, Long ownerUserId) {

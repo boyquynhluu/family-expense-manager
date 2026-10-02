@@ -13,6 +13,8 @@
   "colorLabel": "Màu",
   "submitAdd": "Thêm danh mục",
   "submitUpdate": "Cập nhật",
+  "submidAddConfirm": "Bạn muốn thêm mới danh mục {{cateName}}?",
+  "submitUpdateConfirm": "Bạn muốn cập nhật danh mục {{cateName}}?",
   "listTitle": "Danh sách danh mục",
   "emptyState": "Chưa có danh mục nào",
   "saveFailed": "Lưu danh mục thất bại",

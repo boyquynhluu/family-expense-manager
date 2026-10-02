@@ -26,6 +26,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * @author boyquynhluu
+ */
 @ExtendWith(MockitoExtension.class)
 class NewUserRegisteredEventListenerTest {
 

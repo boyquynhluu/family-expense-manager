@@ -9,6 +9,9 @@ import org.seasar.doma.Table;
 
 import java.time.LocalDateTime;
 
+/**
+ * @author boyquynhluu
+ */
 @Entity
 @Table(name = "REFRESH_TOKENS")
 public class RefreshToken {

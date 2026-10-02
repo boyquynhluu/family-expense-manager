@@ -14,6 +14,8 @@ import lombok.RequiredArgsConstructor;
  * {@code TransactionAwareDataSourceProxy} wrapping the Spring-managed DataSource, so DAO
  * calls made inside a {@code @Transactional} method reuse the same JDBC connection/transaction
  * instead of opening a new one — see each service's {@code DomaConfiguration}.
+ *
+ * @author boyquynhluu
  */
 @RequiredArgsConstructor
 public class AppDomaConfig implements Config {

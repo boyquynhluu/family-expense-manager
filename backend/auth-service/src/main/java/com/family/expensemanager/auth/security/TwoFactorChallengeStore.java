@@ -16,6 +16,8 @@ import lombok.RequiredArgsConstructor;
  * be usable as a bearer token against any other endpoint. Redis (already wired for
  * RevokedSessionStore) is a natural fit: the challenge only needs to survive a couple of
  * minutes while the user types their code.
+ *
+ * @author boyquynhluu
  */
 @Component
 @RequiredArgsConstructor

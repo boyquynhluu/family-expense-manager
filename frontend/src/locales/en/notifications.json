@@ -32,5 +32,6 @@
     "MEMBER_REMOVED": "Member removed from the family",
     "WALLET_TRANSFERRED": "Wallet transfer",
     "EXPENSE_DELETED": "Transaction deleted"
-  }
+  },
+  "savePreferencesConfirm": "Save notification preferences?"
 }

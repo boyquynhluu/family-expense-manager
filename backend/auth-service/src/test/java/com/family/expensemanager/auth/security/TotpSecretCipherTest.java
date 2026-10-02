@@ -7,6 +7,9 @@ import java.util.Base64;
 
 import org.junit.jupiter.api.Test;
 
+/**
+ * @author boyquynhluu
+ */
 class TotpSecretCipherTest {
 
     private static final String KEY = "ZGV2LW9ubHktdG90cC1lbmNyeXB0aW9uLWtleS0zMmI=";

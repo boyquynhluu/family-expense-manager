@@ -8,7 +8,11 @@ import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** The frontend sends/reads the flag as "isPrivate" — guard the JSON name of the boolean record component. */
+/**
+ * The frontend sends/reads the flag as "isPrivate" — guard the JSON name of the boolean record component.
+ *
+ * @author boyquynhluu
+ */
 class TransactionPrivacyJsonTest {
 
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();

@@ -680,6 +680,7 @@ stateDiagram-v2
     [*] --> Active: Tạo ví, danh mục, giao dịch
     Active --> InTrash: DELETE — chỉ đặt deleted_at
     InTrash --> Active: POST /id/restore — xoá deleted_at
+    InTrash --> [*]: Xoá vĩnh viễn — nút trên từng dòng, Dọn sạch thùng rác, hoặc job sau 30 ngày
     note right of Active
         Danh sách bình thường
         chỉ lấy dòng deleted_at IS NULL
@@ -692,7 +693,23 @@ stateDiagram-v2
 
 Quyền xoá và khôi phục: ví và danh mục chỉ OWNER; giao dịch thì người tạo hoặc OWNER. Khoản chuyển giữa các ví bị xoá cứng, không đi qua thùng rác. Ví đã có lịch sử chuyển thì không xoá được.
 
-**TODO — chưa làm, đang PENDING (không cấp thiết, quy mô project còn nhỏ nên chưa cần):** dòng vào thùng rác (`deleted_at IS NOT NULL`) không có job nào purge vĩnh viễn — tồn tại mãi trong DB, không có hạn tự động xoá hẳn. Việc này chỉ tăng dung lượng DB rất chậm theo thời gian, không ảnh hưởng chức năng hiện tại. Nếu làm: cần chốt trước số ngày giữ trong thùng rác (ví dụ 30 ngày) rồi purge vĩnh viễn bằng 1 job `@Scheduled`; với riêng Transaction có ảnh hoá đơn, job đó phải gọi thêm `receiptStorageService.delete(receiptPath)` trước khi xoá DB row, tránh để lại file mồ côi trên storage (hiện `TransactionDao.delete()` — xoá cứng — đã có sẵn nhưng chưa được service nào gọi tới).
+**Xoá vĩnh viễn** (`TrashController`, `TrashService`):
+
+| Endpoint | Ai được dùng |
+|---|---|
+| `DELETE /api/expenses/trash/transactions/{id}` | Người tạo hoặc OWNER (như khôi phục). Giao dịch riêng tư của người khác trả 404, kể cả với OWNER |
+| `DELETE /api/expenses/trash/wallets/{id}` | OWNER |
+| `DELETE /api/expenses/trash/categories/{id}` | OWNER |
+| `DELETE /api/expenses/trash` — "Dọn sạch thùng rác" | OWNER; phải gõ "XOÁ" để xác nhận. Gồm cả giao dịch riêng tư của thành viên khác: chỉ người tạo mới đưa được chúng vào thùng rác, nên xoá hẳn không làm lộ gì. Trả về số mục đã xoá theo loại và số mục được giữ lại |
+
+`TrashRetentionScheduler` chạy lúc 03:30 mỗi đêm (`trash.purge-cron`) và xoá vĩnh viễn mọi mục nằm trong thùng rác quá `trash.retention-days` ngày (mặc định 30, env `TRASH_RETENTION_DAYS`), ở mọi gia đình.
+
+Cả ba đường (nút từng dòng, Dọn sạch, job) đi qua **cùng một mã xử lý cho từng dòng** trong `TrashService`:
+- **Thứ tự:** giao dịch trước, rồi mới đến ví và danh mục — giao dịch trong thùng rác vẫn giữ khoá ngoại tới ví/danh mục của nó.
+- **Ví/danh mục còn bị tham chiếu thì không xoá:** còn giao dịch (đếm cả giao dịch trong thùng rác — `countAllByWalletId`/`countAllByCategoryId`), giao dịch định kỳ, lịch sử chuyển tiền (ví) hoặc ngân sách (danh mục). Xoá từng dòng thì trả 409 nói rõ lý do; Dọn sạch và job thì bỏ qua mục đó, để lại trong thùng rác và thử lại lần sau.
+- **Mỗi dòng một transaction riêng** (`TrashPurger`, `REQUIRES_NEW`): một dòng lỗi không làm hoàn tác các dòng đã xoá, và job vẫn chạy tiếp.
+- **Ảnh hoá đơn** bị xoá khỏi storage sau khi việc xoá dòng giao dịch đã commit (lỡ xoá file lỗi thì chỉ còn file thừa, không bao giờ có giao dịch trỏ tới file đã mất).
+- **Lịch sử giao dịch được giữ lại:** `TRANSACTION_AUDIT_LOGS` cố ý không có khoá ngoại tới `TRANSACTIONS`, và mỗi lần xoá vĩnh viễn ghi thêm một dòng `PURGED` (người xoá; với job là "Hệ thống (tự dọn thùng rác)").
 
 ### Mục 11 — Integration test chạm DB thật
 

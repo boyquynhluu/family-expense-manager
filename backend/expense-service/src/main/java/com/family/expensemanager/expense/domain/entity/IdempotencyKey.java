@@ -9,7 +9,11 @@ import org.seasar.doma.GenerationType;
 import org.seasar.doma.Id;
 import org.seasar.doma.Table;
 
-/** One reserved/completed {@code Idempotency-Key} — see {@code IdempotencyGuard}. */
+/**
+ * One reserved/completed {@code Idempotency-Key} — see {@code IdempotencyGuard}.
+ *
+ * @author boyquynhluu
+ */
 @Entity
 @Table(name = "IDEMPOTENCY_KEYS")
 public class IdempotencyKey {

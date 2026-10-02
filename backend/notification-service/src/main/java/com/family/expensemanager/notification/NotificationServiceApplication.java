@@ -10,6 +10,9 @@ import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.context.annotation.Import;
 import org.springframework.kafka.annotation.EnableKafka;
 
+/**
+ * @author boyquynhluu
+ */
 @EnableDiscoveryClient
 @EnableKafka
 @Import({OpenApiConfig.class, GlobalExceptionHandler.class, JwtUtil.class, RevokedSessionStore.class})

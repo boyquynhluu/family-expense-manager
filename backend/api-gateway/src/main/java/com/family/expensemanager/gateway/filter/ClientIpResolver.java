@@ -12,6 +12,8 @@ import java.util.regex.Pattern;
  * honoured when the direct peer is itself a private/loopback hop (docker network, nginx,
  * cloudflared); the RIGHTMOST X-Forwarded-For entry is the one appended by that nearest
  * trusted proxy, whereas everything to its left is client-controlled and forgeable.
+ *
+ * @author boyquynhluu
  */
 public final class ClientIpResolver {
 

@@ -7,7 +7,11 @@ import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 
 import com.family.expensemanager.auth.domain.entity.User;
 
-/** Wraps Google's OIDC claims together with our resolved local {@link User}. */
+/**
+ * Wraps Google's OIDC claims together with our resolved local {@link User}.
+ *
+ * @author boyquynhluu
+ */
 public class AppOidcUser extends DefaultOidcUser implements AppUserPrincipal {
 
     private final User user;

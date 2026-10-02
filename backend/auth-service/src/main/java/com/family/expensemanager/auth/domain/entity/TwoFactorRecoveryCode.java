@@ -9,7 +9,11 @@ import org.seasar.doma.Table;
 
 import java.time.LocalDateTime;
 
-/** One single-use backup code for signing in when a 2FA-enabled user loses their authenticator device. */
+/**
+ * One single-use backup code for signing in when a 2FA-enabled user loses their authenticator device.
+ *
+ * @author boyquynhluu
+ */
 @Entity
 @Table(name = "TWO_FACTOR_RECOVERY_CODES")
 public class TwoFactorRecoveryCode {

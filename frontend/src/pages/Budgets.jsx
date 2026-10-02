@@ -6,7 +6,7 @@ import { AlertIcon, EditIcon, TrashIcon } from "../components/AppIcons";
 import AmountInput from "../components/AmountInput";
 import Pagination from "../components/Pagination";
 import { confirmDialog } from "../utils/confirm";
-import { formatCurrency } from "../utils/format";
+import { formatCurrency, formatYearMonth } from "../utils/format";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
 import { Button, IconButton } from "../components/ui/Button";
@@ -115,6 +115,9 @@ export default function Budgets() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    const confirmKey = editingId ? "budgets:updateConfirm" : "budgets:addConfirm";
+    const confirmVars = { amount: formatCurrency(Number(limitAmount)), month: formatYearMonth(periodMonth) };
+    if (!(await confirmDialog(t(confirmKey, confirmVars), { tone: "primary", icon: "question" }))) return;
     setError("");
     const payload = {
       categoryId: categoryId === "" ? null : Number(categoryId),
@@ -151,6 +154,7 @@ export default function Budgets() {
       toast.error(t("budgets:copySameMonth"));
       return;
     }
+    if (!(await confirmDialog(t("budgets:copyConfirm", { from: formatYearMonth(copyFrom), to: formatYearMonth(copyTo) }), { tone: "primary", icon: "question" }))) return;
     setCopying(true);
     try {
       const res = await client.post("/expenses/budgets/copy", { fromMonth: copyFrom, toMonth: copyTo });

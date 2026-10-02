@@ -6,6 +6,8 @@ import java.math.BigDecimal;
  * Business floor for a transaction's amount (thu/chi and recurring rules — not wallet transfers or budgets).
  * Every family wallet uses one currency (WalletService.requireConsistentCurrency), today always VND.
  * Keep in sync with frontend utils/inputLimits.js → LIMITS.minTransactionAmount.
+ *
+ * @author boyquynhluu
  */
 public final class TransactionAmounts {
 

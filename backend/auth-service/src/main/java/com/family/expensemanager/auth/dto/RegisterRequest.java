@@ -11,7 +11,11 @@ import jakarta.validation.constraints.Size;
 
 import java.util.Locale;
 
-/** @param phone optional; normalised to +84… so it can be used to log in instead of the email. */
+/**
+ * @param phone optional; normalised to +84… so it can be used to log in instead of the email.
+ *
+ * @author boyquynhluu
+ */
 public record RegisterRequest(
         @NotBlank @Size(max = 100) @CleanText String familyName,
         @NotBlank @Email @Size(max = 255) String email,

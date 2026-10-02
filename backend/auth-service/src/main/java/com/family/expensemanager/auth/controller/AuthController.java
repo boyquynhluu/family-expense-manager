@@ -55,6 +55,8 @@ import lombok.extern.slf4j.Slf4j;
  * Base path matches the gateway route predicate {@code Path=/api/auth/**} exactly
  * (that route has no StripPrefix filter), so the same paths work both directly
  * against this service and through the gateway.
+ *
+ * @author boyquynhluu
  */
 @RestController
 @RequestMapping("/api/auth")

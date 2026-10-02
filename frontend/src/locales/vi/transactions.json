@@ -40,7 +40,7 @@
   "importErrorsHeader": "{{count}} dòng lỗi:",
   "importRowError": "Dòng {{row}}: {{message}}",
   "importMoreErrors": "...và {{count}} lỗi khác",
-  "historyTitle": "Lịch sử giao dịch",
+  "historyTitle": "Lịch sử thay đổi",
   "importButton": "Nhập từ CSV/Excel",
   "importing": "Đang nhập...",
   "exportCsv": "Xuất CSV",
@@ -73,7 +73,6 @@
   "selectRowAria": "Chọn giao dịch",
   "duplicateAria": "Sao chép",
   "historyAria": "Lịch sử thay đổi",
-  "historyTitle": "Lịch sử thay đổi",
   "historySubtitle": "Ai đã tạo, sửa, xoá hoặc khôi phục giao dịch này, và đã thay đổi những gì.",
   "historyEmpty": "Chưa có lịch sử — giao dịch này được tạo trước khi tính năng ghi lịch sử ra đời.",
   "historyLoadFailed": "Không tải được lịch sử giao dịch",
@@ -81,6 +80,7 @@
   "historyActionUPDATED": "Chỉnh sửa",
   "historyActionDELETED": "Xoá",
   "historyActionRESTORED": "Khôi phục",
+  "historyActionPURGED": "Xoá vĩnh viễn",
   "historyNoChanges": "Lưu lại nhưng không thay đổi gì",
   "historyField_amount": "Số tiền",
   "historyField_type": "Loại",
@@ -92,5 +92,10 @@
   "historyTypeIncome": "Thu",
   "historyTypeExpense": "Chi",
   "historyReceiptYes": "Có",
-  "historyReceiptNo": "Không"
+  "historyReceiptNo": "Không",
+  "addConfirm": "Thêm giao dịch {{amount}}?",
+  "updateConfirm": "Cập nhật giao dịch thành {{amount}}?",
+  "uploadReceiptConfirm": "Tải ảnh hoá đơn \"{{file}}\" lên giao dịch này?",
+  "replaceReceiptConfirm": "Thay ảnh hoá đơn hiện tại bằng \"{{file}}\"? Ảnh cũ sẽ bị xoá.",
+  "importConfirm": "Nhập giao dịch từ file \"{{file}}\"? Mỗi dòng hợp lệ sẽ thành một giao dịch mới."
 }

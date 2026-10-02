@@ -6,6 +6,8 @@ import java.time.Instant;
  * Published by auth-service to the {@code family-member-events} Kafka topic (key = familyId)
  * when someone joins a family (invite accepted), leaves it, or is removed by the owner,
  * and consumed by notification-service to record an in-app notification for the family.
+ *
+ * @author boyquynhluu
  */
 public record FamilyMemberEvent(
         String eventType,

@@ -9,6 +9,8 @@ import java.util.Locale;
  * Validation lives in the calling service (not here) so a business-rule violation is logged at the
  * throw site via {@code logged(log, ...)}, same as everywhere else in this codebase — a plain DTO
  * has no logger of its own.
+ *
+ * @author boyquynhluu
  */
 public record TransactionReportFilter(
         Long walletId, Long categoryId, String type, LocalDate fromDate, LocalDate toDate,

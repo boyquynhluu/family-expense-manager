@@ -64,6 +64,9 @@ import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
 // No class-level @Transactional on purpose: each row is created through TransactionService (its own
 // transaction) and a failing row is caught and reported, so one shared outer transaction would be
 // marked rollback-only by that failure and discard the rows that did import.
+/**
+ * @author boyquynhluu
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j(topic = "TransactionImportService")

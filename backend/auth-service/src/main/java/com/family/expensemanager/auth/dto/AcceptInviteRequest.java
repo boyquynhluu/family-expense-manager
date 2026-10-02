@@ -10,6 +10,8 @@ import jakarta.validation.constraints.Size;
  * created); an existing account just gets a new membership and needs neither field —
  * see AuthService#acceptInvite, which validates that case manually since it can't be
  * expressed with static @NotBlank annotations here. The size limits still apply when present.
+ *
+ * @author boyquynhluu
  */
 public record AcceptInviteRequest(@Size(max = 100) @CleanText String displayName, @Size(min = 8, max = 72) @MaxUtf8Bytes(72) String password) {
 }

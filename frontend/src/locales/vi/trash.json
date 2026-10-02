@@ -27,8 +27,20 @@
   "typeIncome": "Thu nhập",
   "restoreConfirm": "Bạn có chắc muốn khôi phục {{kind}} không?",
   "kind": {
-      "transactions": "giao dịch",
-      "categories": "danh mục",
-      "wallets": "ví"
-    }
+    "transactions": "giao dịch",
+    "categories": "danh mục",
+    "wallets": "ví"
+  },
+  "retentionHint": "Mục nằm trong thùng rác quá {{days}} ngày sẽ tự động bị xoá vĩnh viễn.",
+  "purgeButton": "Xoá vĩnh viễn",
+  "purgeConfirm": "Xoá vĩnh viễn {{kind}} này? Thao tác này KHÔNG THỂ hoàn tác.",
+  "purgeSuccess": "Đã xoá vĩnh viễn",
+  "purgeFailed": "Xoá vĩnh viễn thất bại",
+  "emptyButton": "Dọn sạch thùng rác",
+  "emptyTitle": "Dọn sạch thùng rác?",
+  "emptyConfirm": "Toàn bộ {{count}} mục trong thùng rác (kể cả giao dịch riêng tư của các thành viên) sẽ bị xoá vĩnh viễn và KHÔNG THỂ khôi phục.",
+  "emptyConfirmWord": "XOÁ",
+  "emptySuccess": "Đã xoá vĩnh viễn {{count}} mục",
+  "emptyPartial": "Đã xoá vĩnh viễn {{count}} mục. {{skipped}} mục được giữ lại vì vẫn đang được dùng (ví dụ ví còn giao dịch định kỳ hoặc lịch sử chuyển tiền, danh mục còn ngân sách).",
+  "emptyFailed": "Dọn sạch thùng rác thất bại"
 }

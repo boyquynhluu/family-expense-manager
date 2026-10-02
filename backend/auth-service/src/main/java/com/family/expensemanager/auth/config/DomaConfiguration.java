@@ -20,6 +20,9 @@ import org.springframework.jdbc.datasource.TransactionAwareDataSourceProxy;
 
 import javax.sql.DataSource;
 
+/**
+ * @author boyquynhluu
+ */
 @Configuration
 public class DomaConfiguration {
 

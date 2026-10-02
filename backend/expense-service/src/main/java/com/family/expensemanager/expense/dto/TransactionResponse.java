@@ -5,6 +5,9 @@ import com.family.expensemanager.expense.domain.entity.Transaction;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * @author boyquynhluu
+ */
 public record TransactionResponse(
         Long id,
         Long walletId,

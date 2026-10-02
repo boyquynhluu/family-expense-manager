@@ -1,7 +1,6 @@
 {
   "title": "Hồ sơ",
   "subtitle": "Quản lý thông tin tài khoản của bạn",
-
   "relationshipFather": "Bố",
   "relationshipMother": "Mẹ",
   "relationshipGrandfather": "Ông",
@@ -14,9 +13,7 @@
   "relationshipHusband": "Chồng",
   "relationshipWife": "Vợ",
   "relationshipOther": "Khác",
-
   "notAvailable": "-",
-
   "personalInfoTitle": "Thông tin cá nhân",
   "emailLabel": "Email",
   "displayNameLabel": "Tên hiển thị",
@@ -28,7 +25,6 @@
   "saveChanges": "Lưu thay đổi",
   "profileUpdateSuccess": "Cập nhật hồ sơ thành công",
   "profileUpdateFailed": "Cập nhật hồ sơ thất bại",
-
   "changePasswordTitle": "Đổi mật khẩu",
   "oauthNoPasswordNotice": "Tài khoản này đăng nhập qua {{provider}}, không có mật khẩu để đổi.",
   "currentPasswordLabel": "Mật khẩu hiện tại",
@@ -38,7 +34,6 @@
   "changePasswordButton": "Đổi mật khẩu",
   "passwordChangeSuccess": "Đổi mật khẩu thành công",
   "passwordChangeFailed": "Đổi mật khẩu thất bại",
-
   "familyMembersTitle": "Thành viên gia đình",
   "noMembers": "Chưa có thành viên nào.",
   "relationshipColumnHeader": "Quan hệ",
@@ -51,7 +46,6 @@
   "sendInviteButton": "Gửi lời mời",
   "inviteSentDefault": "Đã gửi lời mời đến {{email}}",
   "inviteFailed": "Gửi lời mời thất bại",
-
   "familyNameLabel": "Tên gia đình",
   "renameFamilyButton": "Đổi tên",
   "familyRenamed": "Đã đổi tên gia đình",
@@ -63,7 +57,6 @@
   "leaveFamilyButton": "Rời gia đình",
   "leaveFamilyConfirm": "Rời khỏi gia đình này? Bạn sẽ mất quyền truy cập dữ liệu của gia đình.",
   "leaveFamilyFailed": "Rời gia đình thất bại",
-
   "pendingInvitesTitle": "Lời mời đang chờ",
   "noPendingInvites": "Không có lời mời nào đang chờ.",
   "invitedAtHeader": "Gửi lúc",
@@ -75,7 +68,6 @@
   "cancelInviteFailed": "Huỷ lời mời thất bại",
   "inviteResent": "Đã gửi lại lời mời đến {{email}}",
   "resendInviteFailed": "Gửi lại lời mời thất bại",
-
   "sessionsTitle": "Phiên đăng nhập",
   "noSessions": "Không có phiên đăng nhập nào đang hoạt động.",
   "deviceHeader": "Thiết bị",
@@ -93,7 +85,6 @@
   "actionFailed": "Thao tác thất bại",
   "revokingOthersLoading": "Đang đăng xuất...",
   "revokeOtherSessionsButton": "Đăng xuất khỏi mọi thiết bị khác",
-
   "twoFactorTitle": "Xác thực 2 lớp (2FA)",
   "recoveryCodesNotice": "Đã bật 2FA thành công. Lưu lại các mã khôi phục dưới đây ở nơi an toàn — mỗi mã chỉ dùng được một lần khi bạn mất thiết bị xác thực. Mã sẽ không hiển thị lại.",
   "recoveryCodesSavedButton": "Tôi đã lưu, đóng",
@@ -127,10 +118,8 @@
   "twoFactorStepVerifyTitle": "Nhập mã xác thực",
   "twoFactorStepVerifyHint": "Nhập mã 6 số đang hiển thị trong ứng dụng để hoàn tất.",
   "startingTwoFactorLoading": "Đang tạo mã...",
-
   "confirmDisableCodeLabel": "Nhập mã xác thực (hoặc mã khôi phục) để xác nhận tắt 2FA",
   "codeOrRecoveryPlaceholder": "Mã 6 số hoặc mã khôi phục",
-
   "changeEmailTitle": "Đổi email",
   "changeEmailNotice": "Chúng tôi sẽ gửi link xác nhận đến email mới. Email chỉ được đổi sau khi bạn mở link đó, và mọi thiết bị sẽ bị đăng xuất để đăng nhập lại.",
   "newEmailLabel": "Email mới",
@@ -139,14 +128,12 @@
   "changeEmailSent": "Đã gửi link xác nhận đến {{email}}. Vui lòng kiểm tra hộp thư.",
   "changeEmailFailed": "Không gửi được yêu cầu đổi email",
   "reauthNeedsTwoFactor": "Tài khoản này đăng nhập qua {{provider}} và chưa có mật khẩu. Hãy bật xác thực 2 lớp (2FA) bên dưới để thực hiện thao tác này.",
-
   "exportDataTitle": "Dữ liệu cá nhân",
   "exportDataNotice": "Tải về bản sao thông tin tài khoản, các gia đình bạn tham gia và các phiên đăng nhập dưới dạng tệp JSON (không gồm mật khẩu hay mã bí mật).",
   "exportDataButton": "Tải dữ liệu cá nhân",
   "exportingData": "Đang tải...",
   "exportSuccess": "Đã tải dữ liệu cá nhân",
   "exportFailed": "Không tải được dữ liệu cá nhân",
-
   "deleteAccountTitle": "Xoá tài khoản",
   "deleteAccountNotice": "Xoá vĩnh viễn tài khoản của bạn. Nếu bạn là chủ hộ của gia đình còn thành viên khác, hãy chuyển quyền chủ hộ trước. Gia đình chỉ có mình bạn sẽ bị xoá cùng. Không thể hoàn tác.",
   "deleteAccountButton": "Xoá tài khoản của tôi",
@@ -154,5 +141,11 @@
   "deleteAccountConfirmTitle": "Xoá tài khoản?",
   "deleteAccountConfirm": "Tài khoản của bạn sẽ bị xoá vĩnh viễn và không thể khôi phục. Bạn chắc chắn muốn tiếp tục?",
   "deleteAccountConfirmButton": "Xoá vĩnh viễn",
-  "deleteAccountFailed": "Xoá tài khoản thất bại"
+  "deleteAccountFailed": "Xoá tài khoản thất bại",
+  "disableTwoFactorConfirm": "Tắt xác thực 2 lớp? Tài khoản sẽ chỉ còn được bảo vệ bằng mật khẩu.",
+  "renameFamilyConfirm": "Đổi tên gia đình thành \"{{name}}\"?",
+  "inviteConfirm": "Gửi lời mời tham gia gia đình tới {{email}}?",
+  "profileUpdateConfirm": "Lưu thay đổi thông tin cá nhân?",
+  "passwordChangeConfirm": "Đổi mật khẩu? Sau khi đổi, bạn cần đăng nhập lại.",
+  "changeEmailConfirm": "Đổi email đăng nhập sang {{email}}? Email chỉ đổi sau khi bạn mở link xác nhận gửi tới địa chỉ mới."
 }

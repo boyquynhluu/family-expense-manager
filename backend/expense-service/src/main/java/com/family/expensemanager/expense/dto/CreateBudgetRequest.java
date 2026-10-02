@@ -7,6 +7,9 @@ import jakarta.validation.constraints.Pattern;
 
 import java.math.BigDecimal;
 
+/**
+ * @author boyquynhluu
+ */
 public record CreateBudgetRequest(
         Long categoryId,
         @NotNull @Pattern(regexp = "\\d{4}-(0[1-9]|1[0-2])") String periodMonth,

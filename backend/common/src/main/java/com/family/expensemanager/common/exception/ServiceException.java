@@ -9,6 +9,8 @@ import lombok.extern.slf4j.Slf4j;
  * errors ({@link ApiException}, access-denied) pass through untouched and wrap everything else with
  * {@link #unexpected}, so the client always gets one generic 500 message while the real cause — with
  * its stack trace — is logged here once and never leaked into the response.
+ *
+ * @author boyquynhluu
  */
 @Slf4j(topic = "ServiceException")
 public class ServiceException extends ApiException {

@@ -24,6 +24,8 @@ import lombok.extern.slf4j.Slf4j;
  * infra/docker-compose.yml). If the gateway is ever scaled to multiple instances,
  * this would need a shared store (e.g. Redis, already used by expense-service) so
  * limits are enforced consistently across instances.
+ *
+ * @author boyquynhluu
  */
 @Component
 @Slf4j(topic = "RateLimitFilter")

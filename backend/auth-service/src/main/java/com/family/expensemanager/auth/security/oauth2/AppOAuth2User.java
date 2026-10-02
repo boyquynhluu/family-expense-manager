@@ -7,7 +7,11 @@ import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 
 import com.family.expensemanager.auth.domain.entity.User;
 
-/** Wraps a non-OIDC provider's (Facebook) attributes together with our resolved local {@link User}. */
+/**
+ * Wraps a non-OIDC provider's (Facebook) attributes together with our resolved local {@link User}.
+ *
+ * @author boyquynhluu
+ */
 public class AppOAuth2User extends DefaultOAuth2User implements AppUserPrincipal {
 
     private final User user;

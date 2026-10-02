@@ -45,6 +45,8 @@ import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
  * "3. Không có giao dịch định kỳ") plus the daily catch-up job that turns a due
  * template into a real transaction. See {@link RecurringTransactionScheduler} for the
  * cron trigger.
+ *
+ * @author boyquynhluu
  */
 @Service
 @Transactional

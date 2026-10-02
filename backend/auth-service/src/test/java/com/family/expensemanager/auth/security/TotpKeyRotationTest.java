@@ -16,6 +16,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.family.expensemanager.auth.dao.UserDao;
 import com.family.expensemanager.auth.domain.entity.User;
 
+/**
+ * @author boyquynhluu
+ */
 @ExtendWith(MockitoExtension.class)
 class TotpKeyRotationTest {
 

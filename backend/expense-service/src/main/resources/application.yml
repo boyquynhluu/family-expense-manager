@@ -33,6 +33,11 @@ spring:
 receipt:
   storage-path: ${RECEIPT_STORAGE_PATH:./data/receipts}
 
+# Trash retention (TrashRetentionScheduler): rows in the trash longer than this are removed for good, nightly.
+trash:
+  retention-days: ${TRASH_RETENTION_DAYS:30}
+  purge-cron: "0 30 3 * * *"
+
 eureka:
   client:
     service-url:

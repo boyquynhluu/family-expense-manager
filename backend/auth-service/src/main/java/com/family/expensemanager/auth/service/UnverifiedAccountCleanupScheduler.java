@@ -6,7 +6,11 @@ import org.springframework.stereotype.Component;
 
 import lombok.extern.slf4j.Slf4j;
 
-/** Daily removal of accounts that never verified their email, see {@link AuthService#purgeStaleUnverifiedAccounts(int)}. */
+/**
+ * Daily removal of accounts that never verified their email, see {@link AuthService#purgeStaleUnverifiedAccounts(int)}.
+ *
+ * @author boyquynhluu
+ */
 @Component
 @Slf4j(topic = "UnverifiedAccountCleanupScheduler")
 public class UnverifiedAccountCleanupScheduler {

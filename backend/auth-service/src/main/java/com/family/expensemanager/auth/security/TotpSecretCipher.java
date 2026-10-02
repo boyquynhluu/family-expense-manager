@@ -19,6 +19,8 @@ import org.springframework.stereotype.Component;
  * A value without the prefix is a legacy plaintext secret and is returned as-is by {@link #decrypt}.
  * An optional previous key lets secrets written before a key rotation still be read until
  * {@link TotpKeyRotation} re-encrypts them with the current key.
+ *
+ * @author boyquynhluu
  */
 @Component
 public class TotpSecretCipher {

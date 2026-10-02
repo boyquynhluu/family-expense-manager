@@ -41,6 +41,8 @@ import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
  * USERS.is_system_admin) — an orthogonal, cross-family privilege independent of the
  * per-family OWNER/MEMBER {@code role}. There is no self-service way to become an
  * admin; the first one must be flipped directly in the database.
+ *
+ * @author boyquynhluu
  */
 @Service
 @Transactional

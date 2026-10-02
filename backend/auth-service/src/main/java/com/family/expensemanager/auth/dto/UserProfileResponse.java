@@ -2,6 +2,9 @@ package com.family.expensemanager.auth.dto;
 
 import com.family.expensemanager.auth.domain.entity.User;
 
+/**
+ * @author boyquynhluu
+ */
 public record UserProfileResponse(
         Long id, String email, String phone, String displayName, String role, Long familyId, String provider,
         String relationship, boolean totpEnabled, boolean hasPassword, boolean locked) {

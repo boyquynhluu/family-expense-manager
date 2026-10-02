@@ -4,6 +4,8 @@ package com.family.expensemanager.auth.dto;
  * What {@code POST /api/auth/login} actually returns now that 2FA exists: either the
  * real tokens ({@code requiresTwoFactor=false}), or a short-lived challenge the client
  * must resolve via {@code POST /api/auth/2fa/verify-login} before it gets any tokens.
+ *
+ * @author boyquynhluu
  */
 public record LoginResponse(boolean requiresTwoFactor, String twoFactorToken, AuthResponse tokens) {
 

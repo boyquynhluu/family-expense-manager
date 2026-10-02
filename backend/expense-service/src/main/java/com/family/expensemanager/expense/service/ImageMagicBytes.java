@@ -5,6 +5,8 @@ package com.family.expensemanager.expense.service;
  * whatever {@code Content-Type} header or filename the client sent — both are fully attacker-controlled
  * (an HTTP client can label any bytes "image/jpeg"). Only covers the 3 formats
  * {@link TransactionService#ALLOWED_RECEIPT_CONTENT_TYPES} accepts for receipt photos.
+ *
+ * @author boyquynhluu
  */
 final class ImageMagicBytes {
 

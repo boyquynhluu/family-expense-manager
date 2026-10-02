@@ -6,7 +6,11 @@ import jakarta.validation.constraints.Size;
 
 import java.util.Locale;
 
-/** {@code password} for accounts that have one; {@code code} (current TOTP) for provider-only accounts with 2FA. */
+/**
+ * {@code password} for accounts that have one; {@code code} (current TOTP) for provider-only accounts with 2FA.
+ *
+ * @author boyquynhluu
+ */
 public record ChangeEmailRequest(
         @NotBlank @Email @Size(max = 255) String newEmail,
         @Size(max = 128) String password,

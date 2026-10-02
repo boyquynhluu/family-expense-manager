@@ -23,6 +23,8 @@ import lombok.extern.slf4j.Slf4j;
  * Consumes {@code password-reset} events published by auth-service when a user requests
  * a password reset, and emails them a link to the frontend's {@code /reset-password?token=...}
  * page — same pattern as {@link UserVerificationEventListener}.
+ *
+ * @author boyquynhluu
  */
 @Component
 @Slf4j(topic = "PasswordResetEventListener")

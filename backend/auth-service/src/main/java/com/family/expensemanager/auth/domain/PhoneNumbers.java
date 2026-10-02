@@ -5,6 +5,8 @@ import java.util.regex.Pattern;
 /**
  * Vietnamese mobile numbers, stored and compared in one form ({@code +84} + 9 digits) so the same number typed
  * as "0912 345 678", "84912345678" or "+84 912.345.678" maps to one account.
+ *
+ * @author boyquynhluu
  */
 public final class PhoneNumbers {
 

@@ -8,7 +8,11 @@ import org.seasar.doma.Select;
 
 import com.family.expensemanager.expense.domain.entity.TransactionAuditLog;
 
-/** Append-only: there is deliberately no update or delete. */
+/**
+ * Append-only: there is deliberately no update or delete.
+ *
+ * @author boyquynhluu
+ */
 @Dao
 public interface TransactionAuditLogDao {
 

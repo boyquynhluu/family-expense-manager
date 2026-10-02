@@ -14,7 +14,11 @@ import com.family.expensemanager.auth.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-/** Handles non-OIDC providers (Facebook) sign-in: {@code registrationId} = "facebook". */
+/**
+ * Handles non-OIDC providers (Facebook) sign-in: {@code registrationId} = "facebook".
+ *
+ * @author boyquynhluu
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j(topic = "AppOAuth2UserService")

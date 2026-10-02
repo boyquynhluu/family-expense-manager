@@ -14,6 +14,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 import lombok.RequiredArgsConstructor;
 
+/**
+ * @author boyquynhluu
+ */
 @Configuration
 @RequiredArgsConstructor
 public class SecurityConfig {

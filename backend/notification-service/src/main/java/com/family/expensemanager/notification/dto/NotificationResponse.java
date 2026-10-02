@@ -5,6 +5,8 @@ import com.family.expensemanager.notification.domain.entity.Notification;
 /**
  * What the client sees of a notification. The stored payload JSON is deliberately left out: it is the raw event,
  * including the actor's email address, and every member of the family can list these notifications.
+ *
+ * @author boyquynhluu
  */
 public record NotificationResponse(
         Long id,

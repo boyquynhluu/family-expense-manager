@@ -12,6 +12,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.mock.web.MockMultipartFile;
 
+/**
+ * @author boyquynhluu
+ */
 class ReceiptStorageServiceTest {
 
     @TempDir

@@ -4,15 +4,17 @@ import client from "../api/client";
 import Pagination from "../components/Pagination";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
-import { confirmDialog } from "../utils/confirm";
+import { confirmDialog, confirmTypedDialog } from "../utils/confirm";
 import { formatCurrency, formatServerDateTime } from "../utils/format";
 import { notifyTrashChanged } from "../utils/trashEvents";
 
-import { LockIcon } from "../components/AppIcons";
+import { LockIcon, TrashIcon } from "../components/AppIcons";
 import { Button } from "../components/ui/Button";
 import { Table, TBody, Td, Th, THead } from "../components/ui/Table";
 
 const MASK = "***";
+// Matches the backend default trash.retention-days (TrashRetentionScheduler).
+const RETENTION_DAYS = 30;
 
 export default function Trash() {
   const { t } = useTranslation("trash");
@@ -44,6 +46,49 @@ export default function Trash() {
     }
   }
 
+  // Same rights as restoring (the backend re-checks): wallets/categories OWNER, transactions creator or OWNER.
+  async function handlePurge(kind, id, reload) {
+    const kindLabel = t(`trash:kind.${kind}`);
+    if (!(await confirmDialog(t("purgeConfirm", { kind: kindLabel }), { confirmButtonText: t("purgeButton") }))) return;
+
+    try {
+      await client.delete(`/expenses/trash/${kind}/${id}`);
+      notifyTrashChanged();
+      toast.success(t("purgeSuccess"));
+      reload();
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("purgeFailed"));
+    }
+  }
+
+  const trashTotal = walletsPage.totalElements + categoriesPage.totalElements + transactionsPage.totalElements;
+
+  async function handleEmptyTrash() {
+    const confirmed = await confirmTypedDialog(t("emptyConfirm", { count: trashTotal }), t("emptyConfirmWord"), {
+      title: t("emptyTitle"),
+      confirmButtonText: t("emptyButton"),
+    });
+    if (!confirmed) return;
+
+    try {
+      const res = await client.delete("/expenses/trash");
+      const result = res.data.data;
+      notifyTrashChanged();
+      const purged = result.transactions + result.wallets + result.categories;
+      if (result.skipped > 0) {
+        toast(t("emptyPartial", { count: purged, skipped: result.skipped }), { icon: "⚠️", duration: 6000 });
+      } else {
+        toast.success(t("emptySuccess", { count: purged }));
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("emptyFailed"));
+    } finally {
+      loadWallets();
+      loadCategories();
+      loadTransactions();
+    }
+  }
+
   function formatDateTime(value) {
     if (!value) return "-";
     return formatServerDateTime(value);
@@ -55,7 +100,14 @@ export default function Trash() {
         <div>
           <h1>{t("title")}</h1>
           <p className="page-header-subtitle">{t("subtitle")}</p>
+          <p className="page-header-subtitle">{t("retentionHint", { days: RETENTION_DAYS })}</p>
         </div>
+        {isOwner && (
+          <Button variant="danger" onClick={handleEmptyTrash} disabled={trashTotal === 0}>
+            <TrashIcon />
+            {t("emptyButton")}
+          </Button>
+        )}
       </div>
 
       <div className="section-card">
@@ -82,6 +134,9 @@ export default function Trash() {
                     <Td actions>
                       <Button variant="success-outline" size="sm" onClick={() => handleRestore("wallets", w.id, loadWallets)}>
                         {t("restoreButton")}
+                      </Button>
+                      <Button variant="danger-outline" size="sm" onClick={() => handlePurge("wallets", w.id, loadWallets)}>
+                        {t("purgeButton")}
                       </Button>
                     </Td>
                   )}
@@ -117,6 +172,9 @@ export default function Trash() {
                     <Td actions>
                       <Button variant="success-outline" size="sm" onClick={() => handleRestore("categories", c.id, loadCategories)}>
                         {t("restoreButton")}
+                      </Button>
+                      <Button variant="danger-outline" size="sm" onClick={() => handlePurge("categories", c.id, loadCategories)}>
+                        {t("purgeButton")}
                       </Button>
                     </Td>
                   )}
@@ -180,9 +238,14 @@ export default function Trash() {
                   <Td data-label={t("colDeletedBy")}>{t2.deletedByName || "-"}</Td>
                   <Td actions>
                     {!masked && (isOwner || mine) && (
-                      <Button variant="success-outline" size="sm" onClick={() => handleRestore("transactions", t2.id, loadTransactions)}>
-                        {t("restoreButton")}
-                      </Button>
+                      <>
+                        <Button variant="success-outline" size="sm" onClick={() => handleRestore("transactions", t2.id, loadTransactions)}>
+                          {t("restoreButton")}
+                        </Button>
+                        <Button variant="danger-outline" size="sm" onClick={() => handlePurge("transactions", t2.id, loadTransactions)}>
+                          {t("purgeButton")}
+                        </Button>
+                      </>
                     )}
                   </Td>
                 </tr>

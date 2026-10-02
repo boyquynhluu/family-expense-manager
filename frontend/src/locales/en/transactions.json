@@ -40,7 +40,7 @@
   "importErrorsHeader": "{{count}} row errors:",
   "importRowError": "Row {{row}}: {{message}}",
   "importMoreErrors": "...and {{count}} more errors",
-  "historyTitle": "Transaction history",
+  "historyTitle": "Change history",
   "importButton": "Import from CSV/Excel",
   "importing": "Importing...",
   "exportCsv": "Export CSV",
@@ -73,7 +73,6 @@
   "selectRowAria": "Select transaction",
   "duplicateAria": "Duplicate",
   "historyAria": "Change history",
-  "historyTitle": "Change history",
   "historySubtitle": "Who created, edited, deleted or restored this transaction, and what changed.",
   "historyEmpty": "No history yet — this transaction was created before change tracking existed.",
   "historyLoadFailed": "Couldn’t load the transaction history",
@@ -81,6 +80,7 @@
   "historyActionUPDATED": "Edited",
   "historyActionDELETED": "Deleted",
   "historyActionRESTORED": "Restored",
+  "historyActionPURGED": "Deleted permanently",
   "historyNoChanges": "Saved without any changes",
   "historyField_amount": "Amount",
   "historyField_type": "Type",
@@ -92,5 +92,10 @@
   "historyTypeIncome": "Income",
   "historyTypeExpense": "Expense",
   "historyReceiptYes": "Yes",
-  "historyReceiptNo": "No"
+  "historyReceiptNo": "No",
+  "addConfirm": "Add a {{amount}} transaction?",
+  "updateConfirm": "Change this transaction to {{amount}}?",
+  "uploadReceiptConfirm": "Upload receipt \"{{file}}\" to this transaction?",
+  "replaceReceiptConfirm": "Replace the current receipt with \"{{file}}\"? The old one will be deleted.",
+  "importConfirm": "Import transactions from \"{{file}}\"? Every valid row becomes a new transaction."
 }

@@ -20,6 +20,9 @@ import com.family.expensemanager.expense.domain.entity.TransactionAuditLog;
 import com.family.expensemanager.expense.dto.TransactionSnapshot;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+/**
+ * @author boyquynhluu
+ */
 @ExtendWith(MockitoExtension.class)
 class TransactionAuditServiceTest {
 

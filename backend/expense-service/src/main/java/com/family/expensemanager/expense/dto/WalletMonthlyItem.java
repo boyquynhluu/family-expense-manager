@@ -5,6 +5,8 @@ import java.math.BigDecimal;
 /**
  * One wallet's movement within a month: {@code net} is the month's surplus (positive) or
  * deficit (negative), and {@code closingBalance = openingBalance + net}.
+ *
+ * @author boyquynhluu
  */
 public record WalletMonthlyItem(
         Long walletId, String walletName, String currency,

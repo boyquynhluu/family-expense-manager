@@ -24,6 +24,8 @@ import lombok.extern.slf4j.Slf4j;
  * System-admin-only endpoints (see {@link AdminService} for the authorization check).
  * A regular authenticated user hitting these gets a 403 from the {@code @PreAuthorize}
  * on the service methods, same pattern as the OWNER-only wallet/category/budget deletes.
+ *
+ * @author boyquynhluu
  */
 @RestController
 @RequestMapping("/api/admin")

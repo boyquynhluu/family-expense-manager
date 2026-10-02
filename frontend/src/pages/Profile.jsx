@@ -267,6 +267,7 @@ export default function Profile() {
 
   async function handleDisableTwoFactor(e) {
     e.preventDefault();
+    if (!(await confirmDialog(t("disableTwoFactorConfirm"), { tone: "warning" }))) return;
     setDisableError("");
     setSavingTwoFactor(true);
     try {
@@ -302,6 +303,7 @@ export default function Profile() {
 
   async function handleRenameFamily(e) {
     e.preventDefault();
+    if (!(await confirmDialog(t("renameFamilyConfirm", { name: familyName.trim() }), { tone: "primary", icon: "question" }))) return;
     setRenamingFamily(true);
     try {
       const res = await client.put("/auth/family", { name: familyName.trim() });
@@ -347,6 +349,7 @@ export default function Profile() {
 
   async function handleInviteSubmit(e) {
     e.preventDefault();
+    if (!(await confirmDialog(t("inviteConfirm", { email: inviteEmail.trim() }), { tone: "primary", icon: "question" }))) return;
     setInviteError("");
     setInviting(true);
     try {
@@ -363,6 +366,7 @@ export default function Profile() {
 
   async function handleProfileSubmit(e) {
     e.preventDefault();
+    if (!(await confirmDialog(t("profileUpdateConfirm"), { tone: "primary", icon: "question" }))) return;
     setProfileError("");
     setSavingProfile(true);
     try {
@@ -384,6 +388,7 @@ export default function Profile() {
 
   async function handlePasswordSubmit(e) {
     e.preventDefault();
+    if (!(await confirmDialog(t("passwordChangeConfirm"), { tone: "warning" }))) return;
     setPasswordError("");
     setSavingPassword(true);
     try {
@@ -401,6 +406,7 @@ export default function Profile() {
 
   async function handleChangeEmailSubmit(e) {
     e.preventDefault();
+    if (!(await confirmDialog(t("changeEmailConfirm", { email: newEmail.trim() }), { tone: "warning" }))) return;
     setEmailError("");
     setChangingEmail(true);
     try {

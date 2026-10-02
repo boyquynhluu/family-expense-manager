@@ -27,6 +27,8 @@ import lombok.extern.slf4j.Slf4j;
  * (see spring-cloud/spring-cloud-gateway#3239 — closed wontfix), so this is a plain
  * servlet {@link jakarta.servlet.Filter} instead, ordered to run before the gateway's
  * own {@link FormFilter}.
+ *
+ * @author boyquynhluu
  */
 @Component
 @RequiredArgsConstructor

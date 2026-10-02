@@ -309,6 +309,8 @@ export default function Transactions() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    const confirmKey = editingId ? "transactions:updateConfirm" : "transactions:addConfirm";
+    if (!(await confirmDialog(t(confirmKey, { amount: formatCurrency(Number(form.amount)) }), { tone: "primary", icon: "question" }))) return;
     setError("");
     const payload = {
       walletId: Number(form.walletId),
@@ -396,6 +398,9 @@ export default function Transactions() {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-selecting the same file (e.g. after a failed upload)
     if (!file || !uploadTargetId) return;
+    const replacing = pageData.content.some((row) => row.id === uploadTargetId && row.hasReceipt);
+    const confirmKey = replacing ? "transactions:replaceReceiptConfirm" : "transactions:uploadReceiptConfirm";
+    if (!(await confirmDialog(t(confirmKey, { file: file.name }), { tone: "primary", icon: "question" }))) return;
     setError("");
     const formData = new FormData();
     formData.append("file", file);
@@ -499,6 +504,7 @@ export default function Transactions() {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-selecting the same file (e.g. after fixing errors)
     if (!file) return;
+    if (!(await confirmDialog(t("transactions:importConfirm", { file: file.name }), { tone: "primary", icon: "question" }))) return;
     setError("");
     setImporting(true);
     const formData = new FormData();

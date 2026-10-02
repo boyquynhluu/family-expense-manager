@@ -49,6 +49,8 @@ import lombok.extern.slf4j.Slf4j;
  * creator additionally gets a "đã trừ" confirmation email and every other family member (looked up
  * via {@link FamilyMemberDirectory}) gets a "đã cộng, ai chuyển" email, each gated by that user's
  * own per-type opt-out.
+ *
+ * @author boyquynhluu
  */
 @Component
 @Slf4j(topic = "ExpenseEventListener")

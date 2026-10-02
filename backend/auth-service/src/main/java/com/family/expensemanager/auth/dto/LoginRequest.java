@@ -11,6 +11,8 @@ import java.util.Locale;
 /**
  * @param identifier the account's email or its phone number (anything without an '@' is read as a phone number).
  *                   Still accepted under the old JSON name {@code email}.
+ *
+ * @author boyquynhluu
  */
 public record LoginRequest(
         @NotBlank @Size(max = 255) @JsonAlias("email") String identifier,

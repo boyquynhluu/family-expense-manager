@@ -16,3 +16,10 @@ export function truncate(text, maxLength = 50) {
   if (!text || text.length <= maxLength) return text;
   return text.slice(0, maxLength) + "...";
 }
+
+/** "2026-10" (an <input type="month"> value / periodMonth) → "10/2026". */
+export function formatYearMonth(value) {
+  if (!value) return value;
+  const [year, month] = value.split("-");
+  return `${month}/${year}`;
+}

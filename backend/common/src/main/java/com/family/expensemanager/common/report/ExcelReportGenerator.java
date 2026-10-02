@@ -22,6 +22,8 @@ import java.util.List;
  * supplies the title/header styling and one pre-styled, otherwise-empty row at
  * {@code dataStartRowIndex} whose per-column style (borders, number/date format, alignment) is
  * cloned onto every generated data row, so callers never touch POI styling directly.
+ *
+ * @author boyquynhluu
  */
 @Component
 public class ExcelReportGenerator {

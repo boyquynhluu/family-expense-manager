@@ -30,6 +30,8 @@ import java.util.stream.Collectors;
  * and stretched letters ("vcllll").
  *
  * <p>Junk is only junk when it is the WHOLE value: "test" is rejected, "Phí test COVID" is not.
+ *
+ * @author boyquynhluu
  */
 public final class TextQuality {
 

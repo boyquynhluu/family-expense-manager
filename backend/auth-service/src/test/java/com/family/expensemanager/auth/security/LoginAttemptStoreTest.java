@@ -17,6 +17,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
+/**
+ * @author boyquynhluu
+ */
 @ExtendWith(MockitoExtension.class)
 class LoginAttemptStoreTest {
 

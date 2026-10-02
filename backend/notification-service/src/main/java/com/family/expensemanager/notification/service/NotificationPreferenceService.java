@@ -29,6 +29,8 @@ import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
  * Per-user opt-outs, stored only when a user changed something — a missing row means
  * "enabled". Notifications are stored per family (shared list and read state), so the
  * in-app opt-out is applied when a user reads the list, not when the row is inserted.
+ *
+ * @author boyquynhluu
  */
 @Service
 @Transactional

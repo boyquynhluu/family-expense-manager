@@ -11,6 +11,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+/**
+ * @author boyquynhluu
+ */
 @Entity
 @Table(name = "RECURRING_TRANSACTIONS")
 public class RecurringTransaction {

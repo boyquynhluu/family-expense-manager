@@ -10,6 +10,9 @@ import org.seasar.doma.Version;
 
 import java.math.BigDecimal;
 
+/**
+ * @author boyquynhluu
+ */
 @Entity
 @Table(name = "BUDGETS")
 public class Budget {

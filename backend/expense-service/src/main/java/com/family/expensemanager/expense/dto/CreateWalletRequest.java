@@ -15,6 +15,8 @@ import java.math.BigDecimal;
  *                    shares ("ví chung"). Only the family OWNER can create/update wallets, and the client
  *                    only offers current members — expense-service has no member list of its own to
  *                    cross-check it against.
+ *
+ * @author boyquynhluu
  */
 public record CreateWalletRequest(
         @NotBlank @Size(max = 255) @CleanText String name,

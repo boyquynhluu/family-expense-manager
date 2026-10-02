@@ -13,7 +13,11 @@ import com.family.expensemanager.auth.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-/** Handles Google (an OpenID Connect provider) sign-in: {@code registrationId} = "google". */
+/**
+ * Handles Google (an OpenID Connect provider) sign-in: {@code registrationId} = "google".
+ *
+ * @author boyquynhluu
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j(topic = "AppOidcUserService")

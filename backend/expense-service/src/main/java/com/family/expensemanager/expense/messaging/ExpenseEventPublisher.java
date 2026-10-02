@@ -15,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
  * within a {@code @Transactional} service method, and only actually sends to Kafka
  * {@code AFTER_COMMIT} — see README "Hợp đồng Kafka" ("publish sau khi transaction DB đã commit").
  * If the transaction rolls back, nothing is published.
+ *
+ * @author boyquynhluu
  */
 @Component
 @Slf4j(topic = "ExpenseEventPublisher")

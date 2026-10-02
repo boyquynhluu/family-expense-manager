@@ -10,6 +10,9 @@ import org.seasar.doma.Update;
 
 import com.family.expensemanager.expense.domain.entity.IdempotencyKey;
 
+/**
+ * @author boyquynhluu
+ */
 @Dao
 public interface IdempotencyKeyDao {
 

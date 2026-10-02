@@ -32,6 +32,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * @author boyquynhluu
+ */
 @ExtendWith(MockitoExtension.class)
 class WalletServiceTest {
 

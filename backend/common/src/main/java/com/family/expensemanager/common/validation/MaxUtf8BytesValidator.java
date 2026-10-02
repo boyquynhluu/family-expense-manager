@@ -5,6 +5,9 @@ import java.nio.charset.StandardCharsets;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 
+/**
+ * @author boyquynhluu
+ */
 public class MaxUtf8BytesValidator implements ConstraintValidator<MaxUtf8Bytes, String> {
 
     private int maxBytes;

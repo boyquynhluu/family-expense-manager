@@ -29,6 +29,8 @@ import lombok.extern.slf4j.Slf4j;
  * the event. Each admin gets their own message so addresses aren't exposed to each other, and one
  * failing address (or an unconfigured SMTP server) is logged instead of thrown, so Kafka doesn't
  * redeliver the event forever.
+ *
+ * @author boyquynhluu
  */
 @Component
 @Slf4j(topic = "NewUserRegisteredEventListener")

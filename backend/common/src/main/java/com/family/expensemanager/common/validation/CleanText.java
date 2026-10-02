@@ -13,6 +13,8 @@ import jakarta.validation.Payload;
  * A free-text value (name, note...) with no profanity and that isn't junk such as "test", "xxx" or "asdf" —
  * see {@link TextQuality}. Null/blank pass (that's {@code @NotBlank}'s job). The message depends on which rule
  * failed, so {@link #message()} is only a fallback.
+ *
+ * @author boyquynhluu
  */
 @Documented
 @Constraint(validatedBy = CleanTextValidator.class)

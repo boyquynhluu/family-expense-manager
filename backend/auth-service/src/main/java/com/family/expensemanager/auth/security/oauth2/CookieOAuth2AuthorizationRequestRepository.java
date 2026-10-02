@@ -22,6 +22,8 @@ import jakarta.servlet.http.HttpServletResponse;
  * stateless and load-balanced across replicas (see {@code SecurityConfig}); the default
  * {@code HttpSessionOAuth2AuthorizationRequestRepository} would require sticky sessions
  * for the callback to land on the same instance that started the flow.
+ *
+ * @author boyquynhluu
  */
 @Component
 public class CookieOAuth2AuthorizationRequestRepository

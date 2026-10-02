@@ -12,6 +12,9 @@ import org.seasar.doma.Update;
 
 import com.family.expensemanager.auth.domain.entity.User;
 
+/**
+ * @author boyquynhluu
+ */
 @Dao
 public interface UserDao {
 

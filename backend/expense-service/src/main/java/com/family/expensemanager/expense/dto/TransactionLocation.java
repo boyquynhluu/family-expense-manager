@@ -6,6 +6,7 @@ package com.family.expensemanager.expense.dto;
  *
  * @param inList whether it matches the current filters at all (if not, {@code page} is meaningless)
  * @param page   0-based page holding it, for the requested page size
+ * @author boyquynhluu
  */
 public record TransactionLocation(boolean inList, int page) {
 }

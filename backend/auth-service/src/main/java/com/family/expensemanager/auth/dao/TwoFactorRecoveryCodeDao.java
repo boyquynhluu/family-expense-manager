@@ -10,6 +10,9 @@ import org.seasar.doma.Update;
 
 import com.family.expensemanager.auth.domain.entity.TwoFactorRecoveryCode;
 
+/**
+ * @author boyquynhluu
+ */
 @Dao
 public interface TwoFactorRecoveryCodeDao {
 

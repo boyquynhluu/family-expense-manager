@@ -34,6 +34,8 @@ import lombok.extern.slf4j.Slf4j;
  * Moves money between two wallets of the same family. A transfer is neither income nor expense, so it
  * lives in its own table and only affects wallet balances (see {@link WalletService}), never the
  * transaction lists, reports or budgets.
+ *
+ * @author boyquynhluu
  */
 @Service
 @Transactional
@@ -42,7 +44,7 @@ import lombok.extern.slf4j.Slf4j;
 public class WalletTransferService {
 
     private static final String ROLE_OWNER = "OWNER";
-    private static final BigDecimal MIN_AMOUNT = new BigDecimal("0.01");
+    private static final BigDecimal MIN_AMOUNT = new BigDecimal("10000");
     private static final int MAX_PAGE_SIZE = 100;
     private static final String IDEMPOTENCY_SCOPE = "CREATE_WALLET_TRANSFER";
 
@@ -136,7 +138,7 @@ public class WalletTransferService {
             throw logged(log, new BadRequestException("Ví nguồn và ví đích phải khác nhau"));
         }
         if (request.amount().compareTo(MIN_AMOUNT) < 0) {
-            throw logged(log, new BadRequestException("Số tiền chuyển phải >= 0.01"));
+            throw logged(log, new BadRequestException("Số tiền chuyển phải >= 10.000"));
         }
         // From the sender's own private wallet, to another member's private wallet or a shared one. On edit, a side
         // is only re-checked when it changes — fixing the amount/note of an older transfer (made before this rule,

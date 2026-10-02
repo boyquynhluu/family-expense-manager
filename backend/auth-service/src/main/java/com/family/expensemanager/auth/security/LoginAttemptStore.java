@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
  * Consecutive failed-login counter per email, in Redis: the 5th failure inside the window
  * locks the email out for the same window. Unknown emails are counted too, so the lockout
  * does not reveal which emails have an account.
+ *
+ * @author boyquynhluu
  */
 @Component
 @RequiredArgsConstructor

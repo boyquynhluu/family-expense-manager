@@ -14,6 +14,8 @@ import java.time.LocalDateTime;
 /**
  * @param isPrivate only the creator may see this transaction's details (null = false). Its amount still counts
  *                  in balances/reports/budgets.
+ *
+ * @author boyquynhluu
  */
 public record TransactionRequest(
         @NotNull Long walletId,

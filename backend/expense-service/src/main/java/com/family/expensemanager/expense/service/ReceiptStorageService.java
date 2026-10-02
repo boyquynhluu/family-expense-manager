@@ -17,6 +17,9 @@ import lombok.extern.slf4j.Slf4j;
  * ever stored in the DB; {@link TransactionService} owns validation and DB updates.
  */
 // No @Transactional on purpose: this component only touches the file system, never the database.
+/**
+ * @author boyquynhluu
+ */
 @Component
 @Slf4j(topic = "ReceiptStorageService")
 public class ReceiptStorageService {

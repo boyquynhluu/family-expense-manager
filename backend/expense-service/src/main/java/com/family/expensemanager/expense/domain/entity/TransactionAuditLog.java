@@ -9,7 +9,11 @@ import org.seasar.doma.GenerationType;
 import org.seasar.doma.Id;
 import org.seasar.doma.Table;
 
-/** One append-only history entry for a transaction — see {@code TransactionAuditService}. */
+/**
+ * One append-only history entry for a transaction — see {@code TransactionAuditService}.
+ *
+ * @author boyquynhluu
+ */
 @Entity
 @Table(name = "TRANSACTION_AUDIT_LOGS")
 public class TransactionAuditLog {

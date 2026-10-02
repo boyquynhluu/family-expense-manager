@@ -22,6 +22,8 @@ import lombok.extern.slf4j.Slf4j;
  * reachable from inside the Docker network, and each call must also carry a JWT signed with the shared
  * {@code jwt.secret} whose role is {@code SERVICE} (notification-service mints one per call) — a normal
  * user token, whatever its role, is rejected with 403.
+ *
+ * @author boyquynhluu
  */
 @RestController
 @RequestMapping("/internal")

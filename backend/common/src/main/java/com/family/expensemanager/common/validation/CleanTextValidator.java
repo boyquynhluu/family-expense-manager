@@ -3,6 +3,9 @@ package com.family.expensemanager.common.validation;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 
+/**
+ * @author boyquynhluu
+ */
 public class CleanTextValidator implements ConstraintValidator<CleanText, String> {
 
     static final String PROFANITY_MESSAGE = "Nội dung có từ ngữ không phù hợp";

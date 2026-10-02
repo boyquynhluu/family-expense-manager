@@ -10,6 +10,7 @@ import jakarta.validation.constraints.Size;
  * @param relationship one of the fixed choices the Profile page offers (frontend RELATIONSHIP_OPTIONS), empty or
  *                     null for none — a free string here would let any text (profanity included) in via the API.
  * @param phone        login phone number, normalised to +84…; empty or null removes it.
+ * @author boyquynhluu
  */
 public record UpdateProfileRequest(
         @NotBlank @Size(max = 100) @CleanText String displayName,
