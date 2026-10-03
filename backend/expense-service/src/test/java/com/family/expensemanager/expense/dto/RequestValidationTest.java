@@ -97,6 +97,28 @@ class RequestValidationTest {
     }
 
     @Test
+    void categoryName_allowsLettersDigitsAndCommonSeparators_only() {
+        for (String ok : new String[] {"Ăn uống & cà phê", "Điện/nước", "Học phí (con)", "Quà 8-3", "Xăng xe.", "Nhà's"}) {
+            assertThat(validator.validate(new CreateCategoryRequest(ok, "EXPENSE", null, null))).as(ok).isEmpty();
+        }
+        for (String bad : new String[] {"<script>", "Ăn uống!", "Tiền $", "a@b", "#hashtag", "Ăn 🍔", "\"quote\"", "123"}) {
+            assertThat(validator.validate(new CreateCategoryRequest(bad, "EXPENSE", null, null))).as(bad)
+                    .extracting(v -> v.getMessage()).contains(CreateCategoryRequest.NAME_MESSAGE);
+        }
+    }
+
+    @Test
+    void categoryIcon_allowsShortCodesAndEmoji_butNoSymbols() {
+        for (String ok : new String[] {"AI", "DX", "🍔", "❤️", "👍🏽", "👨‍👩‍👧", "1️⃣", "🇻🇳", "🛒 mua"}) {
+            assertThat(validator.validate(new CreateCategoryRequest("Ăn", "EXPENSE", ok, null))).as(ok).isEmpty();
+        }
+        for (String bad : new String[] {"<b>", "$$", "a;b", "%", "{x}"}) {
+            assertThat(validator.validate(new CreateCategoryRequest("Ăn", "EXPENSE", bad, null))).as(bad)
+                    .extracting(v -> v.getMessage()).contains(CreateCategoryRequest.ICON_MESSAGE);
+        }
+    }
+
+    @Test
     void categoryIcon_rejectsProfanity_butNotShortCodesThatLookLikeJunk() {
         assertThat(validator.validate(new CreateCategoryRequest("Ăn", "EXPENSE", "fuck", null))).singleElement()
                 .satisfies(v -> assertThat(v.getMessage()).isEqualTo("Nội dung có từ ngữ không phù hợp"));

@@ -766,7 +766,15 @@ export default function Profile() {
       {profile.role === "OWNER" && <PendingInvitesSection reloadSignal={invitesReloadSignal} />}
 
       <div className="section-card">
-        <h2>{t("sessionsTitle")}</h2>
+        {/* Title on the left, "log out other devices" on the right edge, above the table. */}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 [&>h2]:mb-0">
+          <h2>{t("sessionsTitle")}</h2>
+          {(sessionsPage.totalElements > 1 || sessions.some((s) => !s.isCurrent)) && (
+            <Button variant="danger-outline" onClick={handleRevokeOtherSessions} disabled={revokingOthers}>
+              {revokingOthers ? t("revokingOthersLoading") : t("revokeOtherSessionsButton")}
+            </Button>
+          )}
+        </div>
         {sessions.length === 0 ? (
           <p className="empty-state">{t("noSessions")}</p>
         ) : (
@@ -806,11 +814,6 @@ export default function Profile() {
           </Table>
         )}
         <Pagination pageData={sessionsPage} onPageChange={setSessionsPage} />
-        {(sessionsPage.totalElements > 1 || sessions.some((s) => !s.isCurrent)) && (
-          <Button variant="danger-outline" onClick={handleRevokeOtherSessions} disabled={revokingOthers}>
-            {revokingOthers ? t("revokingOthersLoading") : t("revokeOtherSessionsButton")}
-          </Button>
-        )}
       </div>
 
       <div className="section-card">

@@ -12,11 +12,25 @@ import { LIMITS } from "../utils/inputLimits";
 import { useCleanText } from "../utils/textQuality";
 import { notifyTrashChanged } from "../utils/trashEvents";
 
+// Same allowed characters as backend CreateCategoryRequest.NAME_REGEX / ICON_REGEX — keep in sync.
+// Name: letters (with accents), digits, spaces and - _ . , & ( ) / ' +, at least one letter.
+const NAME_PATTERN = /^(?=.*\p{L})[\p{L}\p{M}\p{N} .,&()/'+_-]+$/u;
+// Icon: a short code ("AI") or emoji, incl. joiners, variation selectors, skin tones, keycaps and flags.
+const ICON_PATTERN =
+  // The class lists emoji joiners/modifiers one by one on purpose (each code point is allowed alone).
+  // eslint-disable-next-line no-misleading-character-class
+  /^[\p{L}\p{M}\p{N}\p{Extended_Pictographic}‍️⃣\u{1F3FB}-\u{1F3FF}\u{1F1E6}-\u{1F1FF} _-]*$/u;
+
 export default function Categories() {
   const { t } = useTranslation(["common", "categories"]);
   const cleanText = useCleanText();
   // Icon = short code/emoji ("AI", "DX"): profanity only, like the backend's @CleanText(junk = false).
   const cleanIcon = useCleanText({ junk: false });
+  // Character rule first (it names what is wrong), then profanity/junk.
+  const validateName = (value) =>
+    value.trim() && !NAME_PATTERN.test(value) ? t("categories:nameInvalidChars") : cleanText(value);
+  const validateIcon = (value) =>
+    value && !ICON_PATTERN.test(value) ? t("categories:iconInvalidChars") : cleanIcon(value);
   const { role } = useAuth();
   const isOwner = role === "OWNER";
   const [categories, setCategories] = useState([]);
@@ -100,7 +114,7 @@ export default function Categories() {
               </span>
               <Input
                 placeholder={t("categories:namePlaceholder")}
-                value={name} validate={cleanText}
+                value={name} validate={validateName}
                 maxLength={LIMITS.categoryName}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -118,7 +132,7 @@ export default function Categories() {
               <Input
                 placeholder={t("categories:iconPlaceholder")}
                 value={icon}
-                validate={cleanIcon}
+                validate={validateIcon}
                 maxLength={LIMITS.categoryIcon}
                 onChange={(e) => setIcon(e.target.value)}
               />
