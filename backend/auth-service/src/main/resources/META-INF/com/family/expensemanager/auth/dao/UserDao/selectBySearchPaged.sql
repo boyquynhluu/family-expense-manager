@@ -21,14 +21,16 @@ SELECT
     pending_email,
     pending_email_token,
     pending_email_expires_at,
-    totp_last_step
+    totp_last_step,
+    phone
 FROM
     USERS
 WHERE
     1 = 1
 /*%if pattern != null */
     AND (LOWER(email) LIKE /* pattern */'%a%' ESCAPE '!'
-         OR LOWER(display_name) LIKE /* pattern */'%a%' ESCAPE '!')
+         OR LOWER(display_name) LIKE /* pattern */'%a%' ESCAPE '!'
+         OR phone LIKE /* pattern */'%a%' ESCAPE '!')
 /*%end*/
 ORDER BY
     id

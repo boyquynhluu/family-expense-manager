@@ -12,6 +12,7 @@ import {
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { BalanceIcon, CalendarIcon, TrendDownIcon, TrendUpIcon, WalletIcon } from "../components/AppIcons";
+import WalletMonthlyTable from "../components/WalletMonthlyTable";
 import { formatCurrency } from "../utils/format";
 
 const CATEGORY_COLORS = ["#4f46e5", "#0ea5e9", "#f59e0b", "#16a34a", "#db2777", "#7c3aed", "#dc2626", "#0891b2"];
@@ -53,7 +54,7 @@ export default function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, [yearMonth]);
+  }, [yearMonth, t]);
 
   // Wallets/categories aren't month-scoped on the backend, so they're loaded once.
   useEffect(() => {
@@ -163,25 +164,9 @@ export default function Dashboard() {
       </div>
 
       <div className="section-card">
-        <h2>{t("walletBalanceTitle")}</h2>
-        {wallets.length === 0 ? (
-          <p className="empty-state">{t("noWallets")}</p>
-        ) : (
-          <div className="category-breakdown">
-            {wallets.map((w) => (
-              <div className="category-row" key={w.id}>
-                <div className="category-row-header">
-                  <span className="category-row-name">
-                    <WalletIcon /> {w.name}
-                  </span>
-                  <span className="category-row-amount">
-                    <strong>{formatCurrency(w.currentBalance, w.currency)}</strong>
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <h2>{t("walletMonthlyTitle", { yearMonth })}</h2>
+        <p className="page-header-subtitle">{t("walletMonthlyHint")}</p>
+        <WalletMonthlyTable yearMonth={yearMonth} />
       </div>
 
       <div className="section-card">

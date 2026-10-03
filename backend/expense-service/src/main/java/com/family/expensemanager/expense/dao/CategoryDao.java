@@ -7,9 +7,13 @@ import org.seasar.doma.Insert;
 import org.seasar.doma.Select;
 import org.seasar.doma.Update;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * @author boyquynhluu
+ */
 @Dao
 public interface CategoryDao {
 
@@ -39,4 +43,16 @@ public interface CategoryDao {
 
     @Update(sqlFile = true)
     int restore(Long id, Long familyId);
+
+    // --- Trash: permanent deletion (TrashService) ---
+
+    @Select
+    Optional<Category> selectDeletedById(Long id);
+
+    @Select
+    List<Category> selectDeletedByFamilyId(Long familyId);
+
+    /** Every family: rows that have sat in the trash since before {@code cutoff} (TrashRetentionScheduler). */
+    @Select
+    List<Category> selectDeletedBefore(LocalDateTime cutoff);
 }

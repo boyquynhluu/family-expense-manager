@@ -3,6 +3,8 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { useAuth } from "../hooks/useAuth";
+import { confirmDialog } from "../utils/confirm";
+import { Button } from "./ui/Button";
 
 /**
  * Onboarding shortcut for empty states: asks the backend to create a default wallet and
@@ -14,6 +16,7 @@ export default function SeedDefaultsButton({ onDone }) {
   const [loading, setLoading] = useState(false);
 
   async function handleClick() {
+    if (!(await confirmDialog(t("seedDefaultsConfirm"), { tone: "primary", icon: "question" }))) return;
     setLoading(true);
     try {
       const res = await client.post("/expenses/onboarding/seed-defaults");
@@ -34,8 +37,8 @@ export default function SeedDefaultsButton({ onDone }) {
   }
 
   return (
-    <button type="button" onClick={handleClick} disabled={loading}>
+    <Button onClick={handleClick} disabled={loading}>
       {loading ? t("saving") : t("seedDefaultsButton")}
-    </button>
+    </Button>
   );
 }

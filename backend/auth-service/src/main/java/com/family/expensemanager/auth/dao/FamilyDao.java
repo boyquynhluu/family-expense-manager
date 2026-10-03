@@ -10,6 +10,9 @@ import org.seasar.doma.Insert;
 import org.seasar.doma.Select;
 import org.seasar.doma.Update;
 
+/**
+ * @author boyquynhluu
+ */
 @Dao
 public interface FamilyDao {
 

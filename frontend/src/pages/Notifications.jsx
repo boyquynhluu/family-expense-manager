@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { BellIcon, TrashIcon } from "../components/AppIcons";
 import Pagination from "../components/Pagination";
+import { Button, IconButton } from "../components/ui/Button";
+import { Checkbox } from "../components/ui/Input";
 import { usePagedList } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
 
@@ -60,6 +62,7 @@ export default function Notifications() {
   }
 
   async function markAllAsRead() {
+    if (!(await confirmDialog(t("makeAllReadConfirm")))) return;
     setError("");
     try {
       await client.put("/notifications/read-all");
@@ -97,6 +100,7 @@ export default function Notifications() {
   }
 
   async function savePreferences() {
+    if (!(await confirmDialog(t("savePreferencesConfirm"), { tone: "primary", icon: "question" }))) return;
     setSavingPreferences(true);
     try {
       const body = preferences.map(({ type, inAppEnabled, emailEnabled }) => ({
@@ -126,14 +130,14 @@ export default function Notifications() {
         </div>
         <div className="row-actions">
           {hasUnread && (
-            <button type="button" className="btn-secondary" onClick={markAllAsRead}>
+            <Button variant="secondary" onClick={markAllAsRead}>
               {t("markAllReadButton")}
-            </button>
+            </Button>
           )}
           {pageData.totalElements > 0 && (
-            <button type="button" className="btn-secondary" onClick={handleDeleteRead}>
+            <Button variant="danger-outline" onClick={handleDeleteRead}>
               {t("deleteReadButton")}
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -167,14 +171,12 @@ export default function Notifications() {
                     </div>
                     <p title={n.message}>{n.message}</p>
                   </div>
-                  <button
-                    type="button"
-                    className="icon-btn icon-btn-danger"
+                  <IconButton variant="danger"
                     onClick={(event) => handleDelete(event, n.id)}
                     aria-label={t("common:delete")}
                   >
                     <TrashIcon />
-                  </button>
+                  </IconButton>
                 </li>
               ))}
             </ul>
@@ -191,8 +193,7 @@ export default function Notifications() {
               <li key={p.type}>
                 <span className="notification-preferences-label">{t(`types.${p.type}`)}</span>
                 <label>
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={p.inAppEnabled}
                     onChange={(e) => updatePreference(p.type, "inAppEnabled", e.target.checked)}
                   />
@@ -200,8 +201,7 @@ export default function Notifications() {
                 </label>
                 {p.emailSupported && (
                   <label>
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={p.emailEnabled}
                       onChange={(e) => updatePreference(p.type, "emailEnabled", e.target.checked)}
                     />
@@ -211,9 +211,9 @@ export default function Notifications() {
               </li>
             ))}
           </ul>
-          <button type="button" onClick={savePreferences} disabled={savingPreferences}>
+          <Button onClick={savePreferences} disabled={savingPreferences}>
             {savingPreferences ? t("common:saving") : t("preferencesSave")}
-          </button>
+          </Button>
         </div>
       )}
       </div>

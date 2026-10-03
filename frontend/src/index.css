@@ -13,98 +13,11 @@ h1 {
   margin-top: 0;
 }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: #fff;
-}
-
-th,
-td {
-  text-align: left;
-  padding: 0.65rem 0.9rem;
-  border-bottom: 1px solid #f1f2f5;
-}
-
-th {
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #6b7280;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-/* Zebra striping so a wide table (transactions, users, ...) stays easy to scan across
-   rows — applies to every <table> in the app since none of them opt out of this global
-   rule. */
-tbody tr:nth-child(even) {
-  background: #f3f4f6;
-}
-
-tbody tr:last-child td {
-  border-bottom: none;
-}
-
-tbody tr:hover {
-  background: #e5e7eb;
-}
-
-button {
-  cursor: pointer;
-  border: none;
-  border-radius: 6px;
-  background: #4f46e5;
-  color: #fff;
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
-  transition: background 0.15s ease;
-}
-
-button:hover:not(:disabled) {
-  background: #4338ca;
-}
-
-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-input,
-select {
-  padding: 0.45rem 0.65rem;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  background: #fff;
-}
-
-input:focus,
-select:focus {
-  outline: none;
-  border-color: #4f46e5;
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
-}
-
-/* Fields the user can't edit look grey so they read as locked, not as empty inputs. */
-input:disabled:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
-input:read-only:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
-select:disabled,
-textarea:disabled {
-  background: #eceef2;
-  border-color: #d9dce3;
-  color: #6b7280;
-  -webkit-text-fill-color: #6b7280;
-  opacity: 1;
-  cursor: not-allowed;
-}
-
-input:disabled:focus,
-input:read-only:focus,
-select:disabled:focus {
-  border-color: #d9dce3;
-  box-shadow: none;
-}
+/* Tables, buttons and form controls are styled with Tailwind in components/ui/Table.jsx,
+   Button.jsx and Input.jsx — don't add table/th/td/button/input/select rules here: this
+   file is unlayered, so they would override those utility classes. (Exceptions on
+   purpose: the auth pages' .auth-input-group, the .month-picker pill, and the 16px
+   phone font-size rule further down that stops iOS from zooming into a focused field.) */
 
 .auth-input-group input:disabled:not([type="checkbox"]):not([type="radio"]):not([type="file"]) {
   background: transparent;
@@ -245,6 +158,12 @@ select:disabled:focus {
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
 }
 
+/* Field validation failed (components/ui/Field.jsx sets aria-invalid on the input). */
+.auth-input-group:has(input[aria-invalid="true"]) {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+}
+
 .auth-input-group input {
   flex: 1;
   min-width: 0;
@@ -309,39 +228,7 @@ select:disabled:focus {
 }
 
 .auth-input-toggle {
-  display: flex;
-  align-items: center;
-  background: none;
-  border: none;
-  padding: 0;
-  border-radius: 0;
-  color: #6b7280;
-  cursor: pointer;
   flex-shrink: 0;
-}
-
-.auth-input-toggle:hover {
-  color: #374151;
-  background: none;
-}
-
-.auth-submit {
-  margin-top: 0.25rem;
-  padding: 0.75rem;
-  font-size: 0.9rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  background: linear-gradient(135deg, #6366f1, #4f46e5);
-  color: #fff;
-  border-radius: 999px;
-  box-shadow: 0 12px 28px -6px rgba(79, 70, 229, 0.65);
-  transition: box-shadow 0.15s ease, transform 0.15s ease, background 0.15s ease;
-}
-
-.auth-submit:hover:not(:disabled) {
-  background: linear-gradient(135deg, #575be0, #4338ca);
-  box-shadow: 0 16px 34px -6px rgba(79, 70, 229, 0.8);
-  transform: translateY(-1px);
 }
 
 .auth-options {
@@ -425,12 +312,18 @@ select:disabled:focus {
 
 .auth-terms {
   display: flex;
+  flex-wrap: wrap; /* lets the validation message (Field) drop onto its own line */
   align-items: center;
   gap: 0.5rem;
   font-size: 0.78rem;
   font-weight: 500;
   color: #1f2430;
   cursor: pointer;
+}
+
+/* ...and keeps that message last, after the required "*" drawn by .auth-terms::after. */
+.auth-terms > [data-field-error] {
+  order: 1;
 }
 
 .auth-terms input[type="checkbox"] {
@@ -659,16 +552,6 @@ select:disabled:focus {
   letter-spacing: 0.03em;
 }
 
-.family-switcher select {
-  background: #2a3040;
-  border: 1px solid #3a4152;
-  color: #e5e7eb;
-  font-size: 0.85rem;
-  font-weight: 500;
-  text-transform: none;
-  letter-spacing: normal;
-}
-
 /* Pill toggle (VI | EN) — see LanguageSwitcher.jsx. Same dark-pill look everywhere it
    renders (sidebar or floating), so only positioning differs between variants. */
 .language-toggle {
@@ -681,28 +564,6 @@ select:disabled:focus {
   border: 1px solid rgba(255, 255, 255, 0.08);
   width: fit-content;
   margin-bottom: 1rem;
-}
-
-.language-toggle-btn {
-  border: none;
-  background: transparent;
-  color: #9aa3b5;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  padding: 0.35rem 0.95rem;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.language-toggle-btn:hover:not(.is-active) {
-  color: #e5e7eb;
-}
-
-.language-toggle-btn.is-active {
-  background: #4f46e5;
-  color: #fff;
 }
 
 /* Floats over the auth pages' dark/photo background instead of sitting in the sidebar
@@ -725,21 +586,6 @@ select:disabled:focus {
   font-size: 0.85rem;
   font-weight: 500;
   border-top: 1px solid #3a4152;
-}
-
-.logout-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  justify-content: center;
-  background: transparent;
-  border: 1px solid #3a4152;
-  color: #cbd5e1;
-  margin-top: 0.75rem;
-}
-
-.logout-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
 }
 
 .content {
@@ -802,6 +648,19 @@ select:disabled:focus {
   align-items: flex-end;
 }
 
+/* In a real <form>, fields line up by their TOP: a field showing a validation message
+   (components/ui/Field.jsx) grows taller, and bottom alignment would then push its label
+   above its neighbours'. The submit/cancel buttons are pushed down by one label row
+   (font-size 0.78rem × line-height + the .field gap) so they still sit level with the
+   inputs. */
+form.inline-form {
+  align-items: flex-start;
+}
+
+form.inline-form > button {
+  margin-top: calc(0.78rem * 1.2 + 0.3rem);
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -809,12 +668,6 @@ select:disabled:focus {
   font-size: 0.78rem;
   font-weight: 600;
   color: #6b7280;
-}
-
-.field input,
-.field select {
-  font-weight: 400;
-  color: #1f2430;
 }
 
 .required-mark {
@@ -882,24 +735,6 @@ select:disabled:focus {
   white-space: nowrap;
 }
 
-.file-picker-clear {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  margin-right: 0.3rem;
-  padding: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: #6b7280;
-}
-
-.file-picker-clear:hover:not(:disabled) {
-  background: #fee2e2;
-  color: #dc2626;
-}
-
 .password-field-wrapper {
   position: relative;
   display: flex;
@@ -915,45 +750,6 @@ select:disabled:focus {
   right: 0.5rem;
   top: 50%;
   transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  background: none;
-  border: none;
-  padding: 0;
-  color: #6b7280;
-  cursor: pointer;
-}
-
-.password-toggle-btn:hover {
-  color: #374151;
-  background: none;
-}
-
-.btn-secondary {
-  background: #fff;
-  color: #4b5563;
-  border: 1px solid #d1d5db;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: #f9fafb;
-}
-
-/* Outline "leave/exit" style: cautionary (amber, same hue as .budget-badge-warning) but
-   not destructive-red like the delete-account button, since leaving a family can be
-   undone by re-joining via a new invite. */
-.btn-outline-warning {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: #fff;
-  color: #b45309;
-  border: 1px solid #fcd34d;
-}
-
-.btn-outline-warning:hover:not(:disabled) {
-  background: #fffbeb;
-  border-color: #f59e0b;
 }
 
 /* Separates the leave-family action from the members table above it — needed since
@@ -989,33 +785,18 @@ select:disabled:focus {
   gap: 0.5rem;
 }
 
+/* Toolbars (Import/Export, bulk actions...) wrap onto a new line on narrow screens
+   instead of pushing their last button past the card edge. Icon actions inside a table
+   cell stay on one line — that cell is sized to its content (Td `actions`), so letting
+   it wrap would stack the icons vertically. */
 .row-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.4rem;
 }
 
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border-radius: 8px;
-  background: #f1f2f5;
-  color: #4b5563;
-}
-
-.icon-btn:hover:not(:disabled) {
-  background: #e5e7eb;
-}
-
-.icon-btn-danger {
-  color: #dc2626;
-}
-
-.icon-btn-danger:hover:not(:disabled) {
-  background: #fee2e2;
+td .row-actions {
+  flex-wrap: nowrap;
 }
 
 .badge {
@@ -1027,6 +808,7 @@ select:disabled:focus {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .badge-expense {
@@ -1447,40 +1229,27 @@ select:disabled:focus {
     margin: 4px auto 6px !important;
 }
 
-.custom-swal-confirm {
-    background: #6366f1 !important;
-    color: white !important;
-    border: none !important;
+/* Type-to-confirm field (confirmTypedDialog): same look as components/ui/Input.jsx. */
+.custom-swal-input {
+    width: 100% !important;
+    height: 40px !important;
+    margin: 14px 0 0 !important;
+    padding: 0 12px !important;
+    border: 1px solid #cbd5e1 !important;
     border-radius: 8px !important;
-    padding: 8px 18px !important;
-    font-size: 13px !important;
-    font-weight: 500 !important;
-    margin: 14px 4px 0 !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.08em !important;
+    text-align: center !important;
+    box-shadow: none !important;
 }
 
-.custom-swal-confirm:hover {
-    background: #4f46e5 !important;
-    transform: translateY(-1px);
+.custom-swal-input:focus {
+    border-color: #ef4444 !important;
+    outline: 2px solid rgba(239, 68, 68, 0.25) !important;
 }
 
-.custom-swal-cancel {
-    background: #f3f4f6 !important;
-    color: #374151 !important;
-    border: none !important;
-    border-radius: 8px !important;
-    padding: 8px 18px !important;
-    font-size: 13px !important;
-    font-weight: 500 !important;
-    margin: 14px 4px 0 !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease !important;
-}
-
-.custom-swal-cancel:hover {
-    background: #e5e7eb !important;
-}
+/* Confirm/cancel buttons of the dialog are Tailwind classes set in utils/confirm.js. */
 
 /* iOS Safari (and some Android browsers) auto-zoom the whole page when a focused
    input's font-size is under 16px — the page then looks "broken"/zoomed off-screen
@@ -1531,18 +1300,6 @@ select:disabled:focus {
 
   .mobile-menu-btn {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: none;
-    border-radius: 8px;
-    padding: 0.3rem;
-    color: #fff;
-    flex-shrink: 0;
-  }
-
-  .mobile-menu-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
   }
 
   .sidebar-backdrop {
@@ -1562,93 +1319,25 @@ select:disabled:focus {
     transform: translateX(-100%);
     transition: transform 0.25s ease;
     z-index: 50;
-    box-shadow: 12px 0 32px rgba(0, 0, 0, 0.3);
   }
 
+  /* Shadow only while open: on the closed (translated off-screen) drawer, its 12px/32px
+     shadow still bled into the left edge of every page as a grey strip. */
   .sidebar.is-open {
     transform: translateX(0);
+    box-shadow: 12px 0 32px rgba(0, 0, 0, 0.3);
   }
 
   .sidebar-close-btn {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: none;
-    border-radius: 8px;
-    padding: 0.3rem;
-    color: #cbd5e1;
-    flex-shrink: 0;
-  }
-
-  .sidebar-close-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
   }
 
   .content {
     padding: 1.25rem 1rem;
   }
 
-  /* Wide multi-column tables (Transactions, Wallets, AdminPanel, Profile members) don't
-     fit a phone screen — turn each row into its own labeled card instead of forcing a
-     hidden horizontal scroll. Each <td> keeps working exactly as before on desktop; on
-     mobile its data-label attribute (set in JSX) is shown above the value via ::before. */
-  table,
-  thead,
-  tbody,
-  th,
-  td,
-  tr {
-    display: block;
-  }
-
-  table {
-    width: 100%;
-  }
-
-  thead {
-    display: none;
-  }
-
-  tbody tr {
-    margin-bottom: 0.75rem;
-    border: 1px solid #e5e7eb;
-    border-radius: 10px;
-    padding: 0.85rem 1rem;
-    background: #fff;
-  }
-
-  tbody tr:last-child {
-    margin-bottom: 0;
-  }
-
-  td {
-    border: none;
-    padding: 0.35rem 0;
-    text-align: left;
-    /* A long unbreakable string (email, URL) has no spaces to wrap at, so without
-       this it visually bleeds past the card's right edge instead of respecting it
-       (e.g. "Nguyen Van A (long.email@example.com)" in AdminPanel's "Chủ hộ" column). */
-    overflow-wrap: anywhere;
-  }
-
-  td::before {
-    content: attr(data-label);
-    display: block;
-    font-size: 0.68rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #9aa3b5;
-    margin-bottom: 0.15rem;
-  }
-
-  td:not([data-label])::before,
-  td[data-label=""]::before {
-    content: none;
-    margin: 0;
-  }
-
+  /* The phone "each row is a labeled card" table layout lives in components/ui/Table.jsx
+     (Tailwind max-md: variants). */
   .row-actions {
     display: flex;
     justify-content: flex-end;
@@ -1657,10 +1346,6 @@ select:disabled:focus {
     margin-top: 0.3rem;
     border-top: 1px solid #f1f2f5;
   }
-}
-
-.notification-list li .icon-btn {
-  flex-shrink: 0;
 }
 
 .notification-preferences-list {
@@ -1693,41 +1378,12 @@ select:disabled:focus {
   cursor: pointer;
 }
 
-.notification-preferences-list input[type="checkbox"] {
-  accent-color: #4f46e5;
-  width: 15px;
-  height: 15px;
-}
-
 /* Reports page: tabs, and the print stylesheet used by "In / Lưu PDF" (window.print()) */
 .report-tabs {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
   margin-bottom: 1.25rem;
-}
-
-.report-tab {
-  background: #fff;
-  color: #4b5563;
-  border: 1px solid #d1d5db;
-  border-radius: 999px;
-  padding: 0.45rem 1rem;
-}
-
-.report-tab:hover:not(:disabled) {
-  background: #f9fafb;
-}
-
-.report-tab.is-active,
-.report-tab.is-active:hover:not(:disabled) {
-  background: #4f46e5;
-  border-color: #4f46e5;
-  color: #fff;
-}
-
-.report-controls .btn-secondary {
-  align-self: flex-end;
 }
 
 .report-period {
@@ -1875,5 +1531,364 @@ select:disabled:focus {
   .notification-layout .notification-preferences {
     position: static;
     max-height: none;
+  }
+}
+
+/* ---------- Modal (components/Modal.jsx) ---------- */
+/* Above the sidebar/header (max z-index 50) but below react-hot-toast (9999), so a toast fired
+   from inside a dialog — e.g. "secret key copied" — still shows on top of it. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(17, 24, 39, 0.55);
+  backdrop-filter: blur(2px);
+  animation: modal-fade-in 0.15s ease-out;
+}
+
+.modal-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  max-height: calc(100vh - 32px);
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(17, 24, 39, 0.25);
+  outline: none;
+  animation: modal-pop-in 0.18s ease-out;
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+  padding: 1.25rem 1.5rem 1rem;
+  border-bottom: 1px solid #f1f2f5;
+}
+
+.modal-header-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.modal-header-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.modal-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.modal-header-text h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #111827;
+}
+
+.modal-header-text p {
+  margin: 0.3rem 0 0;
+  font-size: 0.87rem;
+  line-height: 1.45;
+  color: #6b7280;
+}
+
+.modal-body {
+  padding: 1.25rem 1.5rem;
+  overflow-y: auto;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  padding: 0.9rem 1.5rem;
+  border-top: 1px solid #f1f2f5;
+  background: #fafafb;
+  border-radius: 0 0 16px 16px;
+}
+
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes modal-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop,
+  .modal-dialog {
+    animation: none;
+  }
+}
+
+/* ---------- 2FA setup dialog (components/TwoFactorSetupModal.jsx) ---------- */
+.two-factor-step {
+  display: flex;
+  gap: 0.9rem;
+}
+
+.two-factor-step + .two-factor-step {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px dashed #e5e7eb;
+}
+
+.two-factor-step-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #4f46e5;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.two-factor-step-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.two-factor-step-content h3 {
+  margin: 0.2rem 0 0.25rem;
+  font-size: 0.98rem;
+  color: #111827;
+}
+
+.two-factor-hint {
+  display: block;
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: #6b7280;
+}
+
+.two-factor-scan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.1rem;
+}
+
+.two-factor-qr {
+  box-sizing: content-box;
+  padding: 0.5rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.two-factor-manual {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 180px;
+}
+
+.two-factor-manual .two-factor-hint {
+  margin: 0;
+}
+
+.two-factor-secret {
+  padding: 0.55rem 0.7rem;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  background: #f9fafb;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+  color: #111827;
+  word-break: break-all;
+  user-select: all;
+}
+
+/* Big centered code field — an <Input>, only its size/typography differ. */
+.two-factor-code-input {
+  width: 100%;
+  max-width: 240px;
+  height: auto;
+  padding: 0.6rem 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 1.5rem;
+  letter-spacing: 0.45em;
+  text-align: center;
+}
+
+.two-factor-code-input::placeholder {
+  color: #d1d5db;
+}
+
+.two-factor-step-content .error-text {
+  margin: 0.6rem 0 0;
+  font-size: 0.87rem;
+}
+
+@media (max-width: 520px) {
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .two-factor-scan {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .two-factor-qr {
+    align-self: center;
+  }
+
+  .two-factor-code-input {
+    max-width: none;
+  }
+}
+
+/* ---------- Transaction history dialog (components/TransactionHistoryModal.jsx) ---------- */
+.history-empty {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* A vertical timeline: each entry hangs off a line on the left, with a dot coloured by action. */
+.history-item {
+  position: relative;
+  padding: 0 0 1.1rem 1.4rem;
+  border-left: 2px solid #e5e7eb;
+  margin-left: 0.4rem;
+}
+
+.history-item:last-child {
+  padding-bottom: 0;
+  border-left-color: transparent;
+}
+
+.history-item::before {
+  content: "";
+  position: absolute;
+  left: -7px;
+  top: 0.2rem;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--history-color, #9ca3af);
+}
+
+.history-item-created {
+  --history-color: #16a34a;
+}
+
+.history-item-updated {
+  --history-color: #4f46e5;
+}
+
+.history-item-deleted {
+  --history-color: #dc2626;
+}
+
+.history-item-restored {
+  --history-color: #d97706;
+}
+
+.history-item-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.history-item-header .badge {
+  color: var(--history-color);
+  background: color-mix(in srgb, var(--history-color) 12%, #fff);
+}
+
+.history-actor {
+  font-weight: 600;
+  color: #111827;
+}
+
+.history-time {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.history-detail {
+  margin: 0.35rem 0 0;
+  font-size: 0.87rem;
+  color: #4b5563;
+}
+
+.history-changes {
+  list-style: none;
+  margin: 0.45rem 0 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  background: #f9fafb;
+  font-size: 0.87rem;
+}
+
+.history-changes li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.history-changes li + li {
+  margin-top: 0.25rem;
+}
+
+.history-field {
+  min-width: 6.5rem;
+  color: #6b7280;
+}
+
+.history-from {
+  color: #9ca3af;
+  text-decoration: line-through;
+}
+
+.history-to {
+  font-weight: 600;
+  color: #111827;
+}
+
+@media (max-width: 520px) {
+  .history-time {
+    margin-left: 0;
+    width: 100%;
   }
 }

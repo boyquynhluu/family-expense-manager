@@ -1,0 +1,19 @@
+# Blocked words/phrases matched WITH their diacritics, as whole words (TextQuality).
+# Put a word here when its unaccented form is an ordinary word — "lồn" → "lon" (lon bia),
+# "cặc" → "cac" (các), "đụ" → "du" (du lịch), "đéo" → "deo" (đeo kính) — so it must only
+# match as typed. One entry per line, lower case; a phrase = several words separated by a space.
+# Lines starting with # are comments.
+lồn
+cặc
+buồi
+địt
+đụ
+đéo
+đếch
+đĩ
+điếm
+óc chó
+chó đẻ
+con đĩ
+thằng chó
+đồ chó

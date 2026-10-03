@@ -6,6 +6,8 @@ import java.time.Instant;
  * Published by auth-service to the {@code password-reset} Kafka topic (key = userId)
  * when a user requests a password reset, and consumed by notification-service to send
  * the reset email.
+ *
+ * @author boyquynhluu
  */
 public record PasswordResetEvent(
         Long userId,

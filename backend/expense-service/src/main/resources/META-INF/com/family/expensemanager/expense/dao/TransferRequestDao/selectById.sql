@@ -1,0 +1,20 @@
+SELECT
+    id,
+    family_id,
+    requester_user_id,
+    requester_name,
+    approver_user_id,
+    from_wallet_id,
+    to_wallet_id,
+    amount,
+    note,
+    status,
+    decided_by_user_id,
+    decided_by_name,
+    decided_at,
+    transfer_id,
+    created_at
+FROM
+    TRANSFER_REQUESTS
+WHERE
+    id = /* id */0

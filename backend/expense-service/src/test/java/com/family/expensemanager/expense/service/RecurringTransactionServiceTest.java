@@ -17,6 +17,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
@@ -32,11 +34,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * @author boyquynhluu
+ */
 @ExtendWith(MockitoExtension.class)
 class RecurringTransactionServiceTest {
 
@@ -54,6 +60,9 @@ class RecurringTransactionServiceTest {
 
     private static final Long OTHER_USER_ID = 99L;
 
+    /** Runs the callback inline — a real rollback is covered by Spring, only the call shape matters here. */
+    private final TransactionTemplate transactionTemplate = new TransactionTemplate(mock(PlatformTransactionManager.class));
+
     private RecurringTransactionService service;
 
     private static Clock clockOn(String isoDate) {
@@ -64,7 +73,7 @@ class RecurringTransactionServiceTest {
     void setUp() {
         service = new RecurringTransactionService(
                 recurringTransactionDao, walletService, categoryService, transactionService, clockOn("2026-01-15"),
-                eventPublisher);
+                eventPublisher, transactionTemplate);
     }
 
     @Test
@@ -80,11 +89,33 @@ class RecurringTransactionServiceTest {
     }
 
     @Test
+    void create_rejectsRuleBelowTenThousand_soScheduledRunsCanNeverFailOnIt() {
+        var request = new CreateRecurringTransactionRequest(
+                5L, 7L, "EXPENSE", BigDecimal.valueOf(9000), null, null, 1, null, null, LocalDate.of(2026, 2, 1), null);
+
+        assertThatThrownBy(() -> service.create(1L, 10L, "a@b.com", "An", request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Số tiền giao dịch tối thiểu là 10.000đ");
+        verify(recurringTransactionDao, never()).insert(any());
+    }
+
+    @Test
+    void create_rejectsRuleAboveFiveMillion() {
+        var request = new CreateRecurringTransactionRequest(
+                5L, 7L, "EXPENSE", BigDecimal.valueOf(10000000), null, null, 1, null, null, LocalDate.of(2026, 2, 1), null);
+
+        assertThatThrownBy(() -> service.create(1L, 10L, "a@b.com", "An", request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Số tiền giao dịch tối đa là 5.000.000đ");
+        verify(recurringTransactionDao, never()).insert(any());
+    }
+
+    @Test
     void create_setsNextRunDate_toNextMonth_whenDayOfMonthAlreadyPassedInStartMonth() {
         // startDate is the 15th but the bill runs on the 1st — the 1st of the start
         // month already passed, so the first real occurrence is next month's 1st.
         var request = new CreateRecurringTransactionRequest(
-                5L, 7L, "EXPENSE", BigDecimal.TEN, null, null, 1, null, null, LocalDate.of(2026, 2, 15), null);
+                5L, 7L, "EXPENSE", BigDecimal.valueOf(50000), null, null, 1, null, null, LocalDate.of(2026, 2, 15), null);
 
         var response = service.create(1L, 10L, "a@b.com", "An", request);
 
@@ -109,7 +140,7 @@ class RecurringTransactionServiceTest {
         // Same fixed "today" (Jan 15) but dayOfMonth (20) hasn't happened yet this month
         // — the rule should still be allowed to fire later this month, not skip to next.
         var request = new CreateRecurringTransactionRequest(
-                5L, 7L, "EXPENSE", BigDecimal.TEN, null, null, 20, null, null, LocalDate.of(2025, 6, 1), null);
+                5L, 7L, "EXPENSE", BigDecimal.valueOf(50000), null, null, 20, null, null, LocalDate.of(2025, 6, 1), null);
 
         var response = service.create(1L, 10L, "a@b.com", "An", request);
 
@@ -121,7 +152,7 @@ class RecurringTransactionServiceTest {
         RecurringTransaction r = rule(1L, LocalDate.of(2026, 1, 1), 1, null);
         when(recurringTransactionDao.selectById(9L)).thenReturn(Optional.of(r));
         var request = new CreateRecurringTransactionRequest(
-                5L, 7L, "EXPENSE", BigDecimal.TEN, null, null, 1, null, null, LocalDate.of(2025, 10, 1), null);
+                5L, 7L, "EXPENSE", BigDecimal.valueOf(50000), null, null, 1, null, null, LocalDate.of(2025, 10, 1), null);
 
         var response = service.update(9L, 1L, 10L, false, request);
 
@@ -131,7 +162,7 @@ class RecurringTransactionServiceTest {
     @Test
     void create_clampsDayOfMonth_toLastDayOfShorterMonth() {
         var request = new CreateRecurringTransactionRequest(
-                5L, 7L, "EXPENSE", BigDecimal.TEN, null, null, 31, null, null, LocalDate.of(2026, 2, 1), null);
+                5L, 7L, "EXPENSE", BigDecimal.valueOf(50000), null, null, 31, null, null, LocalDate.of(2026, 2, 1), null);
 
         var response = service.create(1L, 10L, "a@b.com", "An", request);
 
@@ -143,13 +174,13 @@ class RecurringTransactionServiceTest {
         RecurringTransaction rule = rule(1L, LocalDate.of(2026, 1, 1), 1, null);
         assertThat(rule.getLastRunDate()).isNull(); // never fired yet — frontend shows "Chưa thực hiện"
         when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
-        when(transactionService.create(any(), any(), any(), any(), any()))
-                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.TEN,
-                        LocalDate.of(2026, 1, 1).atStartOfDay(), null, false, null));
+        when(transactionService.create(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.valueOf(50000),
+                        LocalDate.of(2026, 1, 1).atStartOfDay(), null, false, null, null));
 
         service.generateDueTransactions();
 
-        verify(transactionService, times(1)).create(eq(1L), eq(10L), eq("a@b.com"), eq("An"), any());
+        verify(transactionService, times(1)).create(eq(1L), eq(10L), eq("a@b.com"), eq("An"), any(), any());
         assertThat(rule.getNextRunDate()).isEqualTo(LocalDate.of(2026, 2, 1));
         // Now that it fired once, frontend should show "Hoàn thành" for this rule.
         assertThat(rule.getLastRunDate()).isEqualTo(LocalDate.of(2026, 1, 1));
@@ -161,13 +192,13 @@ class RecurringTransactionServiceTest {
         // Server was "down" since October — nextRunDate is 3 months behind today (Jan 15).
         RecurringTransaction rule = rule(1L, LocalDate.of(2025, 10, 1), 1, null);
         when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
-        when(transactionService.create(any(), any(), any(), any(), any()))
-                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.TEN, null, null, false, null));
+        when(transactionService.create(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.valueOf(50000), null, null, false, null, null));
 
         service.generateDueTransactions();
 
         // Oct, Nov, Dec, Jan = 4 occurrences due by Jan 15.
-        verify(transactionService, times(4)).create(eq(1L), eq(10L), eq("a@b.com"), eq("An"), any());
+        verify(transactionService, times(4)).create(eq(1L), eq(10L), eq("a@b.com"), eq("An"), any(), any());
         assertThat(rule.getNextRunDate()).isEqualTo(LocalDate.of(2026, 2, 1));
         assertThat(rule.getLastRunDate()).isEqualTo(LocalDate.of(2026, 1, 1)); // the most recent occurrence processed
     }
@@ -176,8 +207,8 @@ class RecurringTransactionServiceTest {
     void generateDueTransactions_deactivatesRule_onceNextRunDatePassesEndDate() {
         RecurringTransaction rule = rule(1L, LocalDate.of(2026, 1, 1), 1, LocalDate.of(2026, 1, 31));
         when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
-        when(transactionService.create(any(), any(), any(), any(), any()))
-                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.TEN, null, null, false, null));
+        when(transactionService.create(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.valueOf(50000), null, null, false, null, null));
 
         service.generateDueTransactions();
 
@@ -189,10 +220,10 @@ class RecurringTransactionServiceTest {
         RecurringTransaction failing = rule(1L, LocalDate.of(2026, 1, 1), 1, null);
         RecurringTransaction ok = rule(2L, LocalDate.of(2026, 1, 1), 1, null);
         when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(failing, ok));
-        when(transactionService.create(eq(1L), any(), any(), any(), any()))
+        when(transactionService.create(eq(1L), any(), any(), any(), any(), any()))
                 .thenThrow(new RuntimeException("wallet was deleted"));
-        when(transactionService.create(eq(2L), any(), any(), any(), any()))
-                .thenReturn(new TransactionResponse(99L, 5L, 7L, 2L, 10L, null, "EXPENSE", BigDecimal.TEN, null, null, false, null));
+        when(transactionService.create(eq(2L), any(), any(), any(), any(), any()))
+                .thenReturn(new TransactionResponse(99L, 5L, 7L, 2L, 10L, null, "EXPENSE", BigDecimal.valueOf(50000), null, null, false, null, null));
 
         service.generateDueTransactions();
 
@@ -208,9 +239,9 @@ class RecurringTransactionServiceTest {
         category.setName("Nhà ở");
         when(categoryService.requireOwnedByFamily(7L, 1L)).thenReturn(category);
         when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
-        when(transactionService.create(any(), any(), any(), any(), any()))
-                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.TEN,
-                        LocalDate.of(2026, 1, 1).atStartOfDay(), null, false, null));
+        when(transactionService.create(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.valueOf(50000),
+                        LocalDate.of(2026, 1, 1).atStartOfDay(), null, false, null, null));
 
         service.generateDueTransactions();
 
@@ -231,7 +262,7 @@ class RecurringTransactionServiceTest {
     void generateDueTransactions_publishesRecurringFailedEvent_whenRuleThrows() {
         RecurringTransaction failing = rule(1L, LocalDate.of(2026, 1, 1), 1, null);
         when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(failing));
-        when(transactionService.create(any(), any(), any(), any(), any()))
+        when(transactionService.create(any(), any(), any(), any(), any(), any()))
                 .thenThrow(new RuntimeException("wallet was deleted"));
 
         service.generateDueTransactions();
@@ -248,8 +279,8 @@ class RecurringTransactionServiceTest {
     void generateDueTransactions_keepsProcessing_whenPublishingEventThrows() {
         RecurringTransaction rule = rule(1L, LocalDate.of(2026, 1, 1), 1, null);
         when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
-        when(transactionService.create(any(), any(), any(), any(), any()))
-                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.TEN, null, null, false, null));
+        when(transactionService.create(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.valueOf(50000), null, null, false, null, null));
         doThrow(new IllegalStateException("kafka down")).when(eventPublisher).publishEvent(any(ExpenseEvent.class));
 
         service.generateDueTransactions();
@@ -263,7 +294,7 @@ class RecurringTransactionServiceTest {
         RecurringTransaction rule = rule(1L, LocalDate.of(2026, 1, 1), 1, null);
         when(recurringTransactionDao.selectById(9L)).thenReturn(Optional.of(rule));
         var request = new CreateRecurringTransactionRequest(
-                5L, 7L, "EXPENSE", BigDecimal.TEN, null, null, 1, null, null, LocalDate.of(2026, 2, 1), null);
+                5L, 7L, "EXPENSE", BigDecimal.valueOf(50000), null, null, 1, null, null, LocalDate.of(2026, 2, 1), null);
 
         assertForbidden(() -> service.update(9L, 1L, OTHER_USER_ID, false, request));
         verify(recurringTransactionDao, never()).update(any());
@@ -274,7 +305,7 @@ class RecurringTransactionServiceTest {
         RecurringTransaction rule = rule(1L, LocalDate.of(2026, 1, 1), 1, null);
         when(recurringTransactionDao.selectById(9L)).thenReturn(Optional.of(rule));
         var request = new CreateRecurringTransactionRequest(
-                5L, 7L, "EXPENSE", BigDecimal.TEN, null, null, 1, null, null, LocalDate.of(2026, 2, 1), null);
+                5L, 7L, "EXPENSE", BigDecimal.valueOf(50000), null, null, 1, null, null, LocalDate.of(2026, 2, 1), null);
 
         service.update(9L, 1L, OTHER_USER_ID, true, request);
 
@@ -330,6 +361,44 @@ class RecurringTransactionServiceTest {
 
         assertThat(rule.getActive()).isFalse();
         verify(recurringTransactionDao).update(rule);
+    }
+
+    @Test
+    void setActive_reactivating_resumesFromNextOccurrence_insteadOfBackfillingThePausedMonths() {
+        // Monthly on the 5th, paused since Oct 5 (nextRunDate still points there); today is Jan 15.
+        RecurringTransaction rule = rule(1L, LocalDate.of(2025, 10, 5), 5, null);
+        rule.setActive(false);
+        when(recurringTransactionDao.selectById(9L)).thenReturn(Optional.of(rule));
+
+        service.setActive(9L, 1L, 10L, false, true);
+
+        assertThat(rule.getActive()).isTrue();
+        // Next 5th after Jan 15 — not Oct 5, which would make tonight's job create Oct, Nov, Dec and Jan.
+        assertThat(rule.getNextRunDate()).isEqualTo(LocalDate.of(2026, 2, 5));
+        verify(recurringTransactionDao).update(rule);
+    }
+
+    @Test
+    void setActive_pausing_leavesNextRunDateAlone() {
+        RecurringTransaction rule = rule(1L, LocalDate.of(2026, 2, 1), 1, null);
+        when(recurringTransactionDao.selectById(9L)).thenReturn(Optional.of(rule));
+
+        service.setActive(9L, 1L, 10L, false, false);
+
+        assertThat(rule.getActive()).isFalse();
+        assertThat(rule.getNextRunDate()).isEqualTo(LocalDate.of(2026, 2, 1));
+    }
+
+    @Test
+    void setActive_reactivating_isRejected_whenTheRuleHasAlreadyEnded() {
+        RecurringTransaction rule = rule(1L, LocalDate.of(2025, 10, 5), 5, LocalDate.of(2025, 12, 31));
+        rule.setActive(false);
+        when(recurringTransactionDao.selectById(9L)).thenReturn(Optional.of(rule));
+
+        assertThatThrownBy(() -> service.setActive(9L, 1L, 10L, false, true))
+                .isInstanceOf(BadRequestException.class);
+        assertThat(rule.getActive()).isFalse();
+        verify(recurringTransactionDao, never()).update(any());
     }
 
     @Test
@@ -515,7 +584,7 @@ class RecurringTransactionServiceTest {
 
         service.generateDueTransactions();
 
-        verify(transactionService, times(3)).create(eq(1L), eq(10L), eq("a@b.com"), eq("An"), any());
+        verify(transactionService, times(3)).create(eq(1L), eq(10L), eq("a@b.com"), eq("An"), any(), any());
         assertThat(rule.getLastRunDate()).isEqualTo(LocalDate.of(2026, 1, 12));
         assertThat(rule.getNextRunDate()).isEqualTo(LocalDate.of(2026, 1, 19));
     }
@@ -533,6 +602,50 @@ class RecurringTransactionServiceTest {
     }
 
     @Test
+    void generateDueTransactions_persistsEachOccurrence_soAFailureMidCatchUpNeverDuplicatesEarlierOnes() {
+        // Nov succeeds, Dec fails: the rule must already point at Dec, or tomorrow's run re-creates Nov.
+        RecurringTransaction rule = rule(1L, LocalDate.of(2025, 11, 1), 1, null);
+        when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
+        when(transactionService.create(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.valueOf(50000), null, null,
+                        false, null, null))
+                .thenThrow(new RuntimeException("wallet was deleted"));
+
+        service.generateDueTransactions();
+
+        verify(transactionService, times(2)).create(any(), any(), any(), any(), any(), any());
+        verify(recurringTransactionDao, times(1)).update(rule);
+        assertThat(rule.getLastRunDate()).isEqualTo(LocalDate.of(2025, 11, 1));
+        assertThat(rule.getNextRunDate()).isEqualTo(LocalDate.of(2025, 12, 1));
+    }
+
+    @Test
+    void generateDueTransactions_weekly_catchUpStopsAtEndDate() {
+        // Due by Jan 15: Dec 29, Jan 5, Jan 12 — but the rule ends Jan 6, so Jan 12 must not be created.
+        RecurringTransaction rule = weeklyRule(LocalDate.of(2025, 12, 29), 1, LocalDate.of(2026, 1, 6));
+        when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
+        stubTransactionCreate();
+
+        service.generateDueTransactions();
+
+        verify(transactionService, times(2)).create(eq(1L), eq(10L), eq("a@b.com"), eq("An"), any(), any());
+        assertThat(rule.getLastRunDate()).isEqualTo(LocalDate.of(2026, 1, 5));
+        assertThat(rule.getActive()).isFalse();
+    }
+
+    @Test
+    void generateDueTransactions_retiresWithoutRunning_aDueRuleAlreadyPastItsEndDate() {
+        RecurringTransaction rule = rule(1L, LocalDate.of(2026, 1, 1), 1, LocalDate.of(2025, 12, 31));
+        when(recurringTransactionDao.selectDue(LocalDate.of(2026, 1, 15))).thenReturn(List.of(rule));
+
+        service.generateDueTransactions();
+
+        verify(transactionService, never()).create(any(), any(), any(), any(), any(), any());
+        assertThat(rule.getActive()).isFalse();
+        verify(recurringTransactionDao).update(rule);
+    }
+
+    @Test
     void generateDueTransactions_yearly_clampsFeb29ToFeb28InNonLeapYears() {
         // Due runs: 2024-02-29 (leap) and 2025-02-28 (clamped); next is 2026-02-28, not yet due.
         RecurringTransaction rule = yearlyRule(LocalDate.of(2024, 2, 29), 2, 29);
@@ -541,7 +654,7 @@ class RecurringTransactionServiceTest {
 
         service.generateDueTransactions();
 
-        verify(transactionService, times(2)).create(eq(1L), eq(10L), eq("a@b.com"), eq("An"), any());
+        verify(transactionService, times(2)).create(eq(1L), eq(10L), eq("a@b.com"), eq("An"), any(), any());
         assertThat(rule.getLastRunDate()).isEqualTo(LocalDate.of(2025, 2, 28));
         assertThat(rule.getNextRunDate()).isEqualTo(LocalDate.of(2026, 2, 28));
     }
@@ -552,20 +665,20 @@ class RecurringTransactionServiceTest {
         // Re-anchor the clock past the 2027 run so the loop advances into 2028.
         service = new RecurringTransactionService(
                 recurringTransactionDao, walletService, categoryService, transactionService, clockOn("2027-03-01"),
-                eventPublisher);
+                eventPublisher, transactionTemplate);
         when(recurringTransactionDao.selectDue(LocalDate.of(2027, 3, 1))).thenReturn(List.of(rule));
         stubTransactionCreate();
 
         service.generateDueTransactions();
 
-        verify(transactionService, times(1)).create(eq(1L), eq(10L), eq("a@b.com"), eq("An"), any());
+        verify(transactionService, times(1)).create(eq(1L), eq(10L), eq("a@b.com"), eq("An"), any(), any());
         assertThat(rule.getNextRunDate()).isEqualTo(LocalDate.of(2028, 2, 29));
     }
 
     private void stubTransactionCreate() {
-        when(transactionService.create(any(), any(), any(), any(), any()))
-                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.TEN, null, null,
-                        false, null));
+        when(transactionService.create(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new TransactionResponse(99L, 5L, 7L, 1L, 10L, null, "EXPENSE", BigDecimal.valueOf(50000), null, null,
+                        false, null, null));
     }
 
     private void assertBadRequest(CreateRecurringTransactionRequest request) {
@@ -577,7 +690,7 @@ class RecurringTransactionServiceTest {
     private static CreateRecurringTransactionRequest request(
             String frequency, Integer dayOfMonth, Integer dayOfWeek, Integer monthOfYear, LocalDate startDate) {
         return new CreateRecurringTransactionRequest(
-                5L, 7L, "EXPENSE", BigDecimal.TEN, null, frequency, dayOfMonth, dayOfWeek, monthOfYear, startDate,
+                5L, 7L, "EXPENSE", BigDecimal.valueOf(50000), null, frequency, dayOfMonth, dayOfWeek, monthOfYear, startDate,
                 null);
     }
 

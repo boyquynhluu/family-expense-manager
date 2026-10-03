@@ -33,6 +33,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * @author boyquynhluu
+ */
 @ExtendWith(MockitoExtension.class)
 class TransactionImportServiceTest {
 
@@ -65,13 +68,49 @@ class TransactionImportServiceTest {
         assertThat(result.errors()).isEmpty();
 
         ArgumentCaptor<TransactionRequest> captor = ArgumentCaptor.forClass(TransactionRequest.class);
-        verify(transactionService).create(eq(1L), eq(100L), eq("a@b.com"), eq("An"), captor.capture());
+        verify(transactionService).create(eq(1L), eq(100L), eq("a@b.com"), eq("An"), captor.capture(), any());
         assertThat(captor.getValue().walletId()).isEqualTo(10L);
         assertThat(captor.getValue().categoryId()).isEqualTo(20L);
         assertThat(captor.getValue().type()).isEqualTo("EXPENSE");
         assertThat(captor.getValue().amount()).isEqualByComparingTo(BigDecimal.valueOf(50000));
         assertThat(captor.getValue().occurredAt()).isEqualTo(LocalDate.of(2026, 1, 5).atStartOfDay());
         assertThat(captor.getValue().note()).isEqualTo("Trưa");
+    }
+
+    @Test
+    void importFile_rejectsRow_whenMemberImportsIntoAnotherMembersWallet() {
+        WalletResponse spouses = new WalletResponse(10L, 1L, "Ví Vợ", "VND", BigDecimal.ZERO, BigDecimal.ZERO, null, 200L);
+        when(walletService.listByFamily(1L)).thenReturn(List.of(spouses));
+        when(categoryService.listByFamily(1L)).thenReturn(List.of(category(20L, "Ăn uống", "EXPENSE")));
+        MockMultipartFile file = csvFile(
+                "Thời gian,Ví,Danh mục,Loại,Số tiền,Ghi chú\n"
+                        + "2026-01-05,Ví Vợ,Ăn uống,Chi tiêu,50000,\n");
+
+        var result = importService.importFile(1L, 100L, "a@b.com", "An", false, file);
+
+        assertThat(result.importedCount()).isZero();
+        assertThat(result.errors()).singleElement()
+                .satisfies(e -> assertThat(e.message()).contains("ví riêng của thành viên khác"));
+        verify(transactionService, never()).create(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void importFile_reportsRowsOutsideTenThousandToFiveMillion_andImportsTheRest() {
+        when(walletService.listByFamily(1L)).thenReturn(List.of(wallet(10L, "Ví chính")));
+        when(categoryService.listByFamily(1L)).thenReturn(List.of(category(20L, "Ăn uống", "EXPENSE")));
+        MockMultipartFile file = csvFile(
+                "Thời gian,Ví,Danh mục,Loại,Số tiền,Ghi chú\n"
+                        + "2026-01-05,Ví chính,Ăn uống,Chi tiêu,5000,\n"
+                        + "2026-01-06,Ví chính,Ăn uống,Chi tiêu,10000,\n"
+                        + "2026-01-07,Ví chính,Ăn uống,Chi tiêu,7000000,\n");
+
+        var result = importService.importFile(1L, 100L, "a@b.com", "An", file);
+
+        assertThat(result.importedCount()).isEqualTo(1);
+        assertThat(result.errors()).extracting(e -> e.message())
+                .anySatisfy(m -> assertThat(m).startsWith("Số tiền giao dịch tối thiểu là 10.000đ"))
+                .anySatisfy(m -> assertThat(m).startsWith("Số tiền giao dịch tối đa là 5.000.000đ"))
+                .hasSize(2);
     }
 
     @Test
@@ -87,7 +126,7 @@ class TransactionImportServiceTest {
         assertThat(result.importedCount()).isZero();
         assertThat(result.errors()).hasSize(1);
         assertThat(result.errors().get(0).rowNumber()).isEqualTo(2);
-        verify(transactionService, never()).create(any(), any(), any(), any(), any());
+        verify(transactionService, never()).create(any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -163,9 +202,9 @@ class TransactionImportServiceTest {
         assertThat(result.errors()).hasSize(1);
         assertThat(result.errors().get(0).rowNumber()).isEqualTo(2);
         verify(transactionService, never()).create(eq(1L), eq(100L), eq("a@b.com"), eq("An"),
-                argThat(r -> r.amount().compareTo(BigDecimal.valueOf(50000)) == 0));
+                argThat(r -> r.amount().compareTo(BigDecimal.valueOf(50000)) == 0), any());
         verify(transactionService).create(eq(1L), eq(100L), eq("a@b.com"), eq("An"),
-                argThat(r -> r.amount().compareTo(BigDecimal.valueOf(30000)) == 0));
+                argThat(r -> r.amount().compareTo(BigDecimal.valueOf(30000)) == 0), any());
     }
 
     @Test
@@ -229,7 +268,7 @@ class TransactionImportServiceTest {
         assertThat(result.importedCount()).isEqualTo(1);
         assertThat(result.errors()).isEmpty();
         ArgumentCaptor<TransactionRequest> captor = ArgumentCaptor.forClass(TransactionRequest.class);
-        verify(transactionService).create(eq(1L), eq(100L), eq("a@b.com"), eq("An"), captor.capture());
+        verify(transactionService).create(eq(1L), eq(100L), eq("a@b.com"), eq("An"), captor.capture(), any());
         assertThat(captor.getValue().occurredAt()).isEqualTo(LocalDate.of(2026, 1, 5).atStartOfDay());
     }
 

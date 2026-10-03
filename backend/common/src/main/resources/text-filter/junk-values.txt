@@ -1,0 +1,36 @@
+# Placeholder / keyboard-mash values rejected when they are the WHOLE content of a field
+# (TextQuality) — "test" alone is junk, "Phí test COVID" is not. Compared without diacritics,
+# case-insensitively, with repeated letters collapsed ("testtt" = "test", "xxxx" = "x").
+# One entry per line. # = comment.
+test
+testing
+test1
+test123
+tes
+tess
+x
+xx
+xyz
+abc
+abcd
+abcxyz
+asd
+asdf
+asdfgh
+qwe
+qwer
+qwerty
+zxc
+zxcv
+123
+1234
+12345
+123456
+hihi
+haha
+hehe
+hjhj
+lorem
+lorem ipsum
+dummy
+sample

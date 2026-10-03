@@ -5,12 +5,18 @@ import com.family.expensemanager.expense.dao.BudgetDao;
 import com.family.expensemanager.expense.dao.BudgetDaoImpl;
 import com.family.expensemanager.expense.dao.CategoryDao;
 import com.family.expensemanager.expense.dao.CategoryDaoImpl;
+import com.family.expensemanager.expense.dao.IdempotencyKeyDao;
+import com.family.expensemanager.expense.dao.IdempotencyKeyDaoImpl;
 import com.family.expensemanager.expense.dao.RecurringTransactionDao;
 import com.family.expensemanager.expense.dao.RecurringTransactionDaoImpl;
 import com.family.expensemanager.expense.dao.ReportDao;
 import com.family.expensemanager.expense.dao.ReportDaoImpl;
+import com.family.expensemanager.expense.dao.TransactionAuditLogDao;
+import com.family.expensemanager.expense.dao.TransactionAuditLogDaoImpl;
 import com.family.expensemanager.expense.dao.TransactionDao;
 import com.family.expensemanager.expense.dao.TransactionDaoImpl;
+import com.family.expensemanager.expense.dao.TransferRequestDao;
+import com.family.expensemanager.expense.dao.TransferRequestDaoImpl;
 import com.family.expensemanager.expense.dao.WalletDao;
 import com.family.expensemanager.expense.dao.WalletDaoImpl;
 import com.family.expensemanager.expense.dao.WalletTransferDao;
@@ -22,6 +28,9 @@ import org.springframework.jdbc.datasource.TransactionAwareDataSourceProxy;
 
 import javax.sql.DataSource;
 
+/**
+ * @author boyquynhluu
+ */
 @Configuration
 public class DomaConfiguration {
 
@@ -61,7 +70,22 @@ public class DomaConfiguration {
     }
 
     @Bean
+    public TransferRequestDao transferRequestDao(Config domaConfig) {
+        return new TransferRequestDaoImpl(domaConfig);
+    }
+
+    @Bean
     public ReportDao reportDao(Config domaConfig) {
         return new ReportDaoImpl(domaConfig);
+    }
+
+    @Bean
+    public IdempotencyKeyDao idempotencyKeyDao(Config domaConfig) {
+        return new IdempotencyKeyDaoImpl(domaConfig);
+    }
+
+    @Bean
+    public TransactionAuditLogDao transactionAuditLogDao(Config domaConfig) {
+        return new TransactionAuditLogDaoImpl(domaConfig);
     }
 }

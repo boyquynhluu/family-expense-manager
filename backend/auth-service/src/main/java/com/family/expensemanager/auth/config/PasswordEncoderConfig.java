@@ -11,6 +11,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
  * AppOidcUserService/AppOAuth2UserService) on AuthService, which itself needs a
  * PasswordEncoder — declaring it inside SecurityConfig created a circular dependency
  * (authService -> securityConfig -> appOidcUserService -> authService).
+ *
+ * @author boyquynhluu
  */
 @Configuration
 public class PasswordEncoderConfig {

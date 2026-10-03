@@ -17,6 +17,8 @@ import lombok.extern.slf4j.Slf4j;
  * TTL on a revoked entry is capped at the access-token lifetime: once that long has
  * passed the token would have expired naturally anyway, so there's no need to remember
  * the revocation any longer.
+ *
+ * @author boyquynhluu
  */
 @Component
 @RequiredArgsConstructor

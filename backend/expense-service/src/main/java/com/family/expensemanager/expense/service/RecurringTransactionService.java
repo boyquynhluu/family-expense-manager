@@ -7,8 +7,10 @@ import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.expense.dao.RecurringTransactionDao;
+import com.family.expensemanager.expense.domain.TransactionAmounts;
 import com.family.expensemanager.expense.domain.entity.Category;
 import com.family.expensemanager.expense.domain.entity.RecurringTransaction;
+import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.dto.CreateRecurringTransactionRequest;
 import com.family.expensemanager.expense.dto.RecurringTransactionResponse;
 import com.family.expensemanager.expense.dto.TransactionRequest;
@@ -21,6 +23,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.DayOfWeek;
@@ -42,6 +45,8 @@ import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
  * "3. Không có giao dịch định kỳ") plus the daily catch-up job that turns a due
  * template into a real transaction. See {@link RecurringTransactionScheduler} for the
  * cron trigger.
+ *
+ * @author boyquynhluu
  */
 @Service
 @Transactional
@@ -68,14 +73,29 @@ public class RecurringTransactionService {
     private final TransactionService transactionService;
     private final Clock clock;
     private final ApplicationEventPublisher eventPublisher;
+    private final TransactionTemplate transactionTemplate;
 
+    /** Trusted callers only (no wallet-ownership check) — user requests go through the overload below. */
     public RecurringTransactionResponse create(
             Long familyId, Long userId, String userEmail, String userDisplayName,
+            CreateRecurringTransactionRequest request) {
+        return create(familyId, userId, userEmail, userDisplayName, true, request);
+    }
+
+    /**
+     * @param callerIsOwner whether the caller is the family OWNER — a plain member may only schedule
+     *                      against their own wallet or a shared one. Checked once here, when the rule is
+     *                      saved; the scheduler later runs it without re-checking.
+     */
+    public RecurringTransactionResponse create(
+            Long familyId, Long userId, String userEmail, String userDisplayName, boolean callerIsOwner,
             CreateRecurringTransactionRequest request) {
         try {
             log.info("create - start, familyId={}, walletId={}, categoryId={}",
                     familyId, request.walletId(), request.categoryId());
-            walletService.requireOwnedByFamily(request.walletId(), familyId);
+            requireAmountInRange(request);
+            Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
+            walletService.requireUsableBy(wallet, userId, callerIsOwner);
             categoryService.requireOwnedByFamily(request.categoryId(), familyId, request.type());
 
             RecurringTransaction r = new RecurringTransaction();
@@ -130,7 +150,11 @@ public class RecurringTransactionService {
             log.info("update - start, id={}, familyId={}", id, familyId);
             RecurringTransaction r = requireOwnedByFamily(id, familyId);
             requireCanModify(r, callerUserId, callerIsOwner);
-            walletService.requireOwnedByFamily(request.walletId(), familyId);
+            requireAmountInRange(request);
+            Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
+            if (!request.walletId().equals(r.getWalletId())) {
+                walletService.requireUsableBy(wallet, callerUserId, callerIsOwner);
+            }
             categoryService.requireOwnedByFamily(request.categoryId(), familyId, request.type());
 
             r.setWalletId(request.walletId());
@@ -153,6 +177,17 @@ public class RecurringTransactionService {
             log.info("setActive - start, id={}, familyId={}, active={}", id, familyId, active);
             RecurringTransaction r = requireOwnedByFamily(id, familyId);
             requireCanModify(r, callerUserId, callerIsOwner);
+            if (active && !Boolean.TRUE.equals(r.getActive())) {
+                // Pausing means "skip these runs", not "postpone them": without this, nextRunDate would
+                // still point at the date it was paused on, and the next nightly job would back-fill
+                // every occurrence missed while paused. Resume from the next occurrence on/after today.
+                LocalDate next = firstOccurrenceOnOrAfter(r);
+                if (r.getEndDate() != null && next.isAfter(r.getEndDate())) {
+                    throw logged(log, new BadRequestException(
+                            "Giao dịch định kỳ đã quá ngày kết thúc — hãy sửa ngày kết thúc trước khi kích hoạt lại"));
+                }
+                r.setNextRunDate(next);
+            }
             r.setActive(active);
             recurringTransactionDao.update(r);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
@@ -228,28 +263,48 @@ public class RecurringTransactionService {
         }
     }
 
+    /**
+     * Each occurrence — the transaction AND the rule advancing past it — commits as one unit, so a failure on
+     * a later occurrence (or a crash) can never leave an already-created transaction behind with the rule still
+     * pointing at its date, which the next run would then create a second time.
+     */
     private void processDueRule(RecurringTransaction r, LocalDate today) {
         LocalDate runDate = r.getNextRunDate();
         int runs = 0;
-        while (!runDate.isAfter(today) && runs < MAX_CATCH_UP_RUNS) {
-            TransactionRequest request = new TransactionRequest(
-                    r.getWalletId(), r.getCategoryId(), r.getType(), r.getAmount(), runDate.atStartOfDay(),
-                    r.getNote());
-            TransactionResponse created = transactionService.create(
-                    r.getFamilyId(), r.getCreatedByUserId(), r.getCreatedByEmail(), r.getCreatedByDisplayName(),
-                    request);
-            publishRecurringEvent(ExpenseEvent.RECURRING_EXECUTED, r, created.id(), runDate);
-            // Frontend status badge ("Chưa thực hiện" vs "Hoàn thành") is null-vs-not-null
-            // on this field — set only once a transaction actually got created above.
-            r.setLastRunDate(runDate);
-            runDate = nextOccurrence(runDate, r);
+        while (!runDate.isAfter(today) && !isPastEndDate(r, runDate) && runs < MAX_CATCH_UP_RUNS) {
+            LocalDate occurrence = runDate;
+            LocalDate next = nextOccurrence(occurrence, r);
+            Long createdId = transactionTemplate.execute(status -> {
+                TransactionRequest request = new TransactionRequest(
+                        r.getWalletId(), r.getCategoryId(), r.getType(), r.getAmount(), occurrence.atStartOfDay(),
+                        r.getNote());
+                TransactionResponse created = transactionService.create(
+                        r.getFamilyId(), r.getCreatedByUserId(), r.getCreatedByEmail(), r.getCreatedByDisplayName(),
+                        request, null);
+                // Frontend status badge ("Chưa thực hiện" vs "Hoàn thành") is null-vs-not-null
+                // on this field — set only once a transaction actually got created above.
+                r.setLastRunDate(occurrence);
+                r.setNextRunDate(next);
+                if (isPastEndDate(r, next)) {
+                    r.setActive(false);
+                }
+                recurringTransactionDao.update(r);
+                return created.id();
+            });
+            // Outside the unit above, so the notification only goes out once both are committed.
+            publishRecurringEvent(ExpenseEvent.RECURRING_EXECUTED, r, createdId, occurrence);
+            runDate = next;
             runs++;
         }
-        r.setNextRunDate(runDate);
-        if (r.getEndDate() != null && runDate.isAfter(r.getEndDate())) {
+        // Due but already past its end date (e.g. the end date was moved earlier) — retire it without running.
+        if (Boolean.TRUE.equals(r.getActive()) && isPastEndDate(r, runDate)) {
             r.setActive(false);
+            recurringTransactionDao.update(r);
         }
-        recurringTransactionDao.update(r);
+    }
+
+    private static boolean isPastEndDate(RecurringTransaction r, LocalDate date) {
+        return r.getEndDate() != null && date.isAfter(r.getEndDate());
     }
 
     /**
@@ -343,6 +398,16 @@ public class RecurringTransactionService {
     /** Clamps to the last day of the month for a dayOfMonth beyond it (e.g. 31 in February). */
     private static LocalDate withClampedDay(LocalDate month, int dayOfMonth) {
         return month.withDayOfMonth(Math.min(dayOfMonth, month.lengthOfMonth()));
+    }
+
+    /**
+     * Always, also on an update that keeps the amount: a rule outside the range would make every scheduled run
+     * fail in TransactionService.create, so it has to be fixed before anything else on it is saved.
+     */
+    private void requireAmountInRange(CreateRecurringTransactionRequest request) {
+        TransactionAmounts.problem(request.amount()).ifPresent(message -> {
+            throw logged(log, new BadRequestException(message));
+        });
     }
 
     private void requireCanModify(RecurringTransaction r, Long callerUserId, boolean callerIsOwner) {

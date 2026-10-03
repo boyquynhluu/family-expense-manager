@@ -1,31 +1,34 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { useTrashCount } from "../hooks/useTrashCount";
 import { useUnreadNotifications } from "../hooks/useUnreadNotifications";
+import {
+    BellIcon,
+    CloseIcon,
+    GridIcon,
+    LogoutIcon,
+    MenuIcon,
+    PieChartIcon,
+    ReceiptIcon,
+    RepeatIcon,
+    ShieldIcon,
+    TagIcon,
+    TrashIcon,
+    TrendUpIcon,
+    UserIcon,
+    WalletIcon,
+} from "./AppIcons";
 import FamilySwitcher from "./FamilySwitcher";
 import LanguageSwitcher from "./LanguageSwitcher";
-import {
-  BellIcon,
-  CloseIcon,
-  GridIcon,
-  LogoutIcon,
-  MenuIcon,
-  PieChartIcon,
-  ReceiptIcon,
-  RepeatIcon,
-  ShieldIcon,
-  TagIcon,
-  TrashIcon,
-  TrendUpIcon,
-  UserIcon,
-  WalletIcon,
-} from "./AppIcons";
+import { Button, IconButton } from "./ui/Button";
 
 export default function Layout() {
   const { t } = useTranslation("layout");
   const { logout, displayName, isSystemAdmin } = useAuth();
   const unreadCount = useUnreadNotifications();
+  const trashCount = useTrashCount();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -53,14 +56,12 @@ export default function Layout() {
   return (
     <div className="app-shell">
       <header className="mobile-topbar">
-        <button
-          type="button"
-          className="mobile-menu-btn"
+        <IconButton variant="dark" className="mobile-menu-btn"
           onClick={() => setSidebarOpen(true)}
           aria-label={t("openMenu")}
         >
           <MenuIcon />
-        </button>
+        </IconButton>
         <div className="brand">
           <span className="brand-icon">💰</span>
           <span>{t("brand")}</span>
@@ -75,14 +76,12 @@ export default function Layout() {
             <span className="brand-icon">💰</span>
             <span>{t("brand")}</span>
           </div>
-          <button
-            type="button"
-            className="sidebar-close-btn"
+          <IconButton variant="dark" className="sidebar-close-btn"
             onClick={() => setSidebarOpen(false)}
             aria-label={t("closeMenu")}
           >
             <CloseIcon />
-          </button>
+          </IconButton>
         </div>
         <FamilySwitcher />
         <LanguageSwitcher />
@@ -97,6 +96,9 @@ export default function Layout() {
                   {link.to === "/notifications" && unreadCount > 0 && (
                     <span className="nav-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
                   )}
+                  {link.to === "/trash" && trashCount > 0 && (
+                    <span className="nav-badge">{trashCount > 99 ? "99+" : trashCount}</span>
+                  )}
                 </NavLink>
               </li>
             );
@@ -108,10 +110,10 @@ export default function Layout() {
             <span>{displayName}</span>
           </div>
         )}
-        <button type="button" className="logout-btn" onClick={logout}>
+        <Button variant="dark-outline" className="mt-3 w-full" onClick={logout}>
           <LogoutIcon />
           {t("logout")}
-        </button>
+        </Button>
       </nav>
       <main className="content">
         <Outlet />

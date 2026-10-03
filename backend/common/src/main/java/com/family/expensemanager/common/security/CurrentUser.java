@@ -9,6 +9,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
  * {@link JwtAuthenticationFilter} attached to the current request's SecurityContext.
  * Controllers must scope every query through this — never trust a client-supplied
  * familyId — so one family can never read or write another family's data.
+ *
+ * @author boyquynhluu
  */
 public final class CurrentUser {
 

@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { Button } from "./ui/Button";
 
 /**
  * Shared prev/next pager for every paginated list in the app (backend page size is a
@@ -24,22 +25,18 @@ export default function Pagination({ pageData, onPageChange }) {
         })}
       </span>
       <div className="pagination-controls">
-        <button
-          type="button"
-          className="btn-secondary"
+        <Button variant="secondary" size="sm"
           onClick={() => onPageChange(Math.max(0, pageData.page - 1))}
           disabled={pageData.page === 0}
         >
           {t("prevPage")}
-        </button>
-        <button
-          type="button"
-          className="btn-secondary"
+        </Button>
+        <Button variant="secondary" size="sm"
           onClick={() => onPageChange(Math.min(pageData.totalPages - 1, pageData.page + 1))}
           disabled={pageData.page >= pageData.totalPages - 1}
         >
           {t("nextPage")}
-        </button>
+        </Button>
       </div>
     </div>
   );

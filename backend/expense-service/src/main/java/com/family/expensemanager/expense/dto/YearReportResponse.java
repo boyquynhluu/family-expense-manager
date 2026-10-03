@@ -3,6 +3,9 @@ package com.family.expensemanager.expense.dto;
 import java.math.BigDecimal;
 import java.util.List;
 
+/**
+ * @author boyquynhluu
+ */
 public record YearReportResponse(
         int year,
         BigDecimal totalIncome,

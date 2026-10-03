@@ -1,13 +1,29 @@
 import { useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { EditIcon, TrashIcon } from "../components/AppIcons";
 import SeedDefaultsButton from "../components/SeedDefaultsButton";
-import { confirmDialog } from "../utils/confirm";
+import { Button, IconButton } from "../components/ui/Button";
+import { Field } from "../components/ui/Field";
+import { Input, Select } from "../components/ui/Input";
 import { useAuth } from "../hooks/useAuth";
+import { confirmDialog } from "../utils/confirm";
+import { LIMITS } from "../utils/inputLimits";
+import { hasInvalidIconChars, hasInvalidNameChars } from "../utils/namePatterns";
+import { useCleanText } from "../utils/textQuality";
+import { notifyTrashChanged } from "../utils/trashEvents";
 
 export default function Categories() {
   const { t } = useTranslation(["common", "categories"]);
+  const cleanText = useCleanText();
+  // Icon = short code/emoji ("AI", "DX"): profanity only, like the backend's @CleanText(junk = false).
+  const cleanIcon = useCleanText({ junk: false });
+  // Character rule first (it names what is wrong), then profanity/junk.
+  const validateName = (value) =>
+    hasInvalidNameChars(value) ? t("categories:nameInvalidChars") : cleanText(value);
+  const validateIcon = (value) =>
+    hasInvalidIconChars(value) ? t("categories:iconInvalidChars") : cleanIcon(value);
   const { role } = useAuth();
   const isOwner = role === "OWNER";
   const [categories, setCategories] = useState([]);
@@ -46,8 +62,10 @@ export default function Categories() {
     const payload = { name, type, icon: icon || null, color: color || null };
     try {
       if (editingId) {
+        if (!(await confirmDialog(t(`categories:submitUpdateConfirm`, {cateName: name})))) return;
         await client.put(`/expenses/categories/${editingId}`, payload);
       } else {
+        if (!(await confirmDialog(t(`categories:submidAddConfirm`, {cateName: name})))) return;
         await client.post("/expenses/categories", payload);
       }
       cancelEdit();
@@ -62,6 +80,8 @@ export default function Categories() {
     setError("");
     try {
       await client.delete(`/expenses/categories/${id}`);
+      notifyTrashChanged();
+      toast.success(t("categories:deleteSuccess"));
       load();
     } catch (err) {
       setError(err.response?.data?.message || t("categories:deleteFailed"));
@@ -81,38 +101,45 @@ export default function Categories() {
         <div className="section-card">
           <h2>{editingId ? t("categories:editTitle") : t("categories:addTitle")}</h2>
           <form className="inline-form" onSubmit={handleSubmit}>
-            <label className="field">
+            <Field>
               <span>
                 {t("categories:nameLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <input
+              <Input
                 placeholder={t("categories:namePlaceholder")}
-                value={name}
+                value={name} validate={validateName}
+                maxLength={LIMITS.categoryName}
                 onChange={(e) => setName(e.target.value)}
                 required
               />
-            </label>
-            <label className="field">
+            </Field>
+            <Field>
               {t("categories:typeLabel")}
-              <select value={type} onChange={(e) => setType(e.target.value)}>
+              <Select value={type} onChange={(e) => setType(e.target.value)}>
                 <option value="EXPENSE">{t("categories:typeExpense")}</option>
                 <option value="INCOME">{t("categories:typeIncome")}</option>
-              </select>
-            </label>
-            <label className="field">
+              </Select>
+            </Field>
+            <Field>
               {t("categories:iconLabel")}
-              <input placeholder={t("categories:iconPlaceholder")} value={icon} onChange={(e) => setIcon(e.target.value)} />
-            </label>
-            <label className="field">
+              <Input
+                placeholder={t("categories:iconPlaceholder")}
+                value={icon}
+                validate={validateIcon}
+                maxLength={LIMITS.categoryIcon}
+                onChange={(e) => setIcon(e.target.value)}
+              />
+            </Field>
+            <Field>
               {t("categories:colorLabel")}
-              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
-            </label>
-            <button type="submit">{editingId ? t("categories:submitUpdate") : t("categories:submitAdd")}</button>
+              <Input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
+            </Field>
+            <Button type="submit">{editingId ? t("categories:submitUpdate") : t("categories:submitAdd")}</Button>
             {editingId && (
-              <button type="button" className="btn-secondary" onClick={cancelEdit}>
+              <Button variant="secondary" onClick={cancelEdit}>
                 {t("common:cancel")}
-              </button>
+              </Button>
             )}
           </form>
           {error && <p className="error-text">{error}</p>}
@@ -146,17 +173,15 @@ export default function Categories() {
                 </div>
                 {isOwner && (
                   <div className="row-actions">
-                    <button type="button" className="icon-btn" onClick={() => startEdit(c)} aria-label={t("common:edit")}>
+                    <IconButton onClick={() => startEdit(c)} aria-label={t("common:edit")}>
                       <EditIcon />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn icon-btn-danger"
+                    </IconButton>
+                    <IconButton variant="danger"
                       onClick={() => handleDelete(c.id)}
                       aria-label={t("common:delete")}
                     >
                       <TrashIcon />
-                    </button>
+                    </IconButton>
                   </div>
                 )}
               </div>

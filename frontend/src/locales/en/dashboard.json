@@ -10,6 +10,8 @@
   "income": "Income",
   "expense": "Expense",
   "walletBalanceTitle": "Balance by wallet",
+  "walletMonthlyTitle": "Wallet balance & surplus/deficit — {{yearMonth}}",
+  "walletMonthlyHint": "Surplus/deficit = income − expense + transfers in − transfers out for the month. Closing = opening + surplus/deficit.",
   "noWallets": "No wallets yet",
   "expenseByCategoryTitle": "Expenses by category",
   "noExpenseData": "No expense data for this month yet",

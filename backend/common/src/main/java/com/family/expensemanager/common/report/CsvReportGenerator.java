@@ -15,7 +15,11 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-/** Renders any {@link ReportColumn}/row model into a CSV byte stream. Shared by every CSV report. */
+/**
+ * Renders any {@link ReportColumn}/row model into a CSV byte stream. Shared by every CSV report.
+ *
+ * @author boyquynhluu
+ */
 @Component
 public class CsvReportGenerator {
 
@@ -57,6 +61,6 @@ public class CsvReportGenerator {
         if (value instanceof BigDecimal decimal) {
             return decimal.toPlainString();
         }
-        return value.toString();
+        return FormulaInjectionGuard.sanitize(value.toString());
     }
 }

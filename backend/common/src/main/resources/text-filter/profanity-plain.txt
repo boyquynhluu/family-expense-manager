@@ -1,0 +1,32 @@
+# Blocked words matched WITHOUT diacritics, as whole words (TextQuality) — only entries whose
+# unaccented form can't be an ordinary word: abbreviations/spellings used to dodge a filter, and
+# English swear words. Leave out anything ambiguous ("vl" = vật liệu, "cc" = carbon copy, "dm" =
+# đề-xi-mét, "lol"...). One entry per line, lower case; a phrase = words separated by a space. # = comment.
+dmm
+dcm
+dkm
+djt
+dit me
+dit con me
+vcl
+vkl
+vcc
+clgt
+cmm
+loz
+fuck
+fuk
+fck
+fucking
+fucker
+fucked
+motherfucker
+shit
+bullshit
+bitch
+cunt
+pussy
+asshole
+bastard
+wtf
+stfu

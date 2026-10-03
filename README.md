@@ -4,7 +4,7 @@ Hệ thống quản lý chi tiêu gia đình, dùng thực tế hàng ngày, xâ
 
 **Stack:** Spring Boot 3.3.5 + Doma 2 (không dùng JPA/Hibernate) · React (Vite) · MySQL + Flyway · Docker Compose · Kafka · Redis · Eureka · Spring Cloud Gateway **Server MVC** (servlet-based, không dùng WebFlux) · springdoc-openapi (Swagger UI).
 
-> Tài liệu mô tả **kiến trúc, cách chạy và toàn bộ tính năng đã làm** theo từng mục (mỗi mục có sơ đồ luồng, xem [Tính năng theo từng mục](#tính-năng-theo-từng-mục)). Schema bảng do Flyway quản lý (`db/migration/V*__*.sql`, xem [Database Migrations](#database-migrations-flyway)).
+> Tài liệu mô tả **kiến trúc, cách chạy và toàn bộ tính năng đã làm** theo từng mục (mỗi mục có sơ đồ luồng, xem [Tính năng theo từng mục](#tính-năng-theo-từng-mục)). Schema bảng do Flyway quản lý (`db/migration/V*__*.sql`, xem [Database Migrations](#database-migrations-flyway)). Các nghiệp vụ dự kiến làm sau nằm ở [Nghiệp vụ dự kiến](#nghiệp-vụ-dự-kiến-backlog--chưa-làm).
 
 ## Kiến trúc
 
@@ -138,10 +138,39 @@ Topic `expense-events`, key = `familyId`, phân biệt bằng field `eventType`:
 - `BUDGET_WARNING` — chi chạm 80% ngân sách (danh mục hoặc tổng) lần đầu, chưa vượt 100%. Chỉ tạo thông báo trong app.
 - `BUDGET_EXCEEDED` — chi **vượt 100% lần đầu** (không lặp lại ở các giao dịch vượt tiếp theo). Thông báo trong app và email cho người tạo giao dịch.
 - `RECURRING_EXECUTED`, `RECURRING_FAILED` — scheduler giao dịch định kỳ ghi thành công hoặc gặp lỗi. Chỉ trong app.
+- `EXPENSE_DELETED` — giao dịch bị xoá (xoá mềm, vào Thùng rác). `userId`/`userDisplayName` là **người xoá**. Xoá một giao dịch: event mô tả giao dịch đó (`transactionId`, `amount`, `occurredOn`, `note`) với `itemCount = 1`; **xoá hàng loạt chỉ publish một event** với `itemCount` = số giao dịch đã xoá, để không làm ngập thông báo của cả gia đình. Chỉ trong app, người dùng tắt được trong tuỳ chọn thông báo. Ai xoá cũng được lưu ngay trên dòng giao dịch (`deleted_by_user_id`, `deleted_by_name`, migration V12) và toàn bộ lịch sử tạo/sửa/xoá/khôi phục nằm ở bảng `TRANSACTION_AUDIT_LOGS` (V13, xem `GET /api/expenses/transactions/{id}/history`).
+- `WALLET_TRANSFERRED` — publish sau khi ghi `WALLET_TRANSFERRED` (mục 14). Một dòng thông báo trong app dùng chung cho cả gia đình (ví không có chủ sở hữu riêng, nên không có "người nhận" theo user). Về email, `notification-service` gửi hai kiểu khác nhau: người tạo giao dịch nhận email "đã trừ" (địa chỉ có sẵn trong event, do expense-service đọc từ JWT lúc publish), còn **mỗi thành viên khác trong gia đình** nhận email "đã cộng, ai chuyển" — địa chỉ của họ được tra cứu qua endpoint nội bộ `GET /internal/families/{familyId}/members` của auth-service (xem "Bảo mật" bên dưới), vì notification-service không có sẵn USERS. Lỗi gửi email (kể cả `BUDGET_EXCEEDED`) chỉ được log, không throw lại — tránh Kafka redeliver event và ghi trùng dòng thông báo trong app.
 
 Các topic khác (khai báo dưới `kafka.topic.*` trong `application.yml`): `user-verification` và `password-reset` (email xác thực, đặt lại mật khẩu, cả xác nhận đổi email), `family-invite` (email mời thành viên), `family-member-events` (`MEMBER_JOINED`, `MEMBER_LEFT`, `MEMBER_REMOVED`, do auth-service phát), `user-registered` (có tài khoản mới, kèm danh sách email admin nhận, xem mục 25).
 
 **Lưu ý khi sửa `infra/docker-compose.yml`:** container `kafka` (image `apache/kafka`, KRaft mode) bắt buộc phải set `KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092` — mặc định image tự advertise `localhost:9092`, chỉ đúng cho client chạy trong chính container đó. Nếu thiếu, `expense-service`/`notification-service` connect được bước bootstrap ban đầu (metadata) nhưng produce/consume thật sự sẽ fail liên tục với `Connection to node ... (localhost/127.0.0.1:9092) could not be established` — publish Kafka coi như im lặng không hoạt động, không thấy lỗi ở tầng HTTP vì `KafkaTemplate.send()` là async fire-and-forget.
+
+### Chịu lỗi khi Kafka gặp sự cố
+
+Hành động nghiệp vụ chính (đăng ký, tạo giao dịch, chuyển ví...) **luôn thành công độc lập với Kafka**, vì mọi publisher chỉ publish `AFTER_COMMIT` (DB đã ghi xong) và `KafkaTemplate.send()` là async — client luôn nhận response thành công bất kể Kafka có publish được hay không. Điều **có thể mất** khi Kafka lỗi là các side-effect thuần Kafka: email xác thực/đặt lại mật khẩu/mời thành viên, thông báo trong app, email cảnh báo ngân sách/chuyển tiền.
+
+- **Producer** (`KafkaSendLogging`, dùng trong cả 6 publisher ở `auth-service`/`expense-service`): trước đây kết quả `send()` bị bỏ qua hoàn toàn — publish lỗi thì mất event, không một dòng log. Giờ mọi lỗi publish được `log.error(...)` kèm topic/key/event — không tự retry thêm (kafka-clients hiện đại đã tự retry nội bộ, giới hạn bởi `delivery.timeout.ms`, đủ chịu được gián đoạn ngắn), chỉ để lỗi thật sự (Kafka chết lâu) không còn im lặng.
+- **Consumer** (6 listener trong `notification-service`): mỗi `@KafkaListener` giờ có thêm `@RetryableTopic` — xử lý lỗi (lỗi DB, bug...) được thử lại 3 lần với backoff tăng dần trên topic retry riêng (`<topic>-retry-0`, `-retry-1`...), hết lượt vẫn lỗi thì rơi vào topic `<topic>-dlt` (tự tạo) thay vì mất hẳn sau khi log — có thể xem lại/replay bằng tay từ đó.
+
+**TODO — chưa làm, đang PENDING (đã chốt thiết kế, chưa code vì đổi nhiều file):** hai điều trên chỉ giúp **biết** khi mất và **không mất khi lỗi xử lý ở consumer** — chúng không giúp email **tự động gửi lại** khi Kafka thật sự publish thất bại lúc `send()` (ví dụ Kafka chết đúng lúc user bấm "quên mật khẩu"). Với các email quan trọng (xác thực tài khoản, đặt lại mật khẩu), thiết kế đã thống nhất — kiểu Transactional Outbox nhưng chỉ ghi outbox ở nhánh lỗi (không phải ghi trước cho mọi lần publish):
+
+```
+Commit DB xong (AFTER_COMMIT, như hiện tại)
+        ↓
+Gọi kafkaTemplate.send(...).get(timeout=5s)  ← đổi từ async thuần sang chờ kết quả có timeout
+        ↓
+   Thành công → xong, không ghi gì thêm (như hiện tại, không đổi độ trễ đáng kể)
+   Thất bại   → ghi 1 dòng vào bảng OUTBOX (topic, key, payload, số lần thử) — transaction riêng,
+                vì business write đã commit từ trước rồi
+                        ↓
+        Job quét chu kỳ dài (1–5 phút, chỉ đụng khi có dòng pending — DB gần như không tải thêm)
+                        ↓
+                Gửi lại → thành công thì xoá dòng, thất bại thì để lại chờ vòng sau
+```
+
+Đánh đổi đã biết trước, chấp nhận được với quy mô project: request phải chờ Kafka ack tối đa 5s ở nhánh lỗi (trước đây không chờ gì); và vẫn còn một khoảng hở rất hẹp nếu app crash đúng lúc giữa "gửi Kafka thất bại" và "ghi outbox" (event đó vẫn mất, như hiện tại) — vì outbox không còn nằm chung transaction với business write nữa (lúc ghi outbox thì transaction chính đã commit xong).
+
+Việc còn lại khi làm: 1 bảng `OUTBOX_EVENTS` + migration, đổi cả 6 publisher (`auth-service`/`expense-service`) từ fire-and-forget sang mẫu trên, 1 job `@Scheduled` quét/gửi lại, test cho job. Cần chốt trước: chỉ 2 email quan trọng hay áp dụng cả 6 loại event.
 
 ## Redis
 
@@ -191,6 +220,8 @@ Khác biệt quan trọng so với bản reactive cần lưu ý nếu sửa gate
 JWT được xác thực **độc lập ở từng service** (qua `common`), không chỉ tin tưởng header do gateway set — gateway cũng xác thực để fail nhanh nhưng vẫn forward nguyên `Authorization` header xuống service. Access token 15 phút, refresh token 7 ngày. Ngoài ra: đăng xuất từ xa tức thì (mục 8), 2FA (mục 9), khoá đăng nhập tạm và khoá tài khoản (mục 22, 23), IP máy khách đáng tin cậy (mục 24), phân quyền OWNER/MEMBER kiểm tra ở backend (mục 17).
 
 Mạng: 3 service nghiệp vụ không publish port HTTP ra host; chỉ `api-gateway` (8080), `eureka-server` và `frontend` là điểm vào. Lưu ý `infra/docker-compose.yml` bản dev còn publish thêm port debug JDWP (5005-5009), Redis 6379 và Kafka 9092 ra máy host — không dùng nguyên bản này khi triển khai thật.
+
+**Gọi service-to-service (`/internal/**`):** ngoại lệ duy nhất cho quy tắc "mọi thứ giữa các service là Kafka bất đồng bộ" (xem `ExpenseEvent`'s javadoc) là `notification-service` gọi thẳng `GET /internal/families/{familyId}/members` của auth-service để lấy email các thành viên gia đình cho email "nhận được tiền" (mục 14). `api-gateway` không có route cho `/internal/**` nên chỉ gọi được trong mạng Docker nội bộ; đồng thời `InternalController` yêu cầu JWT có `role = SERVICE` (`@PreAuthorize("hasRole('SERVICE')")`) — `FamilyMemberDirectory` tự ký một JWT ngắn hạn (60 giây) bằng `JWT_SECRET` dùng chung cho mục đích này, một token của user thường (dù role gì) bị từ chối 403. Lỗi gọi (auth-service down, timeout...) chỉ log và coi như không có người nhận, không throw — không làm hỏng phần còn lại của event.
 
 ## Tính năng theo từng mục
 
@@ -556,6 +587,8 @@ sequenceDiagram
 
 Thời gian hiển thị: backend trả `LocalDateTime` theo giờ UTC không kèm múi giờ, frontend đổi sang giờ máy người xem bằng `formatServerDateTime` (`frontend/src/utils/format.js`).
 
+**Xoay và phát hiện dùng lại refresh token** (`AuthService#refresh`): mỗi lần refresh, token cũ bị thu hồi **nguyên tử** ngay trước khi phát token mới (`RefreshTokenDao#revokeById` chỉ update khi `revoked = false`, trả về số dòng bị ảnh hưởng) — hai request refresh song song cùng một token chỉ một request thắng, request còn lại nhận 401 thay vì cả hai cùng phát được token mới. Nếu một refresh token **đã bị thu hồi** lại được gửi lên lần nữa (dấu hiệu kinh điển của việc token bị đánh cắp và dùng song song với chủ tài khoản thật), toàn bộ phiên đăng nhập của user đó bị thu hồi ngay (`revokeAllByUserId`), buộc đăng nhập lại ở mọi thiết bị. `refresh` cũng kiểm tra tài khoản còn `active` (đã xác thực email), giống điều kiện ở `login`.
+
 ### Mục 9 — Xác thực 2 lớp (TOTP)
 
 **Thành phần và nơi lưu dữ liệu**
@@ -647,6 +680,7 @@ stateDiagram-v2
     [*] --> Active: Tạo ví, danh mục, giao dịch
     Active --> InTrash: DELETE — chỉ đặt deleted_at
     InTrash --> Active: POST /id/restore — xoá deleted_at
+    InTrash --> [*]: Xoá vĩnh viễn — nút trên từng dòng, Dọn sạch thùng rác, hoặc job sau 30 ngày
     note right of Active
         Danh sách bình thường
         chỉ lấy dòng deleted_at IS NULL
@@ -658,6 +692,24 @@ stateDiagram-v2
 ```
 
 Quyền xoá và khôi phục: ví và danh mục chỉ OWNER; giao dịch thì người tạo hoặc OWNER. Khoản chuyển giữa các ví bị xoá cứng, không đi qua thùng rác. Ví đã có lịch sử chuyển thì không xoá được.
+
+**Xoá vĩnh viễn** (`TrashController`, `TrashService`):
+
+| Endpoint | Ai được dùng |
+|---|---|
+| `DELETE /api/expenses/trash/transactions/{id}` | Người tạo hoặc OWNER (như khôi phục). Giao dịch riêng tư của người khác trả 404, kể cả với OWNER |
+| `DELETE /api/expenses/trash/wallets/{id}` | OWNER |
+| `DELETE /api/expenses/trash/categories/{id}` | OWNER |
+| `DELETE /api/expenses/trash` — "Dọn sạch thùng rác" | OWNER; phải gõ "XOÁ" để xác nhận. Gồm cả giao dịch riêng tư của thành viên khác: chỉ người tạo mới đưa được chúng vào thùng rác, nên xoá hẳn không làm lộ gì. Trả về số mục đã xoá theo loại và số mục được giữ lại |
+
+`TrashRetentionScheduler` chạy lúc 03:30 mỗi đêm (`trash.purge-cron`) và xoá vĩnh viễn mọi mục nằm trong thùng rác quá `trash.retention-days` ngày (mặc định 30, env `TRASH_RETENTION_DAYS`), ở mọi gia đình.
+
+Cả ba đường (nút từng dòng, Dọn sạch, job) đi qua **cùng một mã xử lý cho từng dòng** trong `TrashService`:
+- **Thứ tự:** giao dịch trước, rồi mới đến ví và danh mục — giao dịch trong thùng rác vẫn giữ khoá ngoại tới ví/danh mục của nó.
+- **Ví/danh mục còn bị tham chiếu thì không xoá:** còn giao dịch (đếm cả giao dịch trong thùng rác — `countAllByWalletId`/`countAllByCategoryId`), giao dịch định kỳ, lịch sử chuyển tiền (ví) hoặc ngân sách (danh mục). Xoá từng dòng thì trả 409 nói rõ lý do; Dọn sạch và job thì bỏ qua mục đó, để lại trong thùng rác và thử lại lần sau.
+- **Mỗi dòng một transaction riêng** (`TrashPurger`, `REQUIRES_NEW`): một dòng lỗi không làm hoàn tác các dòng đã xoá, và job vẫn chạy tiếp.
+- **Ảnh hoá đơn** bị xoá khỏi storage sau khi việc xoá dòng giao dịch đã commit (lỡ xoá file lỗi thì chỉ còn file thừa, không bao giờ có giao dịch trỏ tới file đã mất).
+- **Lịch sử giao dịch được giữ lại:** `TRANSACTION_AUDIT_LOGS` cố ý không có khoá ngoại tới `TRANSACTIONS`, và mỗi lần xoá vĩnh viễn ghi thêm một dòng `PURGED` (người xoá; với job là "Hệ thống (tự dọn thùng rác)").
 
 ### Mục 11 — Integration test chạm DB thật
 
@@ -671,7 +723,7 @@ flowchart LR
     G["mvn test"] --> H["Surefire chỉ chạy *Test.java, mock, nhanh"]
 ```
 
-Cần Docker chạy được với JVM. Trên máy Windows dùng Docker Desktop hiện tại Testcontainers chưa kết nối được (lỗi named pipe), nên các `*IT.java` cần chạy ở máy khác hoặc CI. Ngoài ra nên `EXPLAIN` toàn bộ file `.sql` mới trên MySQL thật sau mỗi lần thêm truy vấn, vì unit test dùng DAO giả không bắt được lỗi SQL.
+Chỉ cần Docker đang chạy (Docker Desktop trên Windows cũng được). Testcontainers phải từ **1.21.4** trở lên: bản cũ hơn gọi Docker bằng API version mà Docker Engine 29+ từ chối (API tối thiểu 1.44), khiến mọi `*IT.java` báo "Could not find a valid Docker environment". CI (`.github/workflows/backend-ci.yml`) chạy `mvn verify` nên integration test chạy trên mọi push/PR. Ngoài ra nên `EXPLAIN` toàn bộ file `.sql` mới trên MySQL thật sau mỗi lần thêm truy vấn, vì unit test dùng DAO giả không bắt được lỗi SQL.
 
 ### Mục 12 — Observability
 
@@ -709,15 +761,25 @@ sequenceDiagram
     participant FE as Wallets.jsx
     participant EX as WalletTransferService
     participant DB as MySQL
+    participant K as Kafka expense-events
+    participant N as notification-service
+    participant AU as auth-service (internal)
 
     U->>FE: Chọn ví nguồn, ví đích, số tiền, thời gian, ghi chú
     FE->>EX: POST /api/expenses/transfers
     EX->>DB: Kiểm tra 2 ví thuộc gia đình, chưa xoá, khác nhau, cùng loại tiền, số tiền >= 0.01
+    EX->>DB: Số tiền phải <= số dư hiện tại của VÍ NGUỒN (đầu + thu − chi + chuyển vào − chuyển ra)
     EX->>DB: Ghi WALLET_TRANSFERS (không tạo giao dịch thu hoặc chi)
+    EX->>K: Publish WALLET_TRANSFERRED (sau khi commit)
     EX-->>FE: OK, FE tải lại lịch sử chuyển và số dư ví
-    Note over EX,DB: Số dư ví = số dư đầu + thu − chi + chuyển vào − chuyển ra
+    K->>N: WALLET_TRANSFERRED
+    N->>DB: 1 dòng thông báo trong app, dùng chung cho cả gia đình
+    N-->>U: Email "đã trừ" cho người tạo giao dịch (nếu chưa tắt)
+    N->>AU: GET /internal/families/{id}/members (JWT role SERVICE)
+    N-->>U: Email "đã cộng, ai chuyển" cho từng thành viên khác (nếu chưa tắt)
     U->>FE: Sửa hoặc xoá một khoản chuyển
     FE->>EX: PUT hoặc DELETE /transfers/id (người tạo hoặc OWNER)
+    Note over EX,DB: Khi sửa, số tiền cũ của chính khoản đang sửa được cộng/trừ lại trước khi so với số dư mới — tránh báo "vượt số dư" oan khi chỉ sửa ghi chú
 ```
 
 Khoản chuyển **không** tính vào báo cáo thu chi, biểu đồ xu hướng hay ngân sách, nên tổng thu chi không bị sai. Endpoint: `POST/GET /api/expenses/transfers` (phân trang), `PUT /{id}`, `DELETE /{id}`.
@@ -813,6 +875,8 @@ flowchart LR
         E2["BUDGET_EXCEEDED"]
         E3["RECURRING_EXECUTED"]
         E4["RECURRING_FAILED"]
+        E5["WALLET_TRANSFERRED"]
+        E6["EXPENSE_DELETED"]
     end
     subgraph AUTHS["auth-service, topic family-member-events"]
         A1["MEMBER_JOINED"]
@@ -823,15 +887,21 @@ flowchart LR
     E2 --> N
     E3 --> N
     E4 --> N
+    E5 --> N
+    E6 --> N
     A1 --> N
     A2 --> N
     A3 --> N
     E2 -->|"nếu người tạo chưa tắt email"| M["Email cảnh báo vượt ngân sách"]
+    E5 -->|"nếu chưa tắt email"| W1["Email 'đã trừ' cho người tạo"]
+    E5 -->|"tra email qua auth-service /internal, nếu chưa tắt"| W2["Email 'đã cộng' cho từng thành viên khác"]
     N --> UI["Trang Notifications + chuông báo chưa đọc"]
-    P["Tuỳ chọn của từng người dùng<br/>hiện trong app theo loại, email cho BUDGET_EXCEEDED"] -.->|"lọc lúc đọc danh sách và đếm chưa đọc"| UI
+    P["Tuỳ chọn của từng người dùng<br/>hiện trong app theo loại, email cho BUDGET_EXCEEDED/WALLET_TRANSFERRED"] -.->|"lọc lúc đọc danh sách và đếm chưa đọc"| UI
 ```
 
 Endpoint: `GET /api/notifications` (phân trang), `GET /unread-count`, `PUT /{id}/read`, `PUT /read-all`, `DELETE /{id}`, `DELETE /read` (xoá mọi thông báo đã đọc), `GET/PUT /preferences`. Vì thông báo được lưu theo gia đình, việc tắt hiển thị một loại chỉ ảnh hưởng người tắt (lọc lúc đọc), không mất thông báo của người khác. Quy tắc định kỳ đang lỗi sẽ báo lỗi mỗi ngày cho đến khi được sửa.
+
+`GET /api/notifications` **không** trả `payloadJson` — dữ liệu đó là nguyên văn event Kafka gốc (gồm cả email người thực hiện) và mọi thành viên gia đình đều đọc được danh sách này, nên trường này bị bỏ khỏi `NotificationResponse` để không lộ email giữa các thành viên với nhau. Cột `payload_json` vẫn còn trong DB, chỉ không trả ra qua API.
 
 ### Mục 20 — Tìm kiếm, xoá hàng loạt, sao chép giao dịch
 
@@ -986,6 +1056,39 @@ sequenceDiagram
 
 ---
 
+## Nghiệp vụ dự kiến (backlog — chưa làm)
+
+Kết quả review nghiệp vụ ngày 01/10/2026. Thứ tự đề xuất: **B1 → B2 → B3 → A1/A2 → phần còn lại**.
+
+### A. Hoàn thiện nghiệp vụ đã có
+
+- [ ] **A1 — Chính sách ví âm.** Chuyển tiền đã kiểm tra số dư ví nguồn (`WalletTransferService`), nhưng ghi khoản chi (`TransactionService`) thì không, nên ví có thể âm. Cần một quy tắc theo loại ví (xem C3): tiền mặt và tài khoản ngân hàng không được âm, thẻ tín dụng được âm trong hạn mức.
+- [ ] **A2 — Thông báo khi sửa giao dịch.** Hiện chỉ phát `EXPENSE_CREATED` và `EXPENSE_DELETED`; khoản 50k bị sửa thành 5 triệu thì cả nhà không biết. Cần thêm `EXPENSE_UPDATED` (nêu giá trị cũ → mới; giao dịch riêng tư thì che `***` như khi xoá).
+- [ ] **A3 — Audit log cho ví, ngân sách, chuyển tiền.** Hiện chỉ giao dịch có lịch sử sửa (`TRANSACTION_AUDIT_LOGS`, mục N4).
+- [ ] **A4 — Giao dịch định kỳ "nhắc và chờ xác nhận".** Hiện scheduler luôn tự ghi đúng số tiền cố định. Hoá đơn có số tiền thay đổi (điện, nước) cần chế độ tạo bản nháp và thông báo để người dùng nhập số thật rồi xác nhận.
+- [ ] **A5 — Phân quyền chi tiết hơn OWNER/MEMBER (mục 17).** Thêm vai trò chỉ xem (VIEWER) và vai trò trẻ em (giới hạn chi theo ngày/tháng); duyệt khoản chi vượt ngưỡng (thành viên chi trên X thì giao dịch ở trạng thái chờ đến khi chủ hộ duyệt).
+- [ ] **A6 — Ngân sách nâng cao (mục 18).** Ngân sách theo ví hoặc theo thành viên; chuyển phần còn dư sang tháng sau (rollover); ngân sách theo năm.
+- [ ] **A7 — Đa tiền tệ (chỉ khi thật sự cần).** Hiện mỗi gia đình chỉ dùng **một** tiền tệ (mục 7, `WalletService.requireConsistentCurrency`), nên mọi phép cộng tổng đều đúng. Nếu muốn có ví USD cạnh ví VND thì cần bảng tỷ giá theo ngày, cho chuyển tiền giữa hai ví khác tiền tệ (ghi cả hai số tiền), và quy đổi về tiền tệ gốc trong mọi SQL tổng hợp (summary, report, budget).
+
+### B. Toàn vẹn số liệu (ưu tiên cao)
+
+- [ ] **B1 — Điều chỉnh số dư (đối soát).** Khi số dư trong app lệch với thực tế, hiện chỉ sửa được bằng một khoản thu/chi giả, làm sai báo cáo thu chi. Cần loại giao dịch `ADJUSTMENT`: có tác động lên số dư ví, nhưng không tính vào thu/chi, ngân sách hay báo cáo danh mục.
+- [ ] **B2 — Chốt sổ theo tháng.** Hiện có thể sửa hoặc xoá giao dịch của tháng đã quyết toán, làm số dư đầu kỳ, mức dư/âm và ngân sách các tháng sau đổi theo mà không ai biết. Cần cho OWNER chốt tháng (bảng `PERIOD_LOCKS(family_id, period_month, locked_by, locked_at)`). Sau khi chốt, mọi thao tác tạo/sửa/xoá/khôi phục giao dịch, chuyển tiền và import có ngày thuộc tháng đó đều trả 409; chỉ OWNER mới được mở lại (ghi audit).
+- [ ] **B3 — Vay / cho vay / nợ.** Đối tác (tên, liên hệ), số tiền gốc, ngày vay, hạn trả, trả dần nhiều lần (mỗi lần trả là một dòng gắn với ví), số còn nợ; thông báo nhắc trước hạn. Tiền vay hoặc cho vay **không** được tính là thu/chi.
+
+### C. Nghiệp vụ mới
+
+- [ ] **C1 — Mục tiêu tiết kiệm.** Tên mục tiêu (mua xe, học phí), số tiền mục tiêu, hạn, ví gắn kèm và % tiến độ; thông báo khi đạt mốc 50/80/100%.
+- [ ] **C2 — Nhắc hoá đơn sắp đến hạn.** Thông báo trước N ngày; có thể làm dựa trên giao dịch định kỳ (mục 3) cùng với A4.
+- [ ] **C3 — Loại ví.** Tiền mặt, ngân hàng, thẻ tín dụng (hạn mức, ngày sao kê, hạn thanh toán), tiết kiệm có kỳ hạn (lãi suất, ngày đáo hạn). Đây là nền cho A1 và C2.
+- [ ] **C4 — Hoàn tiền / trả hàng** gắn với giao dịch gốc: giảm chi tiêu của chính danh mục đó, thay vì ghi một khoản thu làm phồng cả thu lẫn chi.
+- [ ] **C5 — Tách giao dịch** thành nhiều danh mục, ví dụ một hoá đơn siêu thị gồm ăn uống và đồ gia dụng (bảng `TRANSACTION_SPLITS`; tổng các phần phải bằng số tiền giao dịch).
+- [ ] **C6 — Danh mục con và tag.** `CATEGORIES.parent_id` (2 cấp, báo cáo cộng dồn lên danh mục cha); tag tự do để gom chi tiêu theo sự kiện, ví dụ "Du lịch Đà Lạt".
+- [ ] **C7 — Email tổng kết tháng** gửi cho các thành viên (thu, chi, top danh mục, so sánh với tháng trước, tình trạng ngân sách). Dùng scheduler cùng SMTP sẵn có của notification-service; cho tắt/bật trong tuỳ chọn thông báo (mục 19).
+- [ ] **C8 — Xác minh số điện thoại bằng OTP.** Hiện số điện thoại dùng để đăng nhập (USERS.phone, migration V14/V15) chưa được xác minh, nên một người có thể nhập số của người khác. Khi có ngân sách gửi tin thì thêm bước OTP qua Zalo ZNS (khoảng 300đ/tin, cần OA đã xác thực) hoặc SMS Brandname, và cột `phone_verified_at`.
+
+---
+
 ## Phụ lục: Port dịch vụ phổ biến (tham khảo chung, ngoài phạm vi project)
 
 Bảng port của các service/tool phổ biến trong hạ tầng nói chung — không phải tất cả đều được dùng trong project này (xem [Port & chạy service local](#port--chạy-service-local) cho port thật của project).
@@ -1012,7 +1115,9 @@ Bảng port của các service/tool phổ biến trong hạ tầng nói chung �
 
 > Lưu ý: `Tomcat`/`Jenkins` (8080) trùng port với `api-gateway` của project này — nếu chạy chung máy, chỉ được bật một trong hai trên cùng port 8080.
 
-======= DEPLOY BE====
+## Hiện trạng deploy (dev/demo, chưa phải VPS)
+
+```
                          INTERNET
                             │
                             ▼
@@ -1029,3 +1134,28 @@ Bảng port của các service/tool phổ biến trong hạ tầng nói chung �
                             │
                             ▼
                     Spring Boot BE
+```
+
+Tức là hệ thống **chưa chạy trên VPS nào** — backend đang chạy trên máy local, lộ ra ngoài qua Cloudflare Quick Tunnel (URL ngẫu nhiên, đổi mỗi lần container `cloudflared` restart). Đây là mô hình để demo/test, chưa phải production.
+
+### Việc cần làm khi có VPS (chưa làm — TODO)
+
+**Phải sửa trước khi mở ra ngoài Internet (bảo mật nghiêm trọng):**
+- [ ] Bỏ toàn bộ cổng debug JDWP (`JAVA_TOOL_OPTIONS: -agentlib:jdwp=...` và `ports: "500x:500x"`) khỏi mọi service trong `docker-compose.yml` bản chạy thật — JDWP không xác thực mở ra Internet là đường RCE tức thời. Nên tách một `docker-compose.prod.yml` không có các dòng này thay vì sửa trực tiếp file dev.
+- [ ] Bỏ `ports:` publish ra host của `mysql-db` (3307), `kafka` (9092), `redis` (6379) — Docker tự chèn luật iptables NAT nên UFW/firewall thường không chặn được, kể cả khi tưởng đã đóng cổng ở tầng OS. Chỉ nên giao tiếp qua mạng nội bộ `fem-network`.
+- [ ] Bỏ publish cổng Eureka Dashboard (8761) ra ngoài.
+- [ ] Thêm `restart: unless-stopped` cho mọi service (hiện chỉ `cloudflared` có) — VPS reboot hoặc container crash thì cả hệ thống không tự dậy lại.
+
+**Cần có trước khi chạy thật:**
+- [ ] TLS/HTTPS thật qua Nginx/Caddy/Traefik + Let's Encrypt + tên miền riêng (hiện dựa vào HTTPS do Cloudflare Tunnel cấp sẵn).
+- [ ] Đổi `APP_BASE_URL`, `OAUTH2_SUCCESS_REDIRECT_URL` trong `.env` từ `localhost` sang domain thật, đồng thời cập nhật lại Redirect URI ở Google/Facebook Console.
+- [ ] Giới hạn tài nguyên container (`mem_limit`/`deploy.resources.limits`) cho từng service, tương xứng cấu hình VPS — hiện không giới hạn, nhiều JVM cùng chạy có thể chiếm hết RAM khi traffic tăng.
+- [ ] Cấu hình log rotation cho Docker (`logging: driver: json-file, options: {max-size, max-file}`) — mặc định log tích luỹ vô hạn, dễ đầy đĩa VPS.
+- [ ] Có backup định kỳ cho MySQL (`mysqldump` theo lịch, hoặc snapshot volume `mysql-data`) — hiện chưa có.
+- [ ] Ghim version cụ thể cho `grafana/grafana`, `prom/prometheus`, `grafana/loki` (đang dùng `:latest`, không tái lập được).
+- [ ] Chặn `/actuator/**` của `api-gateway` ở tầng reverse proxy/firewall, chỉ cho phép truy cập nội bộ — hiện `/actuator/health` và `/actuator/prometheus` public không cần đăng nhập trên cổng 8080 publish ra ngoài.
+- [ ] CI/CD deploy tự động lên VPS (hiện chỉ có CI build/test — `backend-ci.yml`, `frontend-ci.yml` — chưa có bước SSH/push image + `docker compose pull && up -d` trên VPS; deploy đang hoàn toàn thủ công).
+
+**Không cấp thiết, có thể làm sau (housekeeping, tích rác rất chậm ở quy mô project hiện tại):**
+- [ ] Job dọn định kỳ bảng `IDEMPOTENCY_KEYS` (expense-service) — mỗi request tạo giao dịch/chuyển ví có gửi `Idempotency-Key` sẽ ghi 1 dòng, không có gì xoá sau khi đã dùng xong; nên purge các dòng cũ hơn vài ngày (dòng chỉ cần sống lâu hơn `IN_FLIGHT_TIMEOUT` 1 phút trong `IdempotencyGuard` một chút, không cần giữ lâu).
+- [ ] Job dọn `REFRESH_TOKENS` và `FAMILY_INVITES` đã hết hạn (auth-service) — hiện chỉ bị xoá khi có hành động cụ thể (logout, đổi mật khẩu, xoá lời mời...), token/invite hết hạn nhưng chưa ai đụng tới sẽ nằm lại trong DB vô hạn.

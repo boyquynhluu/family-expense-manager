@@ -7,6 +7,8 @@ import org.slf4j.Logger;
  * expression: {@code throw logged(log, new BadRequestException("..."));}. Business errors are expected
  * outcomes, hence WARN without a stack trace; unexpected failures are logged with the stack trace by
  * {@link ServiceException#unexpected}.
+ *
+ * @author boyquynhluu
  */
 public final class ExceptionLogger {
 

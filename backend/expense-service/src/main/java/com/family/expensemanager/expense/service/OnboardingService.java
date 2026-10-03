@@ -20,7 +20,11 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-/** Gives a brand-new family the minimum data (a wallet + categories) it needs to record its first transaction. */
+/**
+ * Gives a brand-new family the minimum data (a wallet + categories) it needs to record its first transaction.
+ *
+ * @author boyquynhluu
+ */
 @Service
 @Transactional
 @RequiredArgsConstructor

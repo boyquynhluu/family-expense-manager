@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -22,15 +23,20 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * @author boyquynhluu
+ */
 @ExtendWith(MockitoExtension.class)
 class WalletTransferServiceTest {
 
@@ -42,6 +48,8 @@ class WalletTransferServiceTest {
     private WalletService walletService;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private IdempotencyGuard idempotencyGuard;
 
     @InjectMocks
     private WalletTransferService service;
@@ -50,8 +58,27 @@ class WalletTransferServiceTest {
     // (via WalletService.currentBalanceOf); default every test to a wallet that's "rich enough" so
     // that check doesn't trip up tests that aren't specifically exercising it.
     @BeforeEach
+    @SuppressWarnings("unchecked")
     void setUpDefaultBalance() {
         lenient().when(walletService.currentBalanceOf(any())).thenReturn(new BigDecimal("999999999"));
+        // None of these tests exercise idempotency (they all pass a null key) — just run the action,
+        // like the real IdempotencyGuard does for a null/blank key.
+        lenient().when(idempotencyGuard.runOnce(any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(4)).get());
+    }
+
+    @Test
+    void create_locksTheSourceWallet_beforeReadingItsBalance() {
+        Wallet from = wallet(1L, 7L, "VND");
+        when(walletService.requireOwnedByFamily(1L, 7L)).thenReturn(from);
+        when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "VND"));
+
+        service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "150000"), null);
+
+        // Otherwise two concurrent transfers could both read the same balance and together overdraw it.
+        InOrder order = inOrder(walletService);
+        order.verify(walletService).lockForUpdate(1L);
+        order.verify(walletService).currentBalanceOf(from);
     }
 
     @Test
@@ -59,7 +86,7 @@ class WalletTransferServiceTest {
         when(walletService.requireOwnedByFamily(1L, 7L)).thenReturn(wallet(1L, 7L, "VND"));
         when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "VND"));
 
-        var response = service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "150000"));
+        var response = service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "150000"), null);
 
         ArgumentCaptor<WalletTransfer> captor = ArgumentCaptor.forClass(WalletTransfer.class);
         verify(walletTransferDao).insert(captor.capture());
@@ -92,23 +119,67 @@ class WalletTransferServiceTest {
 
     @Test
     void create_doesNotPublishEvent_whenValidationFailsBeforeInsert() {
-        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 1L, "10")))
+        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 1L, "10000"), null))
                 .isInstanceOf(BadRequestException.class);
         verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
     void create_throwsBadRequest_whenSourceAndTargetAreSameWallet() {
-        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 1L, "10")))
+        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 1L, "10000"), null))
                 .isInstanceOf(BadRequestException.class);
         verify(walletTransferDao, never()).insert(any());
     }
 
     @Test
     void create_throwsBadRequest_whenAmountBelowMinimum() {
-        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "0.001")))
+        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "0.001"), null))
                 .isInstanceOf(BadRequestException.class);
         verify(walletTransferDao, never()).insert(any());
+    }
+
+    @Test
+    void create_rejectsAmountOutsideTenThousandToFiveMillion() {
+        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "9999"), null))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Số tiền giao dịch tối thiểu là 10.000đ");
+        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "5000001"), null))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Số tiền giao dịch tối đa là 5.000.000đ");
+        verify(walletTransferDao, never()).insert(any());
+    }
+
+    @Test
+    void create_acceptsExactlyFiveMillion() {
+        when(walletService.requireOwnedByFamily(1L, 7L)).thenReturn(wallet(1L, 7L, "VND"));
+        when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "VND"));
+
+        service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "5000000"), null);
+
+        verify(walletTransferDao).insert(any());
+    }
+
+    // A transfer made before the range existed (e.g. 9.000đ) must be brought into it before it can be saved again.
+    @Test
+    void update_rejectsAnOldOutOfRangeAmount_evenWhenTheAmountIsNotChanged() {
+        WalletTransfer existing = transfer(5L, 7L, 42L);
+        existing.setAmount(new BigDecimal("9000"));
+        when(walletTransferDao.selectById(5L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.update(7L, 42L, "MEMBER", 5L, request(1L, 2L, "9000.00")))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Số tiền giao dịch tối thiểu là 10.000đ");
+        verify(walletTransferDao, never()).update(any());
+    }
+
+    @Test
+    void update_rejectsChangingTheAmountToAboveFiveMillion() {
+        when(walletTransferDao.selectById(5L)).thenReturn(Optional.of(transfer(5L, 7L, 42L)));
+
+        assertThatThrownBy(() -> service.update(7L, 42L, "MEMBER", 5L, request(1L, 2L, "6000000")))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Số tiền giao dịch tối đa là 5.000.000đ");
+        verify(walletTransferDao, never()).update(any());
     }
 
     @Test
@@ -116,7 +187,7 @@ class WalletTransferServiceTest {
         when(walletService.requireOwnedByFamily(1L, 7L)).thenReturn(wallet(1L, 7L, "VND"));
         when(walletService.requireOwnedByFamily(2L, 7L)).thenThrow(new NotFoundException("Wallet không tồn tại: 2"));
 
-        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "10")))
+        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "10000"), null))
                 .isInstanceOf(NotFoundException.class);
         verify(walletTransferDao, never()).insert(any());
     }
@@ -126,7 +197,7 @@ class WalletTransferServiceTest {
         when(walletService.requireOwnedByFamily(1L, 7L)).thenReturn(wallet(1L, 7L, "VND"));
         when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "USD"));
 
-        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "10")))
+        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "10000"), null))
                 .isInstanceOf(BadRequestException.class);
         verify(walletTransferDao, never()).insert(any());
     }
@@ -136,9 +207,9 @@ class WalletTransferServiceTest {
         Wallet from = wallet(1L, 7L, "VND");
         when(walletService.requireOwnedByFamily(1L, 7L)).thenReturn(from);
         when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "VND"));
-        when(walletService.currentBalanceOf(from)).thenReturn(new BigDecimal("100"));
+        when(walletService.currentBalanceOf(from)).thenReturn(new BigDecimal("100000"));
 
-        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "150")))
+        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "150000"), null))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("ví nguồn");
         verify(walletTransferDao, never()).insert(any());
@@ -155,7 +226,7 @@ class WalletTransferServiceTest {
         when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(to);
         when(walletService.currentBalanceOf(from)).thenReturn(new BigDecimal("1000000"));
 
-        service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "150000"));
+        service.create(7L, 42L, "a@b.com", "An", request(1L, 2L, "150000"), null);
 
         verify(walletTransferDao).insert(any());
     }
@@ -237,7 +308,7 @@ class WalletTransferServiceTest {
         transfer.setFamilyId(familyId);
         transfer.setFromWalletId(1L);
         transfer.setToWalletId(2L);
-        transfer.setAmount(BigDecimal.TEN);
+        transfer.setAmount(new BigDecimal("10000"));
         transfer.setOccurredAt(OCCURRED_AT);
         transfer.setCreatedByUserId(createdBy);
         transfer.setCreatedAt(OCCURRED_AT);
@@ -266,7 +337,7 @@ class WalletTransferServiceTest {
         assertThat(response.toWalletId()).isEqualTo(4L);
     }
 
-    // The edited transfer's own 10 is already deducted from the source wallet's balance (0 left), so editing
+    // The edited transfer's own 10000 is already deducted from the source wallet's balance (0 left), so editing
     // it must not be judged against that already-reduced balance.
     @Test
     void update_allowsSameAmount_whenSourceBalanceOnlyCoversTheTransferBeingEdited() {
@@ -277,7 +348,7 @@ class WalletTransferServiceTest {
         when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "VND"));
         when(walletService.currentBalanceOf(from)).thenReturn(BigDecimal.ZERO);
 
-        service.update(7L, 42L, "MEMBER", 5L, request(1L, 2L, "10"));
+        service.update(7L, 42L, "MEMBER", 5L, request(1L, 2L, "10000"));
 
         verify(walletTransferDao).update(existing);
     }
@@ -291,12 +362,12 @@ class WalletTransferServiceTest {
         when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "VND"));
         when(walletService.currentBalanceOf(from)).thenReturn(BigDecimal.ZERO);
 
-        assertThatThrownBy(() -> service.update(7L, 42L, "MEMBER", 5L, request(1L, 2L, "11")))
+        assertThatThrownBy(() -> service.update(7L, 42L, "MEMBER", 5L, request(1L, 2L, "11000")))
                 .isInstanceOf(BadRequestException.class);
         verify(walletTransferDao, never()).update(any());
     }
 
-    // Edited transfer 1 -> 2 (10) becomes 2 -> 3: wallet 2 currently holds that incoming 10, which disappears
+    // Edited transfer 1 -> 2 (10000) becomes 2 -> 3: wallet 2 currently holds that incoming 10000, which disappears
     // with the edit, so only the balance without it (0) counts.
     @Test
     void update_excludesTheEditedTransfersIncomingAmount_whenItsDestinationBecomesTheNewSource() {
@@ -305,10 +376,11 @@ class WalletTransferServiceTest {
         when(walletTransferDao.selectById(5L)).thenReturn(Optional.of(existing));
         when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(newSource);
         when(walletService.requireOwnedByFamily(3L, 7L)).thenReturn(wallet(3L, 7L, "VND"));
-        when(walletService.currentBalanceOf(newSource)).thenReturn(new BigDecimal("10"));
+        when(walletService.currentBalanceOf(newSource)).thenReturn(new BigDecimal("10000"));
 
-        assertThatThrownBy(() -> service.update(7L, 42L, "MEMBER", 5L, request(2L, 3L, "5")))
-                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> service.update(7L, 42L, "MEMBER", 5L, request(2L, 3L, "10000")))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("ví nguồn");
     }
 
     @Test
@@ -318,16 +390,46 @@ class WalletTransferServiceTest {
         when(walletService.requireOwnedByFamily(1L, 7L)).thenReturn(wallet(1L, 7L, "VND"));
         when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "VND"));
 
-        service.update(7L, 99L, "OWNER", 5L, request(1L, 2L, "10"));
+        service.update(7L, 99L, "OWNER", 5L, request(1L, 2L, "10000"));
 
         verify(walletTransferDao).update(existing);
+    }
+
+    @Test
+    void create_checksSourceAndDestinationAgainstTheSender() {
+        Wallet from = wallet(1L, 7L, "VND");
+        Wallet to = wallet(2L, 7L, "VND");
+        when(walletService.requireOwnedByFamily(1L, 7L)).thenReturn(from);
+        when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(to);
+        when(walletService.currentBalanceOf(from)).thenReturn(new BigDecimal("100000"));
+
+        service.create(7L, 42L, "a@b.com", "An", "OWNER", request(1L, 2L, "10000"), null);
+
+        // Even for the OWNER: the rule is the sender's own wallet → someone else's / shared.
+        verify(walletService).requireTransferSource(from, 42L);
+        verify(walletService).requireTransferDestination(to, 42L);
+    }
+
+    @Test
+    void update_byOwner_checksTheNewSourceAgainstTheTransfersCreator_andSkipsAnUnchangedDestination() {
+        WalletTransfer existing = transfer(5L, 7L, 42L); // 1 -> 2, made by member 42
+        Wallet newSource = wallet(3L, 7L, "VND");
+        when(walletTransferDao.selectById(5L)).thenReturn(Optional.of(existing));
+        when(walletService.requireOwnedByFamily(3L, 7L)).thenReturn(newSource);
+        when(walletService.requireOwnedByFamily(2L, 7L)).thenReturn(wallet(2L, 7L, "VND"));
+        when(walletService.currentBalanceOf(newSource)).thenReturn(new BigDecimal("100000"));
+
+        service.update(7L, 99L, "OWNER", 5L, request(3L, 2L, "10000"));
+
+        verify(walletService).requireTransferSource(newSource, 42L);
+        verify(walletService, never()).requireTransferDestination(any(), any());
     }
 
     @Test
     void update_throwsAccessDenied_forOtherMember() {
         when(walletTransferDao.selectById(5L)).thenReturn(Optional.of(transfer(5L, 7L, 42L)));
 
-        assertThatThrownBy(() -> service.update(7L, 99L, "MEMBER", 5L, request(1L, 2L, "10")))
+        assertThatThrownBy(() -> service.update(7L, 99L, "MEMBER", 5L, request(1L, 2L, "10000")))
                 .isInstanceOf(AccessDeniedException.class);
         verify(walletTransferDao, never()).update(any());
     }
@@ -337,9 +439,9 @@ class WalletTransferServiceTest {
         when(walletTransferDao.selectById(5L)).thenReturn(Optional.of(transfer(5L, 8L, 42L)));
         when(walletTransferDao.selectById(6L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.update(7L, 42L, "OWNER", 5L, request(1L, 2L, "10")))
+        assertThatThrownBy(() -> service.update(7L, 42L, "OWNER", 5L, request(1L, 2L, "10000")))
                 .isInstanceOf(NotFoundException.class);
-        assertThatThrownBy(() -> service.update(7L, 42L, "OWNER", 6L, request(1L, 2L, "10")))
+        assertThatThrownBy(() -> service.update(7L, 42L, "OWNER", 6L, request(1L, 2L, "10000")))
                 .isInstanceOf(NotFoundException.class);
         verify(walletTransferDao, never()).update(any());
     }
@@ -354,7 +456,7 @@ class WalletTransferServiceTest {
                 .isInstanceOf(BadRequestException.class);
         assertThatThrownBy(() -> service.update(7L, 42L, "OWNER", 5L, request(1L, 2L, "0.001")))
                 .isInstanceOf(BadRequestException.class);
-        assertThatThrownBy(() -> service.update(7L, 42L, "OWNER", 5L, request(1L, 2L, "10")))
+        assertThatThrownBy(() -> service.update(7L, 42L, "OWNER", 5L, request(1L, 2L, "10000")))
                 .isInstanceOf(BadRequestException.class);
         verify(walletTransferDao, never()).update(any());
     }

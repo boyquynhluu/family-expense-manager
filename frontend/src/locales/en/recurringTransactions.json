@@ -50,6 +50,10 @@
   "activateButton": "Activate",
   "saveFailed": "Failed to save recurring transaction",
   "deleteConfirm": "Delete this recurring transaction? Transactions already created from it won't be deleted.",
+  "pauseConfirm": "Pause this recurring transaction? No transactions will be created from it until you activate it again.",
+  "activateConfirm": "Activate this recurring transaction again? Transactions will be created on schedule again.",
   "deleteFailed": "Failed to delete recurring transaction",
-  "toggleFailed": "Update failed"
+  "toggleFailed": "Update failed",
+  "addConfirm": "Add a {{amount}} recurring transaction?",
+  "updateConfirm": "Change this recurring transaction to {{amount}}?"
 }

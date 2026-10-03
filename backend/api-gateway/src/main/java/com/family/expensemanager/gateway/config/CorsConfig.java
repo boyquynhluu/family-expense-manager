@@ -18,6 +18,8 @@ import java.util.List;
  * browser enforces CORS on every request. Registered as a plain servlet Filter at
  * highest precedence so it runs before {@link JwtGatewayFilter} and handles preflight
  * OPTIONS requests before any auth check.
+ *
+ * @author boyquynhluu
  */
 @Configuration
 public class CorsConfig {

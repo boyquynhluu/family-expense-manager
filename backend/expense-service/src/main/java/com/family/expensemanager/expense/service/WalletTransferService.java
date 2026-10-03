@@ -1,5 +1,8 @@
 package com.family.expensemanager.expense.service;
 
+import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
+
+import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -7,9 +10,11 @@ import java.util.List;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.family.expensemanager.common.currency.CurrencyUtil;
 import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.event.ExpenseEvent;
 import com.family.expensemanager.common.exception.ApiException;
@@ -17,22 +22,21 @@ import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.expense.dao.WalletTransferDao;
+import com.family.expensemanager.expense.domain.TransactionAmounts;
 import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.domain.entity.WalletTransfer;
 import com.family.expensemanager.expense.dto.CreateWalletTransferRequest;
 import com.family.expensemanager.expense.dto.WalletTransferResponse;
-import java.io.UncheckedIOException;
-import org.springframework.security.core.AuthenticationException;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
-import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
 
 /**
  * Moves money between two wallets of the same family. A transfer is neither income nor expense, so it
  * lives in its own table and only affects wallet balances (see {@link WalletService}), never the
  * transaction lists, reports or budgets.
+ *
+ * @author boyquynhluu
  */
 @Service
 @Transactional
@@ -41,18 +45,40 @@ import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
 public class WalletTransferService {
 
     private static final String ROLE_OWNER = "OWNER";
-    private static final BigDecimal MIN_AMOUNT = new BigDecimal("0.01");
     private static final int MAX_PAGE_SIZE = 100;
+    private static final String IDEMPOTENCY_SCOPE = "CREATE_WALLET_TRANSFER";
 
     private final WalletTransferDao walletTransferDao;
     private final WalletService walletService;
     private final ApplicationEventPublisher eventPublisher;
+    private final IdempotencyGuard idempotencyGuard;
 
-    public WalletTransferResponse create(
-            Long familyId, Long userId, String userEmail, String userDisplayName, CreateWalletTransferRequest request) {
+    /**
+     * @param idempotencyKey optional {@code Idempotency-Key} request header (see {@link IdempotencyGuard}) —
+     *                        a retry with the same key returns the same {@link WalletTransferResponse}
+     *                        instead of creating a second transfer; null/blank opts out, as before this existed.
+     */
+    public WalletTransferResponse create(Long familyId, Long userId, String userEmail, String userDisplayName,
+                                          CreateWalletTransferRequest request, String idempotencyKey) {
+        return create(familyId, userId, userEmail, userDisplayName, ROLE_OWNER, request, idempotencyKey);
+    }
+
+    /**
+     * A transfer moves money from the sender's OWN private wallet into another member's private wallet or a
+     * shared one (see {@link #requireValidWallets}) — the same rule for the family OWNER, so {@code role} plays
+     * no part in it (it is kept for callers' symmetry with {@link #update}).
+     */
+    public WalletTransferResponse create(Long familyId, Long userId, String userEmail, String userDisplayName,
+                                          String role, CreateWalletTransferRequest request, String idempotencyKey) {
+        return idempotencyGuard.runOnce(familyId, IDEMPOTENCY_SCOPE, idempotencyKey, WalletTransferResponse.class,
+                () -> doCreate(familyId, userId, userEmail, userDisplayName, request));
+    }
+
+    private WalletTransferResponse doCreate(Long familyId, Long userId, String userEmail, String userDisplayName,
+                                            CreateWalletTransferRequest request) {
         try {
             log.info("create - start, familyId={}, from={}, to={}", familyId, request.fromWalletId(), request.toWalletId());
-            Wallet[] wallets = requireValidWallets(familyId, request, null);
+            Wallet[] wallets = requireValidWallets(familyId, request, null, userId);
 
             WalletTransfer transfer = new WalletTransfer();
             transfer.setFamilyId(familyId);
@@ -74,7 +100,7 @@ public class WalletTransferService {
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
             throw e;
         } catch (Exception e) {
-            throw ServiceException.unexpected("WalletTransferService.create", e);
+            throw ServiceException.unexpected("WalletTransferService.doCreate", e);
         }
     }
 
@@ -84,7 +110,9 @@ public class WalletTransferService {
             log.info("update - start, familyId={}, userId={}, transferId={}", familyId, userId, transferId);
             WalletTransfer transfer = requireOwnedByFamily(transferId, familyId);
             requireCreatorOrOwner(transfer, userId, role, "sửa");
-            Wallet[] wallets = requireValidWallets(familyId, request, transfer);
+            // The rule is about whose transfer it is — so an OWNER fixing a member's transfer is checked
+            // against that member's wallets, not the OWNER's own.
+            Wallet[] wallets = requireValidWallets(familyId, request, transfer, transfer.getCreatedByUserId());
 
             transfer.setFromWalletId(wallets[0].getId());
             transfer.setToWalletId(wallets[1].getId());
@@ -104,20 +132,33 @@ public class WalletTransferService {
      * @param existing the transfer being edited, or null when creating — its own amount is already part of
      *                 the wallets' current balances, so it must be taken out before checking the new amount.
      */
-    private Wallet[] requireValidWallets(Long familyId, CreateWalletTransferRequest request, WalletTransfer existing) {
+    private Wallet[] requireValidWallets(Long familyId, CreateWalletTransferRequest request, WalletTransfer existing,
+                                         Long senderUserId) {
         if (request.fromWalletId().equals(request.toWalletId())) {
             throw logged(log, new BadRequestException("Ví nguồn và ví đích phải khác nhau"));
         }
-        if (request.amount().compareTo(MIN_AMOUNT) < 0) {
-            throw logged(log, new BadRequestException("Số tiền chuyển phải >= 0.01"));
-        }
+        // Same 10.000đ–5.000.000đ range as a transaction, on create and on every edit.
+        TransactionAmounts.problem(request.amount()).ifPresent(message -> {
+            throw logged(log, new BadRequestException(message));
+        });
+        // From the sender's own private wallet, to another member's private wallet or a shared one. On edit, a side
+        // is only re-checked when it changes — fixing the amount/note of an older transfer (made before this rule,
+        // e.g. out of a shared wallet) stays possible.
         Wallet from = walletService.requireOwnedByFamily(request.fromWalletId(), familyId);
+        if (existing == null || !request.fromWalletId().equals(existing.getFromWalletId())) {
+            walletService.requireTransferSource(from, senderUserId);
+        }
         Wallet to = walletService.requireOwnedByFamily(request.toWalletId(), familyId);
+        if (existing == null || !request.toWalletId().equals(existing.getToWalletId())) {
+            walletService.requireTransferDestination(to, senderUserId);
+        }
         if (!from.getCurrency().equals(to.getCurrency())) {
             throw logged(log, new BadRequestException("Hai ví phải cùng loại tiền tệ"));
         }
         // Balance is checked against the SOURCE wallet (you can't send more than it holds), not the
         // destination — and must include the wallet's initialBalance, not just its transaction history.
+        // Locked first, so a concurrent transfer out of the same wallet waits until this one commits.
+        walletService.lockForUpdate(from.getId());
         BigDecimal fromBalance = walletService.currentBalanceOf(from);
         if (existing != null) {
             if (existing.getFromWalletId().equals(from.getId())) {
@@ -128,7 +169,7 @@ public class WalletTransferService {
             }
         }
         if (request.amount().compareTo(fromBalance) > 0) {
-            throw logged(log, new BadRequestException("Số tiền chuyển phải <= số dư hiện tại của ví nguồn: " + fromBalance));
+            throw logged(log, new BadRequestException("Số tiền chuyển phải <= số dư hiện tại của ví nguồn: " + CurrencyUtil.formatCurrency(fromBalance)));
         }
         return new Wallet[] {from, to};
     }

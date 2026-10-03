@@ -19,6 +19,8 @@ import java.util.List;
  * Stamps the trusted client IP (see {@link ClientIpResolver}) onto {@code X-Client-Ip} for
  * downstream services, discarding any value the caller sent. Wrapping the servlet request
  * is enough because Gateway Server MVC builds the proxied request's headers from it.
+ *
+ * @author boyquynhluu
  */
 @Component
 public class ClientIpFilter extends OncePerRequestFilter implements Ordered {

@@ -1,0 +1,340 @@
+name: family-expense-manager
+
+networks:
+  fem-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  receipt-uploads:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+
+services:
+  mysql-db:
+    image: mysql:8.4
+    container_name: fem-mysql-db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      # Only the mysql image's own bootstrap vars create fem_auth automatically.
+      # fem_expense/fem_notify are created by mysql/init/01-create-expense-notify-databases.sh,
+      # which needs these 4 vars available in its environment to do so.
+      MYSQL_DATABASE: fem_auth
+      MYSQL_USER: ${FEM_AUTH_DB_USER}
+      MYSQL_PASSWORD: ${FEM_AUTH_DB_PASSWORD}
+      FEM_EXPENSE_DB_USER: ${FEM_EXPENSE_DB_USER}
+      FEM_EXPENSE_DB_PASSWORD: ${FEM_EXPENSE_DB_PASSWORD}
+      FEM_NOTIFY_DB_USER: ${FEM_NOTIFY_DB_USER}
+      FEM_NOTIFY_DB_PASSWORD: ${FEM_NOTIFY_DB_PASSWORD}
+    ports:
+      # Host port 3307 (not 3306) so this doesn't clash with a local MySQL install.
+      # Only affects access from the host machine — auth/expense/notification-service
+      # reach this container over the internal Docker network at mysql-db:3306, unchanged.
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - fem-network
+
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: fem-kafka
+    environment:
+      # Default advertised.listeners is "localhost:9092", which only works for a
+      # client running inside this same container — other containers (expense-service,
+      # notification-service) need the broker to advertise itself as "kafka:9092"
+      # (the Docker Compose service name) so their post-bootstrap produce/fetch
+      # connections resolve correctly on the fem-network.
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - fem-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: fem-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fem-network
+
+  eureka-server:
+    build:
+      context: ../backend
+      dockerfile: eureka-server/Dockerfile
+    container_name: fem-eureka-server
+    ports:
+      - "8761:8761"
+      - "5005:5005" # JDWP remote debug port (attach IDE here)
+    environment:
+      JAVA_TOOL_OPTIONS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+    healthcheck:
+      # eclipse-temurin:*-jre-alpine has no curl; BusyBox wget is built in.
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8761/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - fem-network
+
+  api-gateway:
+    build:
+      context: ../backend
+      dockerfile: api-gateway/Dockerfile
+    container_name: fem-api-gateway
+    ports:
+      - "8080:8080"
+      - "5006:5006" # JDWP remote debug port (attach IDE here)
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka/
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      JAVA_TOOL_OPTIONS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5006
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - fem-network
+
+  auth-service:
+    build:
+      context: ../backend
+      dockerfile: auth-service/Dockerfile
+    container_name: fem-auth-service
+    ports:
+      - "5007:5007" # JDWP remote debug port (attach IDE here)
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka/
+      MYSQL_HOST: mysql-db
+      MYSQL_PORT: 3306
+      FEM_AUTH_DB_USER: ${FEM_AUTH_DB_USER}
+      FEM_AUTH_DB_PASSWORD: ${FEM_AUTH_DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:?Thiếu TOTP_ENCRYPTION_KEY trong infra/.env}
+      TOTP_ENCRYPTION_KEY_PREVIOUS: ${TOTP_ENCRYPTION_KEY_PREVIOUS:-}
+      AUTH_UNVERIFIED_CLEANUP_RETENTION_DAYS: ${AUTH_UNVERIFIED_CLEANUP_RETENTION_DAYS:-7}
+      AUTH_UNVERIFIED_CLEANUP_CRON: ${AUTH_UNVERIFIED_CLEANUP_CRON:-0 30 2 * * *}
+      APP_BASE_URL: ${APP_BASE_URL}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      FACEBOOK_CLIENT_ID: ${FACEBOOK_CLIENT_ID}
+      FACEBOOK_CLIENT_SECRET: ${FACEBOOK_CLIENT_SECRET}
+      OAUTH2_SUCCESS_REDIRECT_URL: ${OAUTH2_SUCCESS_REDIRECT_URL}
+      JAVA_TOOL_OPTIONS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5007
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      mysql-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - fem-network
+
+  expense-service:
+    build:
+      context: ../backend
+      dockerfile: expense-service/Dockerfile
+    container_name: fem-expense-service
+    ports:
+      - "5008:5008" # JDWP remote debug port (attach IDE here)
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka/
+      MYSQL_HOST: mysql-db
+      MYSQL_PORT: 3306
+      FEM_EXPENSE_DB_USER: ${FEM_EXPENSE_DB_USER}
+      FEM_EXPENSE_DB_PASSWORD: ${FEM_EXPENSE_DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET}
+      RECEIPT_STORAGE_PATH: /data/receipts
+      JAVA_TOOL_OPTIONS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5008
+    volumes:
+      - receipt-uploads:/data/receipts
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      mysql-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - fem-network
+
+  notification-service:
+    build:
+      context: ../backend
+      dockerfile: notification-service/Dockerfile
+    container_name: fem-notification-service
+    ports:
+      - "5009:5009" # JDWP remote debug port (attach IDE here)
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka/
+      MYSQL_HOST: mysql-db
+      MYSQL_PORT: 3306
+      FEM_NOTIFY_DB_USER: ${FEM_NOTIFY_DB_USER}
+      FEM_NOTIFY_DB_PASSWORD: ${FEM_NOTIFY_DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM}
+      APP_BASE_URL: ${APP_BASE_URL}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL}
+      JAVA_TOOL_OPTIONS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5009
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      mysql-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - fem-network
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: fem-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - fem-network
+
+  # Exposes api-gateway to the internet via a Cloudflare quick tunnel, so a frontend
+  # deployed elsewhere (e.g. GitHub Pages) can call this local backend. The public URL
+  # is random and changes every time this container restarts — read it with
+  # `infra/get-tunnel-url.sh` and update the frontend's VITE_API_BASE_URL accordingly.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: fem-cloudflared
+    command: tunnel --no-autoupdate --url http://api-gateway:8080
+    profiles:
+      - monitoring
+    depends_on:
+      - api-gateway
+    networks:
+      - fem-network
+    restart: unless-stopped
+
+  # Monitoring stack (prometheus, loki, promtail, grafana) is opt-in in dev: all four are in
+  # the "monitoring" profile, so a plain `docker compose -f docker-compose-dev.yml up` starts
+  # only the app services. Include it with `--profile monitoring` (no app service depends on it).
+
+  # README "12. Observability sơ sài" — metrics half of the stack. Each service exposes
+  # Micrometer metrics at /actuator/prometheus (see prometheus/prometheus.yml for the
+  # scrape targets); this just polls them and stores the time series.
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: fem-prometheus
+    profiles:
+      - monitoring
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - fem-network
+
+  # Log-aggregation half of the observability stack — Loki stores logs, Promtail (below)
+  # ships every container's stdout/stderr here so they're searchable from one place
+  # instead of `docker logs <container>` one at a time.
+  loki:
+    image: grafana/loki:latest
+    container_name: fem-loki
+    profiles:
+      - monitoring
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - fem-network
+
+  # Auto-discovers every container on this host via the (read-only) Docker socket — no
+  # config change needed when a new service container is added later.
+  promtail:
+    image: grafana/promtail:latest
+    container_name: fem-promtail
+    profiles:
+      - monitoring
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on:
+      - loki
+    networks:
+      - fem-network
+
+  # Single UI for both: Prometheus + Loki datasources and a starter dashboard are
+  # auto-provisioned from ./grafana/provisioning (see that folder) — no manual
+  # click-through setup needed after `docker compose up`. Default login admin/admin.
+  grafana:
+    image: grafana/grafana:latest
+    container_name: fem-grafana
+    profiles:
+      - monitoring
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - fem-network

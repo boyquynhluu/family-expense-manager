@@ -14,6 +14,9 @@ import com.family.expensemanager.auth.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+/**
+ * @author boyquynhluu
+ */
 @Component
 public class OAuth2AuthenticationFailureHandler implements AuthenticationFailureHandler {
 

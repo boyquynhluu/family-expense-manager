@@ -29,6 +29,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * @author boyquynhluu
+ */
 @ExtendWith(MockitoExtension.class)
 class BudgetServiceTest {
 
@@ -46,7 +49,7 @@ class BudgetServiceTest {
 
     @Test
     void create_savesBudget_whenCategoryOwnedByFamily() {
-        var response = budgetService.create(1L, new CreateBudgetRequest(5L, "2026-01", BigDecimal.valueOf(1000)));
+        var response = budgetService.create(1L, new CreateBudgetRequest(5L, "2026-01", BigDecimal.valueOf(1000000)));
 
         verify(categoryService).requireOwnedByFamily(5L, 1L, "EXPENSE");
         assertThat(response.familyId()).isEqualTo(1L);
@@ -58,13 +61,13 @@ class BudgetServiceTest {
         doThrow(new NotFoundException("Category không tồn tại: 5"))
                 .when(categoryService).requireOwnedByFamily(5L, 1L, "EXPENSE");
 
-        assertThatThrownBy(() -> budgetService.create(1L, new CreateBudgetRequest(5L, "2026-01", BigDecimal.TEN)))
+        assertThatThrownBy(() -> budgetService.create(1L, new CreateBudgetRequest(5L, "2026-01", BigDecimal.valueOf(100000))))
                 .isInstanceOf(NotFoundException.class);
     }
 
     @Test
     void create_savesOverallBudget_whenCategoryIdNull() {
-        var response = budgetService.create(1L, new CreateBudgetRequest(null, "2026-01", BigDecimal.valueOf(1000)));
+        var response = budgetService.create(1L, new CreateBudgetRequest(null, "2026-01", BigDecimal.valueOf(1000000)));
 
         verify(categoryService, never()).requireOwnedByFamily(any(), any(), any());
         assertThat(response.categoryId()).isNull();
@@ -75,7 +78,7 @@ class BudgetServiceTest {
     void create_rejectsSecondOverallBudget_forSameMonth() {
         when(budgetDao.selectOverallByPeriod(1L, "2026-01")).thenReturn(Optional.of(overallBudget(3L)));
 
-        assertThatThrownBy(() -> budgetService.create(1L, new CreateBudgetRequest(null, "2026-01", BigDecimal.TEN)))
+        assertThatThrownBy(() -> budgetService.create(1L, new CreateBudgetRequest(null, "2026-01", BigDecimal.valueOf(100000))))
                 .isInstanceOf(BadRequestException.class);
         verify(budgetDao, never()).insert(any());
     }
@@ -84,7 +87,7 @@ class BudgetServiceTest {
     void create_rejectsDuplicateCategoryBudget_forSameMonth() {
         when(budgetDao.selectByCategoryAndPeriod(5L, "2026-01")).thenReturn(Optional.of(budget(3L, 1L)));
 
-        assertThatThrownBy(() -> budgetService.create(1L, new CreateBudgetRequest(5L, "2026-01", BigDecimal.TEN)))
+        assertThatThrownBy(() -> budgetService.create(1L, new CreateBudgetRequest(5L, "2026-01", BigDecimal.valueOf(100000))))
                 .isInstanceOf(BadRequestException.class);
         verify(budgetDao, never()).insert(any());
     }
@@ -95,9 +98,9 @@ class BudgetServiceTest {
         when(budgetDao.selectById(3L)).thenReturn(Optional.of(existing));
         when(budgetDao.selectOverallByPeriod(1L, "2026-01")).thenReturn(Optional.of(existing));
 
-        var response = budgetService.update(3L, 1L, new CreateBudgetRequest(null, "2026-01", BigDecimal.valueOf(99)));
+        var response = budgetService.update(3L, 1L, new CreateBudgetRequest(null, "2026-01", BigDecimal.valueOf(990000)));
 
-        assertThat(response.limitAmount()).isEqualByComparingTo("99");
+        assertThat(response.limitAmount()).isEqualByComparingTo("990000");
         verify(budgetDao).update(existing);
     }
 
@@ -106,7 +109,7 @@ class BudgetServiceTest {
         when(budgetDao.selectById(4L)).thenReturn(Optional.of(budget(4L, 1L)));
         when(budgetDao.selectOverallByPeriod(1L, "2026-01")).thenReturn(Optional.of(overallBudget(3L)));
 
-        assertThatThrownBy(() -> budgetService.update(4L, 1L, new CreateBudgetRequest(null, "2026-01", BigDecimal.TEN)))
+        assertThatThrownBy(() -> budgetService.update(4L, 1L, new CreateBudgetRequest(null, "2026-01", BigDecimal.valueOf(100000))))
                 .isInstanceOf(BadRequestException.class);
         verify(budgetDao, never()).update(any());
     }
@@ -158,7 +161,7 @@ class BudgetServiceTest {
         Budget budget = budget(1L, 2L);
         when(budgetDao.selectById(1L)).thenReturn(Optional.of(budget));
 
-        assertThatThrownBy(() -> budgetService.update(1L, 1L, new CreateBudgetRequest(5L, "2026-01", BigDecimal.TEN)))
+        assertThatThrownBy(() -> budgetService.update(1L, 1L, new CreateBudgetRequest(5L, "2026-01", BigDecimal.valueOf(100000))))
                 .isInstanceOf(NotFoundException.class);
     }
 
@@ -166,7 +169,7 @@ class BudgetServiceTest {
     void update_throwsNotFound_whenBudgetMissing() {
         when(budgetDao.selectById(1L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> budgetService.update(1L, 1L, new CreateBudgetRequest(5L, "2026-01", BigDecimal.TEN)))
+        assertThatThrownBy(() -> budgetService.update(1L, 1L, new CreateBudgetRequest(5L, "2026-01", BigDecimal.valueOf(100000))))
                 .isInstanceOf(NotFoundException.class);
     }
 
@@ -244,5 +247,14 @@ class BudgetServiceTest {
                 assertThat(annotation.value()).isEqualTo("hasRole('OWNER')");
             });
         }
+    }
+
+    @Test
+    void create_rejectsLimitOutsideTenThousandToFiveMillion() {
+        assertThatThrownBy(() -> budgetService.create(1L, new CreateBudgetRequest(null, "2026-01", BigDecimal.valueOf(9999))))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> budgetService.create(1L, new CreateBudgetRequest(null, "2026-01", BigDecimal.valueOf(5000001))))
+                .isInstanceOf(BadRequestException.class);
+        verify(budgetDao, never()).insert(any());
     }
 }

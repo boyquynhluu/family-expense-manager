@@ -23,6 +23,9 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * @author boyquynhluu
+ */
 @RestController
 @RequestMapping("/api/notifications")
 @RequiredArgsConstructor

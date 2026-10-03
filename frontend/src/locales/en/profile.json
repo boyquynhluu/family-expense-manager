@@ -1,7 +1,6 @@
 {
   "title": "Profile",
   "subtitle": "Manage your account information",
-
   "relationshipFather": "Father",
   "relationshipMother": "Mother",
   "relationshipGrandfather": "Grandfather",
@@ -14,19 +13,18 @@
   "relationshipHusband": "Husband",
   "relationshipWife": "Wife",
   "relationshipOther": "Other",
-
   "notAvailable": "-",
-
   "personalInfoTitle": "Personal information",
   "emailLabel": "Email",
   "displayNameLabel": "Display name",
+  "phoneLabel": "Phone number (for login)",
+  "phonePlaceholder": "e.g. 0912 345 678",
   "relationshipLabel": "Family relationship",
   "relationshipNone": "None selected",
   "roleLabel": "Role",
   "saveChanges": "Save changes",
   "profileUpdateSuccess": "Profile updated successfully",
   "profileUpdateFailed": "Failed to update profile",
-
   "changePasswordTitle": "Change password",
   "oauthNoPasswordNotice": "This account signs in via {{provider}}, so there's no password to change.",
   "currentPasswordLabel": "Current password",
@@ -36,7 +34,6 @@
   "changePasswordButton": "Change password",
   "passwordChangeSuccess": "Password changed successfully",
   "passwordChangeFailed": "Failed to change password",
-
   "familyMembersTitle": "Family members",
   "noMembers": "No members yet.",
   "relationshipColumnHeader": "Relationship",
@@ -49,7 +46,6 @@
   "sendInviteButton": "Send invite",
   "inviteSentDefault": "Invite sent to {{email}}",
   "inviteFailed": "Failed to send invite",
-
   "familyNameLabel": "Family name",
   "renameFamilyButton": "Rename",
   "familyRenamed": "Family renamed",
@@ -61,7 +57,6 @@
   "leaveFamilyButton": "Leave family",
   "leaveFamilyConfirm": "Leave this family? You will lose access to its data.",
   "leaveFamilyFailed": "Failed to leave family",
-
   "pendingInvitesTitle": "Pending invites",
   "noPendingInvites": "No pending invites.",
   "invitedAtHeader": "Sent at",
@@ -73,7 +68,6 @@
   "cancelInviteFailed": "Failed to cancel invite",
   "inviteResent": "Invite resent to {{email}}",
   "resendInviteFailed": "Failed to resend invite",
-
   "sessionsTitle": "Login sessions",
   "noSessions": "No active login sessions.",
   "deviceHeader": "Device",
@@ -91,13 +85,10 @@
   "actionFailed": "Action failed",
   "revokingOthersLoading": "Logging out...",
   "revokeOtherSessionsButton": "Log out of all other devices",
-
   "twoFactorTitle": "Two-factor authentication (2FA)",
   "recoveryCodesNotice": "2FA has been enabled successfully. Save the recovery codes below somewhere safe — each one can only be used once if you lose access to your authenticator device. They won't be shown again.",
   "recoveryCodesSavedButton": "I've saved them, close",
-  "scanQrNotice": "Scan the QR code with your authenticator app (Google Authenticator...), or manually enter the secret key below.",
   "qrCodeAlt": "2FA setup QR code",
-  "secretKeyLabel": "Secret key:",
   "verificationCodeLabel": "Verification code",
   "sixDigitCodePlaceholder": "Enter the 6-digit code",
   "confirmingTwoFactorLoading": "Confirming...",
@@ -116,10 +107,19 @@
   "twoFactorStatusDisabledSuffix": "Turn it on to require an extra verification code on every login.",
   "disableTwoFactorButton": "Disable 2FA",
   "enableTwoFactorButton": "Enable 2FA",
-
+  "twoFactorModalTitle": "Set up two-factor authentication",
+  "twoFactorModalSubtitle": "Every login will also ask for a 6-digit code from your phone — it changes every 30 seconds.",
+  "twoFactorStepScanTitle": "Scan the QR code",
+  "twoFactorStepScanHint": "Open your authenticator app (Google Authenticator, Microsoft Authenticator, Authy...) and scan the code below.",
+  "twoFactorManualEntryLabel": "Can’t scan it? Enter this key manually:",
+  "copySecretButton": "Copy key",
+  "secretCopied": "Secret key copied",
+  "copyFailed": "Couldn’t copy — please copy it manually",
+  "twoFactorStepVerifyTitle": "Enter the verification code",
+  "twoFactorStepVerifyHint": "Enter the 6-digit code shown in the app to finish.",
+  "startingTwoFactorLoading": "Generating...",
   "confirmDisableCodeLabel": "Enter an authentication code (or recovery code) to confirm disabling 2FA",
   "codeOrRecoveryPlaceholder": "6-digit code or recovery code",
-
   "changeEmailTitle": "Change email",
   "changeEmailNotice": "We will send a confirmation link to the new address. The email only changes once you open that link, and every device is signed out so you log in again.",
   "newEmailLabel": "New email",
@@ -128,14 +128,12 @@
   "changeEmailSent": "A confirmation link was sent to {{email}}. Please check your inbox.",
   "changeEmailFailed": "Could not request the email change",
   "reauthNeedsTwoFactor": "This account signs in through {{provider}} and has no password. Enable two-factor authentication (2FA) below to do this.",
-
   "exportDataTitle": "Personal data",
   "exportDataNotice": "Download a copy of your account details, the families you belong to and your login sessions as a JSON file (no passwords or secrets included).",
   "exportDataButton": "Download my personal data",
   "exportingData": "Downloading...",
   "exportSuccess": "Personal data downloaded",
   "exportFailed": "Could not download your personal data",
-
   "deleteAccountTitle": "Delete account",
   "deleteAccountNotice": "Permanently delete your account. If you are the owner of a family that still has other members, transfer ownership first. A family with only you in it is deleted too. This cannot be undone.",
   "deleteAccountButton": "Delete my account",
@@ -143,5 +141,11 @@
   "deleteAccountConfirmTitle": "Delete account?",
   "deleteAccountConfirm": "Your account will be permanently deleted and cannot be recovered. Are you sure you want to continue?",
   "deleteAccountConfirmButton": "Delete permanently",
-  "deleteAccountFailed": "Failed to delete the account"
+  "deleteAccountFailed": "Failed to delete the account",
+  "disableTwoFactorConfirm": "Turn off two-factor authentication? Your account will be protected by your password only.",
+  "renameFamilyConfirm": "Rename the family to \"{{name}}\"?",
+  "inviteConfirm": "Send a family invitation to {{email}}?",
+  "profileUpdateConfirm": "Save your profile changes?",
+  "passwordChangeConfirm": "Change your password? You will need to log in again afterwards.",
+  "changeEmailConfirm": "Change your login email to {{email}}? It only changes once you open the confirmation link sent there."
 }

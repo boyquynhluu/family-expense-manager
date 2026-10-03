@@ -9,7 +9,11 @@ import java.lang.annotation.Target;
 import jakarta.validation.Constraint;
 import jakarta.validation.Payload;
 
-/** A three-letter ISO 4217 currency code (VND, USD...); case-insensitive, the service normalises to upper case. */
+/**
+ * A three-letter ISO 4217 currency code (VND, USD...); case-insensitive, the service normalises to upper case.
+ *
+ * @author boyquynhluu
+ */
 @Documented
 @Constraint(validatedBy = IsoCurrencyValidator.class)
 @Target({ElementType.FIELD, ElementType.PARAMETER, ElementType.RECORD_COMPONENT})

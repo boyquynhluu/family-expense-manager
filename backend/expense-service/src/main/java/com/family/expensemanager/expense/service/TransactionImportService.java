@@ -2,7 +2,9 @@ package com.family.expensemanager.expense.service;
 
 import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
+import com.family.expensemanager.expense.domain.TransactionAmounts;
 import com.family.expensemanager.common.exception.ServiceException;
+import com.family.expensemanager.common.validation.TextQuality;
 import com.family.expensemanager.expense.dto.CategoryResponse;
 import com.family.expensemanager.expense.dto.ImportResult;
 import com.family.expensemanager.expense.dto.ImportRowError;
@@ -38,6 +40,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -61,6 +64,9 @@ import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
 // No class-level @Transactional on purpose: each row is created through TransactionService (its own
 // transaction) and a failing row is caught and reported, so one shared outer transaction would be
 // marked rollback-only by that failure and discard the rows that did import.
+/**
+ * @author boyquynhluu
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j(topic = "TransactionImportService")
@@ -87,8 +93,18 @@ public class TransactionImportService {
     private final WalletService walletService;
     private final CategoryService categoryService;
 
+    /** Trusted callers only (no wallet-ownership check) — user uploads go through the overload below. */
     public ImportResult importFile(
             Long familyId, Long userId, String userEmail, String userDisplayName, MultipartFile file) {
+        return importFile(familyId, userId, userEmail, userDisplayName, true, file);
+    }
+
+    /**
+     * @param callerIsOwner whether the uploader is the family OWNER — otherwise a row naming another
+     *                      member's private wallet is rejected (reported per row, the rest still import).
+     */
+    public ImportResult importFile(Long familyId, Long userId, String userEmail, String userDisplayName,
+                                   boolean callerIsOwner, MultipartFile file) {
         try {
             log.info("importFile - start, familyId={}, filename={}", familyId, file.getOriginalFilename());
             if (file.isEmpty()) {
@@ -114,8 +130,8 @@ public class TransactionImportService {
             for (int i = 0; i < rawRows.size(); i++) {
                 int rowNumber = i + 2; // row 1 is the header
                 int errorsBefore = errors.size();
-                processRow(rowNumber, rawRows.get(i), familyId, userId, userEmail, userDisplayName, walletsByName,
-                        categoriesByKey, errors);
+                processRow(rowNumber, rawRows.get(i), familyId, userId, userEmail, userDisplayName, callerIsOwner,
+                        walletsByName, categoriesByKey, errors);
                 if (errors.size() == errorsBefore) {
                     imported++;
                 }
@@ -131,7 +147,7 @@ public class TransactionImportService {
     }
 
     private void processRow(int rowNumber, Map<String, String> raw, Long familyId, Long userId, String userEmail,
-                             String userDisplayName, Map<String, WalletResponse> walletsByName,
+                             String userDisplayName, boolean callerIsOwner, Map<String, WalletResponse> walletsByName,
                              Map<String, CategoryResponse> categoriesByKey, List<ImportRowError> errors) {
         String dateStr = value(raw, COL_DATE);
         String walletName = value(raw, COL_WALLET);
@@ -177,10 +193,31 @@ public class TransactionImportService {
             errors.add(new ImportRowError(rowNumber, "Số tiền không hợp lệ: \"" + amountStr + "\""));
             return;
         }
+        // TransactionService.create would reject it too, but as a whole-request 400 rather than a per-row error.
+        Optional<String> amountProblem = TransactionAmounts.problem(amount);
+        if (amountProblem.isPresent()) {
+            errors.add(new ImportRowError(rowNumber, amountProblem.get() + ": \"" + amountStr + "\""));
+            return;
+        }
+
+        // Rows are created straight through TransactionService, bypassing the request's @CleanText — same rule here.
+        Optional<TextQuality.Problem> noteProblem = TextQuality.check(note);
+        if (noteProblem.isPresent()) {
+            errors.add(new ImportRowError(rowNumber, noteProblem.get() == TextQuality.Problem.PROFANITY
+                    ? "Ghi chú có từ ngữ không phù hợp"
+                    : "Ghi chú không có ý nghĩa (ví dụ: test, xxx, asdf): \"" + note + "\""));
+            return;
+        }
 
         WalletResponse wallet = walletsByName.get(key(walletName));
         if (wallet == null) {
             errors.add(new ImportRowError(rowNumber, "Không tìm thấy ví: \"" + walletName + "\""));
+            return;
+        }
+        // Same rule as WalletService.canUse (checked here, per row, so one bad row doesn't abort the file).
+        if (!callerIsOwner && wallet.ownerUserId() != null && !wallet.ownerUserId().equals(userId)) {
+            errors.add(new ImportRowError(rowNumber,
+                    "Ví \"" + walletName + "\" là ví riêng của thành viên khác — bạn chỉ dùng được ví của mình và ví chung"));
             return;
         }
 
@@ -194,7 +231,7 @@ public class TransactionImportService {
         TransactionRequest request = new TransactionRequest(
                 wallet.id(), category.id(), type, amount, date.atStartOfDay(), note.isEmpty() ? null : note);
         try {
-            transactionService.create(familyId, userId, userEmail, userDisplayName, request);
+            transactionService.create(familyId, userId, userEmail, userDisplayName, request, null);
         } catch (Exception e) {
             log.warn("importFile - dòng {} thất bại", rowNumber, e);
             errors.add(new ImportRowError(rowNumber, "Lỗi khi tạo giao dịch: " + e.getMessage()));

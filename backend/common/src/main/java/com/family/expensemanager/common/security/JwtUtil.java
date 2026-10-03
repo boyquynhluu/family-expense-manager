@@ -19,6 +19,8 @@ import io.jsonwebtoken.security.Keys;
  * Signs and verifies JWTs shared by every service. The signing key is derived from
  * {@code jwt.secret}, which must be the same value across all services (auth-service
  * issues tokens, api-gateway/expense-service/notification-service only verify them).
+ *
+ * @author boyquynhluu
  */
 @Component
 public class JwtUtil {

@@ -11,6 +11,7 @@
   "listTitle": "Budget list",
   "noBudgets": "No budgets yet",
   "statusDanger": "Over budget",
+  "statusReached": "Limit reached",
   "statusWarning": "Nearing limit",
   "statusSafe": "Safe",
   "saveFailed": "Failed to save budget",
@@ -26,5 +27,8 @@
   "copyResult": "Copied {{copied}} budget(s), skipped {{skipped}} that already existed",
   "copySameMonth": "Source and target months must be different",
   "copyFailed": "Failed to copy budgets",
-  "ownerOnlyManage": "Only the household owner can add, edit, delete or copy budgets."
+  "ownerOnlyManage": "Only the household owner can add, edit, delete or copy budgets.",
+  "addConfirm": "Add a {{amount}} budget for {{month}}?",
+  "updateConfirm": "Change the budget for {{month}} to {{amount}}?",
+  "copyConfirm": "Copy budgets from {{from}} to {{to}}? Budgets that already exist in {{to}} are kept."
 }

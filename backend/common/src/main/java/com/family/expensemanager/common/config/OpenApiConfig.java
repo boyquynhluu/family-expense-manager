@@ -20,6 +20,8 @@ import io.swagger.v3.oas.models.servers.Server;
  *
  * Not auto-scanned by services (it lives outside their base package) — import it
  * explicitly on the main application class, e.g. {@code @Import(OpenApiConfig.class)}.
+ *
+ * @author boyquynhluu
  */
 @Configuration
 public class OpenApiConfig {

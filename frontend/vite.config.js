@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
 // Only the GitHub Pages build needs a base path — it serves this as a project page at
 // /family-expense-manager/ (set via VITE_BASE_PATH in .github/workflows/frontend-ci.yml).
@@ -9,7 +10,7 @@ import react from "@vitejs/plugin-react";
 // index.html back for that "file", and the app never boots (blank page).
 export default defineConfig(({ command }) => ({
   base: command === "build" ? process.env.VITE_BASE_PATH || "/" : "/",
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
   },

@@ -22,12 +22,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
 
+/**
+ * @author boyquynhluu
+ */
 @Service
 @Transactional
 @RequiredArgsConstructor
@@ -45,6 +49,7 @@ public class CategoryService {
     public CategoryResponse create(Long familyId, CreateCategoryRequest request) {
         try {
             log.info("create - start, familyId={}, name={}", familyId, request.name());
+            requireUniqueName(familyId, request.type(), request.name(), null);
             Category category = new Category();
             category.setFamilyId(familyId);
             category.setName(request.name());
@@ -76,6 +81,7 @@ public class CategoryService {
         try {
             log.info("update - start, categoryId={}, familyId={}", categoryId, familyId);
             Category category = requireOwnedByFamily(categoryId, familyId);
+            requireUniqueName(familyId, request.type(), request.name(), categoryId);
             category.setName(request.name());
             category.setType(request.type());
             category.setIcon(request.icon());
@@ -153,6 +159,21 @@ public class CategoryService {
             throw logged(log, new NotFoundException("Category không tồn tại: " + categoryId));
         }
         return category;
+    }
+
+    /**
+     * Case/whitespace-insensitive, scoped by type: a family can have an INCOME category and an EXPENSE
+     * category with the same name (e.g. both called "Khác") without that counting as a duplicate.
+     */
+    private void requireUniqueName(Long familyId, String type, String name, Long excludeCategoryId) {
+        String normalized = name.trim().toLowerCase(Locale.ROOT);
+        boolean duplicate = categoryDao.selectByFamilyId(familyId).stream()
+                .filter(c -> excludeCategoryId == null || !c.getId().equals(excludeCategoryId))
+                .filter(c -> c.getType().equals(type))
+                .anyMatch(c -> c.getName().trim().toLowerCase(Locale.ROOT).equals(normalized));
+        if (duplicate) {
+            throw logged(log, new ConflictException("Đã có danh mục tên \"" + name + "\" cùng loại trong gia đình"));
+        }
     }
 
     /** Same as above, and additionally requires the category to be of {@code expectedType} (INCOME/EXPENSE). */

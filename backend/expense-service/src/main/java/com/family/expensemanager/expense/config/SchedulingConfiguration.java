@@ -10,6 +10,8 @@ import java.time.Clock;
  * Enables {@code @Scheduled} (used by {@code RecurringTransactionScheduler}) and
  * exposes the system {@link Clock} as a bean so time-dependent services can be
  * unit-tested with a fixed clock instead of calling {@code LocalDate.now()} directly.
+ *
+ * @author boyquynhluu
  */
 @Configuration
 @EnableScheduling

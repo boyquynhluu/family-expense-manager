@@ -3,7 +3,11 @@ package com.family.expensemanager.expense.dto;
 import java.math.BigDecimal;
 import java.util.List;
 
-/** {@code bucketType} is "DAY" for ranges of at most 62 days, otherwise "MONTH"; buckets are zero-filled. */
+/**
+ * {@code bucketType} is "DAY" for ranges of at most 62 days, otherwise "MONTH"; buckets are zero-filled.
+ *
+ * @author boyquynhluu
+ */
 public record RangeReportResponse(
         String from,
         String to,

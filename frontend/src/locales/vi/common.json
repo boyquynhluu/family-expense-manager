@@ -21,5 +21,7 @@
   "seedDefaultsSuccess": "Đã tạo ví và danh mục mẫu",
   "seedDefaultsNothingToDo": "Gia đình đã có sẵn ví và danh mục",
   "seedDefaultsFailed": "Không thể tạo dữ liệu mẫu",
-  "seedDefaultsOwnerOnly": "Hãy nhờ chủ hộ tạo ví và danh mục."
+  "seedDefaultsOwnerOnly": "Hãy nhờ chủ hộ tạo ví và danh mục.",
+  "typeToConfirm": "Gõ \"{{word}}\" để xác nhận",
+  "seedDefaultsConfirm": "Tạo ví \"Tiền mặt\" và bộ danh mục thu chi mặc định cho gia đình?"
 }

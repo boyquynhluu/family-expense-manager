@@ -9,14 +9,19 @@ SELECT
     amount,
     occurred_at,
     note,
+    is_private,
     receipt_path,
     receipt_content_type,
-    deleted_at
+    deleted_at,
+    deleted_by_user_id,
+    deleted_by_name,
+    version
 FROM
     TRANSACTIONS
 WHERE
     family_id = /* familyId */0
     AND deleted_at IS NULL
+    AND (is_private = FALSE OR user_id = /* viewerUserId */0/*%if showOthersPrivate */ OR TRUE/*%end*/)
 /*%if walletId != null */
     AND wallet_id = /* walletId */0
 /*%end*/

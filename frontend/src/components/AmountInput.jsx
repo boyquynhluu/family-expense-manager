@@ -1,12 +1,20 @@
 import { useRef } from "react";
+import { useTranslation } from "react-i18next";
+import { Input } from "./ui/Input";
+
+// Matches the backend's @Digits(integer = 16, fraction = 2) on every amount field (DECIMAL(18, 2)).
+const MAX_INTEGER_DIGITS = 16;
+const MAX_FRACTION_DIGITS = 2;
 
 function toRaw(displayValue) {
-  let raw = displayValue.replace(/,/g, "").replace(/[^\d.]/g, "");
+  const raw = displayValue.replace(/,/g, "").replace(/[^\d.]/g, "");
   const firstDot = raw.indexOf(".");
-  if (firstDot !== -1) {
-    raw = raw.slice(0, firstDot + 1) + raw.slice(firstDot + 1).replace(/\./g, "");
+  if (firstDot === -1) {
+    return raw.slice(0, MAX_INTEGER_DIGITS);
   }
-  return raw;
+  const intPart = raw.slice(0, firstDot).slice(0, MAX_INTEGER_DIGITS);
+  const decPart = raw.slice(firstDot + 1).replace(/\./g, "").slice(0, MAX_FRACTION_DIGITS);
+  return `${intPart}.${decPart}`;
 }
 
 function format(raw) {
@@ -22,10 +30,28 @@ function format(raw) {
  * shape a native `<input type="number">` gives — every caller's `Number(form.amount)` etc.
  * keeps working unchanged; only the displayed text is formatted. Renders as `type="text"`
  * (native `type="number"` rejects the "," character), so `min`/`step` aren't enforced by the
- * browser here — negative and non-numeric characters are stripped as you type instead.
+ * browser here — negative and non-numeric characters are stripped as you type instead, and the
+ * digits are capped at 16 before / 2 after the decimal point (a plain `maxLength` can't do this:
+ * it would count the "," and "." the display inserts).
  */
-export default function AmountInput({ value, onChange, ...props }) {
+export default function AmountInput({ value, onChange, positive = false, min, max, ...props }) {
   const inputRef = useRef(null);
+  const { t } = useTranslation("validation");
+  // `positive`: the backend's @DecimalMin("0.01") on transaction/transfer/budget amounts —
+  // "0" passes `required`, so it needs its own rule (shown like any other field error).
+  // `min` / `max`: business limits on top of that (10,000–5,000,000 for a transaction). Not the
+  // native attributes — this is a type="text" input, so the browser wouldn't enforce them.
+  const validate =
+    positive || min != null || max != null
+      ? (display) => {
+          if (display === "") return "";
+          const amount = Number(toRaw(display));
+          if (positive && amount <= 0) return t("amountPositive");
+          if (min != null && amount < min) return t("amountMin", { min: format(String(min)) });
+          if (max != null && amount > max) return t("amountMax", { max: format(String(max)) });
+          return "";
+        }
+      : undefined;
 
   function handleChange(e) {
     const input = e.target;
@@ -53,6 +79,15 @@ export default function AmountInput({ value, onChange, ...props }) {
   }
 
   return (
-    <input {...props} ref={inputRef} type="text" inputMode="decimal" value={format(String(value ?? ""))} onChange={handleChange} />
+    <Input
+      {...props}
+      ref={inputRef}
+      type="text"
+      inputMode="decimal"
+      className="tabular-nums"
+      validate={validate}
+      value={format(String(value ?? ""))}
+      onChange={handleChange}
+    />
   );
 }

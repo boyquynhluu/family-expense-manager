@@ -16,6 +16,8 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * On startup re-encrypts every stored TOTP secret that is still legacy plaintext or encrypted with
  * the previous key, so TOTP_ENCRYPTION_KEY_PREVIOUS can be removed once this has run.
+ *
+ * @author boyquynhluu
  */
 @Component
 @RequiredArgsConstructor

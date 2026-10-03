@@ -22,6 +22,8 @@ import jakarta.servlet.http.HttpServletResponse;
  * AuthContext.jsx) already keeps both tokens in localStorage and refreshes with a
  * POST body rather than a cookie, so the OAuth2 path hands them over the same way
  * password login does instead of introducing a second, cookie-based mechanism.
+ *
+ * @author boyquynhluu
  */
 @Component
 public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccessHandler {

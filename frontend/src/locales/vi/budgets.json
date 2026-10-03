@@ -11,6 +11,7 @@
   "listTitle": "Danh sách ngân sách",
   "noBudgets": "Chưa có ngân sách nào",
   "statusDanger": "Vượt ngân sách",
+  "statusReached": "Đã đạt hạn mức",
   "statusWarning": "Gần đạt hạn mức",
   "statusSafe": "An toàn",
   "saveFailed": "Lưu ngân sách thất bại",
@@ -26,5 +27,8 @@
   "copyResult": "Đã sao chép {{copied}} ngân sách, bỏ qua {{skipped}} ngân sách đã tồn tại",
   "copySameMonth": "Tháng nguồn và tháng đích phải khác nhau",
   "copyFailed": "Sao chép ngân sách thất bại",
-  "ownerOnlyManage": "Chỉ chủ hộ mới được thêm/sửa/xoá/sao chép ngân sách."
+  "ownerOnlyManage": "Chỉ chủ hộ mới được thêm/sửa/xoá/sao chép ngân sách.",
+  "addConfirm": "Thêm ngân sách {{amount}} cho tháng {{month}}?",
+  "updateConfirm": "Cập nhật ngân sách thành {{amount}} cho tháng {{month}}?",
+  "copyConfirm": "Sao chép ngân sách từ tháng {{from}} sang tháng {{to}}? Ngân sách đã có ở tháng {{to}} được giữ nguyên."
 }

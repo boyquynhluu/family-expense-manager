@@ -2,6 +2,8 @@ package com.family.expensemanager.expense.service;
 
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.expense.dao.ReportDao;
+import com.family.expensemanager.expense.dao.WalletDao;
+import com.family.expensemanager.expense.domain.entity.Wallet;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.any;
 
+/**
+ * @author boyquynhluu
+ */
 @ExtendWith(MockitoExtension.class)
 class ReportServiceTest {
 
@@ -28,12 +33,54 @@ class ReportServiceTest {
 
     @Mock
     private ReportDao reportDao;
+    @Mock
+    private WalletDao walletDao;
 
     private ReportService reportService;
 
     @BeforeEach
     void setUp() {
-        reportService = new ReportService(reportDao);
+        reportService = new ReportService(reportDao, walletDao);
+    }
+
+    @Test
+    void walletMonthly_computesOpeningNetAndClosing_perWallet() {
+        Wallet wallet = new Wallet();
+        wallet.setId(10L);
+        wallet.setName("Tiền mặt");
+        wallet.setCurrency("VND");
+        wallet.setInitialBalance(BigDecimal.valueOf(1000));
+        LocalDate start = LocalDate.of(2026, 9, 1);
+        LocalDate end = LocalDate.of(2026, 10, 1);
+        when(walletDao.selectByFamilyId(FAMILY)).thenReturn(List.of(wallet));
+        // Before September: +500 income, -200 expense, +100 transfer in → opening 1400.
+        when(reportDao.sumByWalletAndType(FAMILY, null, start)).thenReturn(List.of(
+                row("walletId", 10L, "type", "INCOME", "total", BigDecimal.valueOf(500)),
+                row("walletId", 10L, "type", "EXPENSE", "total", BigDecimal.valueOf(200))));
+        when(reportDao.sumTransfersByWalletAndDirection(FAMILY, null, start)).thenReturn(List.of(
+                row("walletId", 10L, "direction", "IN", "total", BigDecimal.valueOf(100))));
+        // September: -1700 expense, -300 transfer out → net -2000, closing -600.
+        when(reportDao.sumByWalletAndType(FAMILY, start, end)).thenReturn(List.of(
+                row("walletId", 10L, "type", "EXPENSE", "total", BigDecimal.valueOf(1700))));
+        when(reportDao.sumTransfersByWalletAndDirection(FAMILY, start, end)).thenReturn(List.of(
+                row("walletId", 10L, "direction", "OUT", "total", BigDecimal.valueOf(300))));
+
+        var items = reportService.walletMonthly(FAMILY, "2026-09");
+
+        assertThat(items).hasSize(1);
+        var item = items.get(0);
+        assertThat(item.openingBalance()).isEqualByComparingTo(BigDecimal.valueOf(1400));
+        assertThat(item.income()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(item.expense()).isEqualByComparingTo(BigDecimal.valueOf(1700));
+        assertThat(item.transferOut()).isEqualByComparingTo(BigDecimal.valueOf(300));
+        assertThat(item.net()).isEqualByComparingTo(BigDecimal.valueOf(-2000));
+        assertThat(item.closingBalance()).isEqualByComparingTo(BigDecimal.valueOf(-600));
+    }
+
+    @Test
+    void walletMonthly_rejectsInvalidMonth() {
+        assertThatThrownBy(() -> reportService.walletMonthly(FAMILY, "2026-13"))
+                .isInstanceOf(BadRequestException.class);
     }
 
     private static Map<String, Object> row(Object... kv) {

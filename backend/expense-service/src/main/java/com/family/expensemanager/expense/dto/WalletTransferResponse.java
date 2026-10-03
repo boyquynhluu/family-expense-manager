@@ -5,6 +5,9 @@ import com.family.expensemanager.expense.domain.entity.WalletTransfer;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * @author boyquynhluu
+ */
 public record WalletTransferResponse(
         Long id, Long familyId, Long fromWalletId, Long toWalletId, BigDecimal amount, String note,
         LocalDateTime occurredAt, Long createdByUserId, LocalDateTime createdAt) {

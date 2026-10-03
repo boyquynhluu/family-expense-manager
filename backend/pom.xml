@@ -36,7 +36,9 @@
         <springdoc.version>2.6.0</springdoc.version>
         <poi.version>5.3.0</poi.version>
         <commons-csv.version>1.11.0</commons-csv.version>
-        <testcontainers.version>1.20.4</testcontainers.version>
+        <!-- >= 1.21.4: older versions talk to Docker with an API version Docker Engine 29+ rejects
+             (min API 1.44), so every *IT failed with "Could not find a valid Docker environment". -->
+        <testcontainers.version>1.21.4</testcontainers.version>
     </properties>
 
     <dependencyManagement>

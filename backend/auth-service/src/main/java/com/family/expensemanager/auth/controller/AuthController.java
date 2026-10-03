@@ -55,6 +55,8 @@ import lombok.extern.slf4j.Slf4j;
  * Base path matches the gateway route predicate {@code Path=/api/auth/**} exactly
  * (that route has no StripPrefix filter), so the same paths work both directly
  * against this service and through the gateway.
+ *
+ * @author boyquynhluu
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -99,7 +101,7 @@ public class AuthController {
 
     @PostMapping("/login")
     public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
-        log.info("login - start, email={}", request.email());
+        log.info("login - start, identifier={}", request.identifier());
         return ApiResponse.ok(authService.login(request,
                 RequestMetadataUtil.deviceInfo(httpRequest), RequestMetadataUtil.ipAddress(httpRequest)));
     }
@@ -154,7 +156,7 @@ public class AuthController {
     @PutMapping("/me/password")
     public ApiResponse<MessageResponse> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         log.info("changePassword - start");
-        authService.changePassword(CurrentUser.userId(), request);
+        authService.changePassword(CurrentUser.userId(), CurrentUser.sessionId(), request);
         return ApiResponse.ok(new MessageResponse("Đổi mật khẩu thành công."));
     }
 

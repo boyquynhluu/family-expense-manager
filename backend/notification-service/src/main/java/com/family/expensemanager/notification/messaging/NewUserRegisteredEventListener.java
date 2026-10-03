@@ -6,6 +6,8 @@ import jakarta.mail.internet.MimeMessage;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.annotation.RetryableTopic;
+import org.springframework.retry.annotation.Backoff;
 import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -27,6 +29,8 @@ import lombok.extern.slf4j.Slf4j;
  * the event. Each admin gets their own message so addresses aren't exposed to each other, and one
  * failing address (or an unconfigured SMTP server) is logged instead of thrown, so Kafka doesn't
  * redeliver the event forever.
+ *
+ * @author boyquynhluu
  */
 @Component
 @Slf4j(topic = "NewUserRegisteredEventListener")
@@ -50,6 +54,10 @@ public class NewUserRegisteredEventListener {
         this.template = loadTemplate();
     }
 
+    // Non-blocking retry: a processing failure (DB hiccup, uncaught bug...) is retried 3 times with
+    // backoff on dedicated retry topics instead of blocking this consumer; if it still fails, the record
+    // lands on the auto-created "<topic>-dlt" topic instead of being silently dropped after the retries.
+    @RetryableTopic(attempts = "4", backoff = @Backoff(delay = 2000, multiplier = 2.0, maxDelay = 10000))
     @KafkaListener(topics = "${kafka.topic.user-registered}")
     public void onNewUserRegistered(NewUserRegisteredEvent event) {
         List<String> adminEmails = event.adminEmails();
@@ -90,6 +98,9 @@ public class NewUserRegisteredEventListener {
     private static String sourceLabel(String source) {
         if (NewUserRegisteredEvent.SOURCE_GOOGLE.equals(source)) {
             return "Đăng nhập Google";
+        }
+        if (NewUserRegisteredEvent.SOURCE_FACEBOOK.equals(source)) {
+            return "Đăng nhập Facebook";
         }
         if (NewUserRegisteredEvent.SOURCE_INVITE.equals(source)) {
             return "Lời mời vào gia đình";

@@ -13,6 +13,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import com.family.expensemanager.common.doma.AppDomaConfig;
 import com.family.expensemanager.expense.domain.entity.Category;
 import com.family.expensemanager.expense.domain.entity.Transaction;
+import com.family.expensemanager.expense.domain.entity.TransactionAuditLog;
 import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.domain.entity.WalletTransfer;
 import com.zaxxer.hikari.HikariDataSource;
@@ -31,6 +32,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * Excluded from the fast {@code mvn test} unit-test loop (see maven-failsafe-plugin in
  * pom.xml) — runs via {@code mvn verify}, needs a local Docker daemon.
+ *
+ * @author boyquynhluu
  */
 @Testcontainers
 class ExpenseDaoIT {
@@ -141,8 +144,14 @@ class ExpenseDaoIT {
 
         // Soft-deleting a transaction must drop it from balance/report aggregates too.
         transaction.setDeletedAt(LocalDateTime.now());
+        transaction.setDeletedByUserId(7L);
+        transaction.setDeletedByName("Người Xoá IT");
         transactionDao.update(transaction);
         assertThat(transactionDao.selectById(transaction.getId())).isEmpty();
+        // V12: who deleted it survives the round trip...
+        Transaction trashed = transactionDao.selectDeletedById(transaction.getId()).orElseThrow();
+        assertThat(trashed.getDeletedByUserId()).isEqualTo(7L);
+        assertThat(trashed.getDeletedByName()).isEqualTo("Người Xoá IT");
         assertThat(transactionDao.countByWalletId(wallet.getId())).isEqualTo(0);
         assertThat(transactionDao.countDeletedByFamilyId(familyId)).isGreaterThanOrEqualTo(1);
         assertThat(transactionDao.selectDeletedByFamilyIdPaged(familyId, 100, 0))
@@ -151,8 +160,108 @@ class ExpenseDaoIT {
 
         int restored = transactionDao.restore(transaction.getId(), familyId);
         assertThat(restored).isEqualTo(1);
-        assertThat(transactionDao.selectById(transaction.getId())).isPresent();
+        Transaction back = transactionDao.selectById(transaction.getId()).orElseThrow();
+        // ...and a restore clears it again.
+        assertThat(back.getDeletedByUserId()).isNull();
+        assertThat(back.getDeletedByName()).isNull();
         assertThat(transactionDao.countByWalletId(wallet.getId())).isEqualTo(1);
+    }
+
+    @Test
+    void trashPurgeQueries_seeTrashedRows_andTheForeignKeysTheyStillHold() {
+        WalletDao walletDao = new WalletDaoImpl(domaConfig);
+        CategoryDao categoryDao = new CategoryDaoImpl(domaConfig);
+        TransactionDao transactionDao = new TransactionDaoImpl(domaConfig);
+        Long familyId = 500L;
+        LocalDateTime deletedAt = LocalDateTime.now().minusDays(40).withNano(0);
+
+        Wallet wallet = insertWallet(walletDao, familyId, "Ví Thùng Rác IT");
+        Category category = insertCategory(categoryDao, familyId, "Danh Mục Thùng Rác IT");
+        Transaction transaction = new Transaction();
+        transaction.setWalletId(wallet.getId());
+        transaction.setCategoryId(category.getId());
+        transaction.setFamilyId(familyId);
+        transaction.setUserId(1L);
+        transaction.setType("EXPENSE");
+        transaction.setAmount(new BigDecimal("50000.00"));
+        transaction.setOccurredAt(LocalDateTime.now().withNano(0));
+        transactionDao.insert(transaction);
+
+        transaction.setDeletedAt(deletedAt);
+        transactionDao.update(transaction);
+        wallet.setDeletedAt(deletedAt);
+        walletDao.update(wallet);
+        category.setDeletedAt(deletedAt);
+        categoryDao.update(category);
+
+        // The trashed transaction no longer counts for "can this wallet be deleted?"... but still holds the FK.
+        assertThat(transactionDao.countByWalletId(wallet.getId())).isZero();
+        assertThat(transactionDao.countAllByWalletId(wallet.getId())).isEqualTo(1);
+        assertThat(transactionDao.countAllByCategoryId(category.getId())).isEqualTo(1);
+
+        assertThat(walletDao.selectDeletedById(wallet.getId())).isPresent();
+        assertThat(categoryDao.selectDeletedById(category.getId())).isPresent();
+        assertThat(walletDao.selectDeletedByFamilyId(familyId)).extracting(Wallet::getId).containsExactly(wallet.getId());
+        assertThat(categoryDao.selectDeletedByFamilyId(familyId)).extracting(Category::getId)
+                .containsExactly(category.getId());
+        assertThat(transactionDao.selectDeletedByFamilyId(familyId)).extracting(Transaction::getId)
+                .containsExactly(transaction.getId());
+
+        // Retention cutoff: in the trash 40 days → picked by a 30-day cutoff, not by a 50-day one.
+        LocalDateTime cutoff30 = LocalDateTime.now().minusDays(30);
+        LocalDateTime cutoff50 = LocalDateTime.now().minusDays(50);
+        assertThat(transactionDao.selectDeletedBefore(cutoff30)).extracting(Transaction::getId).contains(transaction.getId());
+        assertThat(walletDao.selectDeletedBefore(cutoff30)).extracting(Wallet::getId).contains(wallet.getId());
+        assertThat(categoryDao.selectDeletedBefore(cutoff30)).extracting(Category::getId).contains(category.getId());
+        assertThat(transactionDao.selectDeletedBefore(cutoff50)).extracting(Transaction::getId)
+                .doesNotContain(transaction.getId());
+
+        // Transaction first, then the wallet/category it pointed at — the order TrashService sweeps in.
+        Transaction trashed = transactionDao.selectDeletedById(transaction.getId()).orElseThrow();
+        assertThat(transactionDao.delete(trashed)).isEqualTo(1);
+        assertThat(walletDao.delete(walletDao.selectDeletedById(wallet.getId()).orElseThrow())).isEqualTo(1);
+        assertThat(categoryDao.delete(categoryDao.selectDeletedById(category.getId()).orElseThrow())).isEqualTo(1);
+        assertThat(transactionDao.selectDeletedById(transaction.getId())).isEmpty();
+        assertThat(walletDao.selectDeletedById(wallet.getId())).isEmpty();
+        assertThat(categoryDao.selectDeletedById(category.getId())).isEmpty();
+    }
+
+    @Test
+    void transactionAuditLog_storesJsonSnapshots_andIsReadBackPerFamilyInOrder() {
+        TransactionAuditLogDao auditDao = new TransactionAuditLogDaoImpl(domaConfig);
+        Long familyId = 400L;
+        Long transactionId = 9001L;
+
+        TransactionAuditLog created = auditLog(familyId, transactionId, "CREATED", null,
+                "{\"amount\": 150000.00, \"note\": \"Tiền chợ\"}");
+        TransactionAuditLog updated = auditLog(familyId, transactionId, "UPDATED",
+                "{\"amount\": 150000.00, \"note\": \"Tiền chợ\"}", "{\"amount\": 175000.00, \"note\": \"Tiền chợ\"}");
+        auditDao.insert(created);
+        auditDao.insert(updated);
+        // Same transaction id, different family — must never show up in family 400's history.
+        auditDao.insert(auditLog(401L, transactionId, "CREATED", null, "{\"amount\": 1}"));
+
+        var history = auditDao.selectByTransactionIdAndFamilyId(transactionId, familyId);
+
+        assertThat(history).extracting(TransactionAuditLog::getAction).containsExactly("CREATED", "UPDATED");
+        assertThat(history.get(0).getBeforeJson()).isNull();
+        // MySQL's JSON column may re-format the text (spacing/key order), so compare content, not the string.
+        assertThat(history.get(1).getAfterJson()).contains("175000").contains("Tiền chợ");
+        assertThat(history.get(1).getActorName()).isEqualTo("Người Sửa IT");
+    }
+
+    private static TransactionAuditLog auditLog(Long familyId, Long transactionId, String action,
+                                                String beforeJson, String afterJson) {
+        TransactionAuditLog log = new TransactionAuditLog();
+        log.setFamilyId(familyId);
+        log.setTransactionId(transactionId);
+        log.setAction(action);
+        log.setActorUserId(7L);
+        log.setActorName("Người Sửa IT");
+        log.setBeforeJson(beforeJson);
+        log.setAfterJson(afterJson);
+        log.setCreatedAt(LocalDateTime.now().withNano(0));
+        return log;
     }
 
     @Test

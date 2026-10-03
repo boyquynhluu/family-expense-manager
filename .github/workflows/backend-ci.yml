@@ -33,6 +33,20 @@ jobs:
           cache: maven
           cache-dependency-path: backend/**/pom.xml
 
-      - name: Build and test (all modules)
+      # `verify`, not `test`: the *IT.java integration tests (real MySQL via Testcontainers, incl. the
+      # Flyway migrations) are bound to maven-failsafe in the verify phase, so `test` silently skipped
+      # them. ubuntu-latest runners ship with Docker, which is all Testcontainers needs.
+      - name: Build, unit tests and integration tests (all modules)
         working-directory: backend
-        run: mvn -B -ntp test
+        run: mvn -B -ntp verify
+
+      # So a red build shows WHICH test failed without digging through the raw log.
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: |
+            backend/**/target/surefire-reports/
+            backend/**/target/failsafe-reports/
+          retention-days: 7

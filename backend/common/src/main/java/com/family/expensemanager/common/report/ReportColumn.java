@@ -7,6 +7,8 @@ import java.util.function.Function;
  * already carries the header text) and the function that pulls this column's value out
  * of a row object. The same list of columns feeds both {@link CsvReportGenerator} and
  * {@link ExcelReportGenerator}, so a report's shape is defined exactly once.
+ *
+ * @author boyquynhluu
  */
 public record ReportColumn<T>(String header, Function<T, Object> valueExtractor) {
 }

@@ -1,6 +1,7 @@
 package com.family.expensemanager.expense.service;
 
 import com.family.expensemanager.common.exception.ApiException;
+import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.common.report.CsvReportGenerator;
 import com.family.expensemanager.common.report.ExcelReportGenerator;
@@ -28,9 +29,13 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
+
 /**
  * Builds the transaction report row/column model once and hands it to whichever generator
  * matches the requested {@link ReportFormat} — the same data feeds both CSV and Excel exports.
+ *
+ * @author boyquynhluu
  */
 @Service
 @Transactional(readOnly = true)
@@ -48,10 +53,11 @@ public class TransactionReportService {
     private final CsvReportGenerator csvReportGenerator;
     private final ExcelReportGenerator excelReportGenerator;
 
-    public byte[] export(Long familyId, TransactionReportFilter filter, ReportFormat format) {
+    /** @param viewerUserId other members' private transactions are left out of the file. */
+    public byte[] export(Long familyId, Long viewerUserId, TransactionReportFilter filter, ReportFormat format) {
         try {
             log.info("export - start, familyId={}, format={}", familyId, format);
-            List<TransactionReportRow> rows = buildRows(familyId, filter);
+            List<TransactionReportRow> rows = buildRows(familyId, viewerUserId, filter);
             List<ReportColumn<TransactionReportRow>> columns = columns();
             return format == ReportFormat.EXCEL
                     ? excelReportGenerator.generate(openTemplate(), EXCEL_DATA_START_ROW, columns, rows)
@@ -71,14 +77,15 @@ public class TransactionReportService {
         }
     }
 
-    private List<TransactionReportRow> buildRows(Long familyId, TransactionReportFilter filter) {
-        filter.validate();
+    private List<TransactionReportRow> buildRows(Long familyId, Long viewerUserId, TransactionReportFilter filter) {
+        validateFilter(filter);
         Map<Long, String> walletNames = walletService.listByFamily(familyId).stream()
                 .collect(Collectors.toMap(w -> w.id(), w -> w.name()));
         Map<Long, String> categoryNames = categoryService.listByFamily(familyId).stream()
                 .collect(Collectors.toMap(c -> c.id(), c -> c.name()));
 
         return transactionDao.selectByFamilyId(familyId).stream()
+                .filter(t -> t.isVisibleTo(viewerUserId))
                 .filter(t -> matches(t, filter))
                 .sorted(Comparator.comparing(Transaction::getOccurredAt))
                 .map(t -> new TransactionReportRow(
@@ -89,6 +96,17 @@ public class TransactionReportService {
                         t.getAmount(),
                         t.getNote() == null ? "" : t.getNote()))
                 .toList();
+    }
+
+    private void validateFilter(TransactionReportFilter filter) {
+        if (filter.q() != null && filter.q().length() > TransactionReportFilter.MAX_QUERY_LENGTH) {
+            throw logged(log, new BadRequestException(
+                    "Từ khoá tìm kiếm tối đa " + TransactionReportFilter.MAX_QUERY_LENGTH + " ký tự"));
+        }
+        if (filter.minAmount() != null && filter.maxAmount() != null
+                && filter.minAmount().compareTo(filter.maxAmount()) > 0) {
+            throw logged(log, new BadRequestException("Số tiền tối thiểu không được lớn hơn số tiền tối đa"));
+        }
     }
 
     private boolean matches(Transaction t, TransactionReportFilter filter) {

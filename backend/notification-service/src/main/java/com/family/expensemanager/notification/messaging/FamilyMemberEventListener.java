@@ -6,6 +6,8 @@ import com.family.expensemanager.notification.domain.entity.Notification;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.annotation.RetryableTopic;
+import org.springframework.retry.annotation.Backoff;
 import org.springframework.stereotype.Component;
 
 import lombok.RequiredArgsConstructor;
@@ -15,6 +17,8 @@ import lombok.extern.slf4j.Slf4j;
  * Consumes {@code family-member-events} published by auth-service when someone joins a
  * family, leaves it, or is removed by the owner, and records an in-app {@link Notification}
  * for the whole family (no email).
+ *
+ * @author boyquynhluu
  */
 @Component
 @RequiredArgsConstructor
@@ -26,6 +30,10 @@ public class FamilyMemberEventListener {
     private final NotificationDao notificationDao;
     private final ObjectMapper objectMapper;
 
+    // Non-blocking retry: a processing failure (DB hiccup, uncaught bug...) is retried 3 times with
+    // backoff on dedicated retry topics instead of blocking this consumer; if it still fails, the record
+    // lands on the auto-created "<topic>-dlt" topic instead of being silently dropped after the retries.
+    @RetryableTopic(attempts = "4", backoff = @Backoff(delay = 2000, multiplier = 2.0, maxDelay = 10000))
     @KafkaListener(topics = "${kafka.topic.family-member-events}")
     public void onFamilyMemberEvent(FamilyMemberEvent event) {
         String name = event.memberDisplayName() != null && !event.memberDisplayName().isBlank()

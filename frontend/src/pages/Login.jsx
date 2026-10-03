@@ -6,13 +6,19 @@ import client, { oauth2AuthorizationUrl } from "../api/client";
 import { EyeIcon, EyeOffIcon, FacebookIcon, GithubIcon, GoogleIcon, KeyIcon, MailIcon } from "../components/AuthIcons";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuth } from "../hooks/useAuth";
+import { LIMITS } from "../utils/inputLimits";
+import { isValidLoginIdentifier, looksLikeEmail } from "../utils/phone";
+import { Button, IconButton } from "../components/ui/Button";
+import { Field } from "../components/ui/Field";
+import { Input } from "../components/ui/Input";
 
 export default function Login() {
   const { t } = useTranslation("login");
   const { login, verifyTwoFactor } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [email, setEmail] = useState("");
+  // Email or phone number — the backend tells them apart.
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
@@ -55,7 +61,7 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      const result = await login(email, password, rememberMe);
+      const result = await login(identifier.trim(), password, rememberMe);
       if (result.requiresTwoFactor) {
         setTwoFactorToken(result.twoFactorToken);
       } else {
@@ -71,11 +77,12 @@ export default function Login() {
   // Must match AuthService.NOT_VERIFIED_MESSAGE on the backend.
   const showResendVerification = error.includes("chưa được xác thực");
 
+  // Only offered when the user logged in with their email — the endpoint looks the account up by email.
   async function handleResendVerification() {
-    if (!email) return;
+    if (!looksLikeEmail(identifier)) return;
     setResending(true);
     try {
-      const res = await client.post("/auth/resend-verification", { email });
+      const res = await client.post("/auth/resend-verification", { email: identifier.trim() });
       toast.success(res.data.data?.message || t("resendVerificationSent"));
     } catch (err) {
       toast.error(err.response?.data?.message || t("resendVerificationFailed"));
@@ -111,29 +118,30 @@ export default function Login() {
 
             {error && <p className="error-text">{error}</p>}
 
-            <div className="auth-input-group no-required-mark">
+            <Field as="div" className="auth-input-group no-required-mark" errorPlacement="after">
               <span className="auth-input-icon">
                 <KeyIcon />
               </span>
-              <input
+              <Input variant="bare"
                 value={totpCode}
+                maxLength={LIMITS.twoFactorCode}
                 onChange={(e) => setTotpCode(e.target.value)}
                 placeholder={t("twoFactorCodePlaceholder")}
                 aria-label={t("twoFactorCodePlaceholder")}
                 autoFocus
                 required
               />
-            </div>
+            </Field>
 
-            <button type="submit" className="auth-submit" disabled={loading}>
+            <Button variant="hero" size="lg" className="mt-1 w-full" type="submit" disabled={loading}>
               {loading ? t("verifying") : t("confirm")}
-            </button>
+            </Button>
           </div>
 
           <p className="auth-footer-text">
-            <button type="button" className="auth-forgot" onClick={() => setTwoFactorToken(null)}>
+            <Button variant="link" onClick={() => setTwoFactorToken(null)}>
               {t("backToLogin")}
-            </button>
+            </Button>
           </p>
         </form>
       </div>
@@ -151,47 +159,53 @@ export default function Login() {
           <p className="auth-card-subtitle">{t("subtitle")}</p>
 
           {error && <p className="error-text">{error}</p>}
-          {showResendVerification && (
-            <button type="button" className="auth-forgot" onClick={handleResendVerification} disabled={resending}>
-              {resending ? t("resendVerificationSending") : t("resendVerification")}
-            </button>
-          )}
+          {showResendVerification &&
+            (looksLikeEmail(identifier) ? (
+              <Button variant="link" onClick={handleResendVerification} disabled={resending}>
+                {resending ? t("resendVerificationSending") : t("resendVerification")}
+              </Button>
+            ) : (
+              <p className="text-sm text-slate-500">{t("resendNeedsEmail")}</p>
+            ))}
 
-          <div className="auth-input-group no-required-mark">
+          <Field as="div" className="auth-input-group no-required-mark" errorPlacement="after">
             <span className="auth-input-icon">
               <MailIcon />
             </span>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+            <Input variant="bare"
+              type="text"
+              inputMode="email"
+              autoComplete="username"
+              value={identifier}
+              maxLength={LIMITS.email}
+              onChange={(e) => setIdentifier(e.target.value)}
+              validate={(v) => (v.trim() && !isValidLoginIdentifier(v) ? t("validation:loginIdentifierInvalid") : "")}
               placeholder={t("emailPlaceholder")}
-              aria-label="Email"
+              aria-label={t("emailPlaceholder")}
               required
             />
-          </div>
+          </Field>
 
-          <div className="auth-input-group no-required-mark">
+          <Field as="div" className="auth-input-group no-required-mark" errorPlacement="after">
             <span className="auth-input-icon">
               <KeyIcon />
             </span>
-            <input
+            <Input variant="bare"
               type={showPassword ? "text" : "password"}
               value={password}
+              maxLength={LIMITS.password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder={t("passwordPlaceholder")}
               aria-label={t("passwordPlaceholder")}
               required
             />
-            <button
-              type="button"
-              className="auth-input-toggle"
+            <IconButton variant="bare" className="auth-input-toggle"
               onClick={() => setShowPassword((v) => !v)}
               aria-label={showPassword ? t("hidePassword") : t("showPassword")}
             >
               {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-            </button>
-          </div>
+            </IconButton>
+          </Field>
 
           <div className="auth-options">
             <label className="auth-remember">
@@ -206,9 +220,9 @@ export default function Login() {
             </Link>
           </div>
 
-          <button type="submit" className="auth-submit" disabled={loading}>
+          <Button variant="hero" size="lg" className="mt-1 w-full" type="submit" disabled={loading}>
             {loading ? t("loggingIn") : t("submit")}
-          </button>
+          </Button>
         </div>
 
         <div className="auth-divider">

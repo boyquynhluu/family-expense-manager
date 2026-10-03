@@ -7,6 +7,8 @@ import org.springframework.http.HttpHeaders;
  * Extracts the device/IP info stamped onto each new session (README "8. Không quản lý
  * được phiên đăng nhập") from the raw request — shared by every place that mints tokens
  * (login, refresh, OAuth2 success, switch-family) so they all read it the same way.
+ *
+ * @author boyquynhluu
  */
 public final class RequestMetadataUtil {
 

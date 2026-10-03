@@ -1,3 +1,6 @@
 **/target/
 **/*.iml
 .idea/
+.git
+.env
+*.log

@@ -7,6 +7,7 @@
   "familyNamePlaceholder": "Family name",
   "displayNamePlaceholder": "Your display name",
   "emailPlaceholder": "Email@gmail.com",
+  "phonePlaceholder": "Phone number (optional, for logging in)",
   "passwordPlaceholder": "Password (minimum 8 characters)",
   "passwordLabel": "Password",
   "hidePassword": "Hide password",

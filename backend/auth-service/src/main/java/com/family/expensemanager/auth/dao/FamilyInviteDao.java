@@ -11,6 +11,9 @@ import org.seasar.doma.Update;
 
 import com.family.expensemanager.auth.domain.entity.FamilyInvite;
 
+/**
+ * @author boyquynhluu
+ */
 @Dao
 public interface FamilyInviteDao {
 

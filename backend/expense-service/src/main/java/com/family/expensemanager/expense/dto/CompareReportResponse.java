@@ -3,7 +3,11 @@ package com.family.expensemanager.expense.dto;
 import java.math.BigDecimal;
 import java.util.List;
 
-/** All deltas are {@code current - previous}, where "previous" is the {@code withMonth} month. */
+/**
+ * All deltas are {@code current - previous}, where "previous" is the {@code withMonth} month.
+ *
+ * @author boyquynhluu
+ */
 public record CompareReportResponse(
         MonthSummary current,
         MonthSummary previous,

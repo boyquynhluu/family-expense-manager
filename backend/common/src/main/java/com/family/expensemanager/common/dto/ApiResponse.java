@@ -1,6 +1,10 @@
 package com.family.expensemanager.common.dto;
 
-/** Uniform success envelope returned by every REST endpoint across services. */
+/**
+ * Uniform success envelope returned by every REST endpoint across services.
+ *
+ * @author boyquynhluu
+ */
 public record ApiResponse<T>(boolean success, T data) {
 
     public static <T> ApiResponse<T> ok(T data) {

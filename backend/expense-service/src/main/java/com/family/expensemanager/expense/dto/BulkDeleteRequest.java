@@ -6,5 +6,8 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
+/**
+ * @author boyquynhluu
+ */
 public record BulkDeleteRequest(@NotEmpty @Size(max = 100) List<@NotNull Long> ids) {
 }

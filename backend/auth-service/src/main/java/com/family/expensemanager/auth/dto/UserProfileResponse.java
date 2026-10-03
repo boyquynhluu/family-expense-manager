@@ -2,8 +2,11 @@ package com.family.expensemanager.auth.dto;
 
 import com.family.expensemanager.auth.domain.entity.User;
 
+/**
+ * @author boyquynhluu
+ */
 public record UserProfileResponse(
-        Long id, String email, String displayName, String role, Long familyId, String provider,
+        Long id, String email, String phone, String displayName, String role, Long familyId, String provider,
         String relationship, boolean totpEnabled, boolean hasPassword, boolean locked) {
 
     public static UserProfileResponse from(User user) {
@@ -18,7 +21,7 @@ public record UserProfileResponse(
      */
     public static UserProfileResponse from(User user, Long familyId, String roleInFamily) {
         return new UserProfileResponse(
-                user.getId(), user.getEmail(), user.getDisplayName(), roleInFamily, familyId,
+                user.getId(), user.getEmail(), user.getPhone(), user.getDisplayName(), roleInFamily, familyId,
                 user.getProvider(), user.getRelationship(), Boolean.TRUE.equals(user.getTotpEnabled()),
                 user.getPasswordHash() != null, Boolean.TRUE.equals(user.getLocked()));
     }

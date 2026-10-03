@@ -4,6 +4,9 @@ import java.time.LocalDateTime;
 
 import com.family.expensemanager.auth.domain.entity.RefreshToken;
 
+/**
+ * @author boyquynhluu
+ */
 public record SessionResponse(
         Long id,
         String deviceInfo,

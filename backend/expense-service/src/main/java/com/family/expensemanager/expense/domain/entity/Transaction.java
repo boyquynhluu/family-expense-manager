@@ -6,10 +6,14 @@ import org.seasar.doma.GeneratedValue;
 import org.seasar.doma.GenerationType;
 import org.seasar.doma.Id;
 import org.seasar.doma.Table;
+import org.seasar.doma.Version;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * @author boyquynhluu
+ */
 @Entity
 @Table(name = "TRANSACTIONS")
 public class Transaction {
@@ -39,6 +43,10 @@ public class Transaction {
 
     private String note;
 
+    /** Only the creator ({@link #userId}) may see this transaction's details; its amount still counts in totals. */
+    @Column(name = "is_private")
+    private Boolean isPrivate = false;
+
     @Column(name = "receipt_path")
     private String receiptPath;
 
@@ -48,8 +56,19 @@ public class Transaction {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    /** Who soft-deleted it (V12); null while not deleted. The name is a snapshot, like createdByName. */
+    @Column(name = "deleted_by_user_id")
+    private Long deletedByUserId;
+
+    @Column(name = "deleted_by_name")
+    private String deletedByName;
+
     @Column(name = "created_by_name")
     private String createdByName;
+
+    /** Optimistic locking — see V10 migration. Doma checks/increments this on every UPDATE automatically. */
+    @Version
+    private Integer version;
 
     public Long getId() {
         return id;
@@ -123,6 +142,19 @@ public class Transaction {
         this.note = note;
     }
 
+    public Boolean getIsPrivate() {
+        return isPrivate;
+    }
+
+    public void setIsPrivate(Boolean isPrivate) {
+        this.isPrivate = isPrivate;
+    }
+
+    /** Visible to {@code viewerUserId}: not private, or created by them. Applies to the family OWNER too. */
+    public boolean isVisibleTo(Long viewerUserId) {
+        return !Boolean.TRUE.equals(isPrivate) || (userId != null && userId.equals(viewerUserId));
+    }
+
     public String getReceiptPath() {
         return receiptPath;
     }
@@ -147,11 +179,35 @@ public class Transaction {
         this.deletedAt = deletedAt;
     }
 
+    public Long getDeletedByUserId() {
+        return deletedByUserId;
+    }
+
+    public void setDeletedByUserId(Long deletedByUserId) {
+        this.deletedByUserId = deletedByUserId;
+    }
+
+    public String getDeletedByName() {
+        return deletedByName;
+    }
+
+    public void setDeletedByName(String deletedByName) {
+        this.deletedByName = deletedByName;
+    }
+
     public String getCreatedByName() {
         return createdByName;
     }
 
     public void setCreatedByName(String createdByName) {
         this.createdByName = createdByName;
+    }
+
+    public Integer getVersion() {
+        return version;
+    }
+
+    public void setVersion(Integer version) {
+        this.version = version;
     }
 }

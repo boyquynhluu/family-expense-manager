@@ -6,6 +6,9 @@ import jakarta.validation.constraints.Size;
 
 import java.util.Locale;
 
+/**
+ * @author boyquynhluu
+ */
 public record ResendVerificationRequest(@NotBlank @Email @Size(max = 255) String email) {
 
     public ResendVerificationRequest {

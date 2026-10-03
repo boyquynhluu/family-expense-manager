@@ -18,6 +18,8 @@ import lombok.extern.slf4j.Slf4j;
  * synchronous cross-service call in the notification path, so it fails soft: any error is logged and
  * treated as "no recipients", so an auth-service hiccup can never make Kafka redeliver an event
  * (and re-insert its in-app notification) forever.
+ *
+ * @author boyquynhluu
  */
 @Component
 @Slf4j(topic = "FamilyMemberDirectory")

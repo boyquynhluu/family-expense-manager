@@ -6,6 +6,8 @@ import jakarta.mail.internet.MimeMessage;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.annotation.RetryableTopic;
+import org.springframework.retry.annotation.Backoff;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Component;
@@ -21,6 +23,8 @@ import lombok.extern.slf4j.Slf4j;
  * Consumes {@code password-reset} events published by auth-service when a user requests
  * a password reset, and emails them a link to the frontend's {@code /reset-password?token=...}
  * page — same pattern as {@link UserVerificationEventListener}.
+ *
+ * @author boyquynhluu
  */
 @Component
 @Slf4j(topic = "PasswordResetEventListener")
@@ -45,6 +49,10 @@ public class PasswordResetEventListener {
         this.template = loadTemplate();
     }
 
+    // Non-blocking retry: a processing failure (DB hiccup, uncaught bug...) is retried 3 times with
+    // backoff on dedicated retry topics instead of blocking this consumer; if it still fails, the record
+    // lands on the auto-created "<topic>-dlt" topic instead of being silently dropped after the retries.
+    @RetryableTopic(attempts = "4", backoff = @Backoff(delay = 2000, multiplier = 2.0, maxDelay = 10000))
     @KafkaListener(topics = "${kafka.topic.password-reset}")
     public void onPasswordResetEvent(PasswordResetEvent event) throws MessagingException {
         String resetLink = frontendUrl + "/reset-password?token=" + event.resetToken();

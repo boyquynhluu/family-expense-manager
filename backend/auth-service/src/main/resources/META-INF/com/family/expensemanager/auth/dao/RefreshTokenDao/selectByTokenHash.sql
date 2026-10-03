@@ -7,7 +7,8 @@ SELECT
     created_at,
     device_info,
     ip_address,
-    last_used_at
+    last_used_at,
+    rotated_at
 FROM
     REFRESH_TOKENS
 WHERE

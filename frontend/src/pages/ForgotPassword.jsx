@@ -4,6 +4,10 @@ import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { MailIcon } from "../components/AuthIcons";
 import LanguageSwitcher from "../components/LanguageSwitcher";
+import { LIMITS } from "../utils/inputLimits";
+import { Button } from "../components/ui/Button";
+import { Field } from "../components/ui/Field";
+import { Input } from "../components/ui/Input";
 
 export default function ForgotPassword() {
   const { t } = useTranslation("forgotPassword");
@@ -42,23 +46,24 @@ export default function ForgotPassword() {
 
           {!message && (
             <>
-              <div className="auth-input-group">
+              <Field as="div" className="auth-input-group" errorPlacement="after">
                 <span className="auth-input-icon">
                   <MailIcon />
                 </span>
-                <input
+                <Input variant="bare"
                   type="email"
                   value={email}
+                  maxLength={LIMITS.email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder={t("emailPlaceholder")}
                   aria-label="Email"
                   required
                 />
-              </div>
+              </Field>
 
-              <button type="submit" className="auth-submit" disabled={loading}>
+              <Button variant="hero" size="lg" className="mt-1 w-full" type="submit" disabled={loading}>
                 {loading ? t("sending") : t("submit")}
-              </button>
+              </Button>
             </>
           )}
         </div>

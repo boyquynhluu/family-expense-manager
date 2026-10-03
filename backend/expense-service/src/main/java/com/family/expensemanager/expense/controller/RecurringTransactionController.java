@@ -21,6 +21,9 @@ import org.springframework.web.bind.annotation.RestController;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * @author boyquynhluu
+ */
 @RestController
 @RequestMapping("/api/expenses/recurring-transactions")
 @RequiredArgsConstructor
@@ -35,7 +38,7 @@ public class RecurringTransactionController {
         log.info("create - start");
         return ApiResponse.ok(recurringTransactionService.create(
                 CurrentUser.familyId(), CurrentUser.userId(), CurrentUser.email(), CurrentUser.displayName(),
-                request));
+                isOwner(), request));
     }
 
     @GetMapping

@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { useAuth } from "../hooks/useAuth";
+import { Select } from "./ui/Input";
 
 /**
  * Only renders once an account belongs to more than one family (README "6. 1 tài
@@ -38,14 +39,14 @@ export default function FamilySwitcher() {
   return (
     <label className="family-switcher">
       {t("label")}
-      <select value={familyId ?? ""} onChange={handleChange}>
+      <Select variant="dark" className="w-full" value={familyId ?? ""} onChange={handleChange}>
         {families.map((f) => (
           <option key={f.familyId} value={f.familyId}>
             {f.familyName}
             {f.role === "OWNER" ? ` (${t("owner")})` : ""}
           </option>
         ))}
-      </select>
+      </Select>
     </label>
   );
 }

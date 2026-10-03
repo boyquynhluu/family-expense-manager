@@ -5,9 +5,15 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import client from "../api/client";
 import { EyeIcon, EyeOffIcon, KeyIcon, UserIcon } from "../components/AuthIcons";
 import LanguageSwitcher from "../components/LanguageSwitcher";
+import { LIMITS } from "../utils/inputLimits";
+import { Button, IconButton } from "../components/ui/Button";
+import { Field } from "../components/ui/Field";
+import { Input } from "../components/ui/Input";
+import { useCleanText } from "../utils/textQuality";
 
 export default function AcceptInvite() {
   const { t } = useTranslation("acceptInvite");
+  const cleanText = useCleanText();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get("token");
@@ -26,7 +32,7 @@ export default function AcceptInvite() {
       .get(`/auth/invite/${token}`)
       .then((res) => setInvite(res.data.data))
       .catch((err) => setLoadError(err.response?.data?.message || t("invalidInvite")));
-  }, [token]);
+  }, [token, t]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -80,50 +86,50 @@ export default function AcceptInvite() {
                 <p className="auth-card-subtitle">{t("existingAccountSubtitle")}</p>
               ) : (
                 <>
-                  <div className="auth-input-group">
+                  <Field as="div" className="auth-input-group" errorPlacement="after">
                     <span className="auth-input-icon">
                       <UserIcon />
                     </span>
-                    <input
-                      value={displayName}
+                    <Input variant="bare"
+                      value={displayName} validate={cleanText}
+                      maxLength={LIMITS.displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
                       placeholder={t("displayNamePlaceholder")}
                       aria-label={t("displayNamePlaceholder")}
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="auth-input-group">
+                  <Field as="div" className="auth-input-group" errorPlacement="after">
                     <span className="auth-input-icon">
                       <KeyIcon />
                     </span>
-                    <input
+                    <Input variant="bare"
                       type={showPassword ? "text" : "password"}
                       value={password}
+                      minLength={LIMITS.newPasswordMin}
+                      maxLength={LIMITS.newPasswordMax}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder={t("passwordPlaceholder")}
                       aria-label={t("passwordLabel")}
-                      minLength={8}
                     />
-                    <button
-                      type="button"
-                      className="auth-input-toggle"
+                    <IconButton variant="bare" className="auth-input-toggle"
                       onClick={() => setShowPassword((v) => !v)}
                       aria-label={showPassword ? t("hidePassword") : t("showPassword")}
                     >
                       {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-                    </button>
-                  </div>
+                    </IconButton>
+                  </Field>
                 </>
               )}
 
-              <button type="submit" className="auth-submit" disabled={loading}>
+              <Button variant="hero" size="lg" className="mt-1 w-full" type="submit" disabled={loading}>
                 {loading
                   ? t("joining")
                   : invite.isExistingAccount
                   ? t("confirmJoin")
                   : t("joinFamily")}
-              </button>
+              </Button>
             </>
           )}
         </div>

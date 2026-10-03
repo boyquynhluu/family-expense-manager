@@ -2,17 +2,26 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { EyeIcon, EyeOffIcon, HomeIcon, KeyIcon, MailIcon, UserIcon } from "../components/AuthIcons";
+import { EyeIcon, EyeOffIcon, HomeIcon, KeyIcon, MailIcon, PhoneIcon, UserIcon } from "../components/AuthIcons";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuth } from "../hooks/useAuth";
+import { LIMITS } from "../utils/inputLimits";
+import { Button, IconButton } from "../components/ui/Button";
+import { Field } from "../components/ui/Field";
+import { Checkbox, Input } from "../components/ui/Input";
+import { useCleanText } from "../utils/textQuality";
+import { isValidPhone, normalizePhone } from "../utils/phone";
 
 export default function Register() {
   const { t } = useTranslation("register");
+  const cleanText = useCleanText();
   const { register } = useAuth();
   const navigate = useNavigate();
   const [familyName, setFamilyName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
+  // Optional — lets the user log in with the phone number instead of the email.
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -23,7 +32,7 @@ export default function Register() {
     setError("");
     setLoading(true);
     try {
-      const message = await register(familyName, email, password, displayName);
+      const message = await register(familyName, email, password, displayName, normalizePhone(phone));
       toast.success(message || t("registerSuccess"), {
         duration: 6000,
       });
@@ -47,77 +56,95 @@ export default function Register() {
 
           {error && <p className="error-text">{error}</p>}
 
-          <div className="auth-input-group">
+          <Field as="div" className="auth-input-group" errorPlacement="after">
             <span className="auth-input-icon">
               <HomeIcon />
             </span>
-            <input
-              value={familyName}
+            <Input variant="bare"
+              value={familyName} validate={cleanText}
+              maxLength={LIMITS.familyName}
               onChange={(e) => setFamilyName(e.target.value)}
               placeholder={t("familyNamePlaceholder")}
               aria-label={t("familyNamePlaceholder")}
               required
             />
-          </div>
+          </Field>
 
-          <div className="auth-input-group">
+          <Field as="div" className="auth-input-group" errorPlacement="after">
             <span className="auth-input-icon">
               <UserIcon />
             </span>
-            <input
-              value={displayName}
+            <Input variant="bare"
+              value={displayName} validate={cleanText}
+              maxLength={LIMITS.displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder={t("displayNamePlaceholder")}
               aria-label={t("displayNamePlaceholder")}
               required
             />
-          </div>
+          </Field>
 
-          <div className="auth-input-group">
+          <Field as="div" className="auth-input-group" errorPlacement="after">
             <span className="auth-input-icon">
               <MailIcon />
             </span>
-            <input
+            <Input variant="bare"
               type="email"
               value={email}
+              maxLength={LIMITS.email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder={t("emailPlaceholder")}
               aria-label="Email"
               required
             />
-          </div>
+          </Field>
 
-          <div className="auth-input-group">
+          <Field as="div" className="auth-input-group" errorPlacement="after">
+            <span className="auth-input-icon">
+              <PhoneIcon />
+            </span>
+            <Input variant="bare"
+              type="tel"
+              autoComplete="tel"
+              value={phone}
+              maxLength={LIMITS.phone}
+              onChange={(e) => setPhone(e.target.value)}
+              validate={(v) => (v.trim() && !isValidPhone(v) ? t("validation:phoneInvalid") : "")}
+              placeholder={t("phonePlaceholder")}
+              aria-label={t("phonePlaceholder")}
+            />
+          </Field>
+
+          <Field as="div" className="auth-input-group" errorPlacement="after">
             <span className="auth-input-icon">
               <KeyIcon />
             </span>
-            <input
+            <Input variant="bare"
               type={showPassword ? "text" : "password"}
               value={password}
+              minLength={LIMITS.newPasswordMin}
+              maxLength={LIMITS.newPasswordMax}
               onChange={(e) => setPassword(e.target.value)}
               placeholder={t("passwordPlaceholder")}
               aria-label={t("passwordLabel")}
-              minLength={8}
               required
             />
-            <button
-              type="button"
-              className="auth-input-toggle"
+            <IconButton variant="bare" className="auth-input-toggle"
               onClick={() => setShowPassword((v) => !v)}
               aria-label={showPassword ? t("hidePassword") : t("showPassword")}
             >
               {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-            </button>
-          </div>
+            </IconButton>
+          </Field>
 
-          <label className="auth-terms">
-            <input type="checkbox" required />
+          <Field className="auth-terms">
+            <Checkbox required />
             {t("termsAgreement")}
-          </label>
+          </Field>
 
-          <button type="submit" className="auth-submit" disabled={loading}>
+          <Button variant="hero" size="lg" className="mt-1 w-full" type="submit" disabled={loading}>
             {loading ? t("registering") : t("submit")}
-          </button>
+          </Button>
         </div>
 
         <p className="auth-footer-text">

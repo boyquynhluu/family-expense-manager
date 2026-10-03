@@ -9,6 +9,9 @@ import org.seasar.doma.Table;
 
 import java.time.LocalDateTime;
 
+/**
+ * @author boyquynhluu
+ */
 @Entity
 @Table(name = "USERS")
 public class User {
@@ -21,6 +24,9 @@ public class User {
     private Long familyId;
 
     private String email;
+
+    /** Optional, normalised to +84XXXXXXXXX (PhoneNumbers); can be used instead of the email to log in. */
+    private String phone;
 
     @Column(name = "password_hash")
     private String passwordHash;
@@ -104,6 +110,14 @@ public class User {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
     }
 
     public String getPasswordHash() {

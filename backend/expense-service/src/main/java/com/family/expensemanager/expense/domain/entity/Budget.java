@@ -6,9 +6,13 @@ import org.seasar.doma.GeneratedValue;
 import org.seasar.doma.GenerationType;
 import org.seasar.doma.Id;
 import org.seasar.doma.Table;
+import org.seasar.doma.Version;
 
 import java.math.BigDecimal;
 
+/**
+ * @author boyquynhluu
+ */
 @Entity
 @Table(name = "BUDGETS")
 public class Budget {
@@ -28,6 +32,10 @@ public class Budget {
 
     @Column(name = "limit_amount")
     private BigDecimal limitAmount;
+
+    /** Optimistic locking — see V10 migration. Doma checks/increments this on every UPDATE automatically. */
+    @Version
+    private Integer version;
 
     public Long getId() {
         return id;
@@ -67,5 +75,13 @@ public class Budget {
 
     public void setLimitAmount(BigDecimal limitAmount) {
         this.limitAmount = limitAmount;
+    }
+
+    public Integer getVersion() {
+        return version;
+    }
+
+    public void setVersion(Integer version) {
+        this.version = version;
     }
 }

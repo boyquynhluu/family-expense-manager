@@ -4,6 +4,10 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import LanguageSwitcher from "../components/LanguageSwitcher";
+import { LIMITS } from "../utils/inputLimits";
+import { Button } from "../components/ui/Button";
+import { Field } from "../components/ui/Field";
+import { Input } from "../components/ui/Input";
 
 // Landed on from the verification link emailed after registration (see
 // notification-service UserVerificationEventListener). Calls the API to activate the
@@ -42,7 +46,8 @@ export default function Verify() {
         setStatus("error");
         setError(err.response?.data?.message || t(isEmailChange ? "emailChangeFailed" : "verifyFailed"));
       });
-  }, [searchParams, navigate]);
+    // handled.current guarantees this runs once, so listing every value it reads is safe.
+  }, [searchParams, navigate, isEmailChange, t]);
 
   async function handleResend(e) {
     e.preventDefault();
@@ -68,19 +73,20 @@ export default function Verify() {
             {!isEmailChange && (
               <form className="verify-resend" onSubmit={handleResend}>
                 <p className="verify-message">{t("resendHint")}</p>
-                <div className="auth-input-group no-required-mark">
-                  <input
+                <Field as="div" className="auth-input-group no-required-mark" errorPlacement="after">
+                  <Input variant="bare"
                     type="email"
                     value={resendEmail}
+                    maxLength={LIMITS.email}
                     onChange={(e) => setResendEmail(e.target.value)}
                     placeholder={t("resendEmailPlaceholder")}
                     aria-label={t("resendEmailPlaceholder")}
                     required
                   />
-                </div>
-                <button type="submit" className="auth-submit" disabled={resending}>
+                </Field>
+                <Button variant="hero" size="lg" className="mt-1 w-full" type="submit" disabled={resending}>
                   {resending ? t("resendSending") : t("resendButton")}
-                </button>
+                </Button>
               </form>
             )}
             <p className="auth-footer-text">

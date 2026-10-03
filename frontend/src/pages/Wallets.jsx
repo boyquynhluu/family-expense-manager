@@ -2,20 +2,38 @@ import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
-import { EditIcon, TrashIcon, WalletIcon } from "../components/AppIcons";
 import AmountInput from "../components/AmountInput";
+import { CalendarIcon, EditIcon, TrashIcon, WalletIcon } from "../components/AppIcons";
 import Pagination from "../components/Pagination";
 import SeedDefaultsButton from "../components/SeedDefaultsButton";
-import { confirmDialog } from "../utils/confirm";
-import { formatCurrency } from "../utils/format";
+import TransferRequests from "../components/TransferRequests";
+import WalletMonthlyTable from "../components/WalletMonthlyTable";
 import { useAuth } from "../hooks/useAuth";
+import { useClientPage } from "../hooks/useClientPage";
 import { usePagedList } from "../hooks/usePagedList";
+import { confirmDialog } from "../utils/confirm";
+import { maxDateTime, minDateTime } from "../utils/dateLimits";
+import { formatCurrency } from "../utils/format";
+import { LIMITS } from "../utils/inputLimits";
+import { notifyTrashChanged } from "../utils/trashEvents";
 
+
+import { Button, IconButton } from "../components/ui/Button";
+import { Field } from "../components/ui/Field";
+import { Input, Select } from "../components/ui/Input";
+import { Table, TBody, Td, Th, THead } from "../components/ui/Table";
+import { hasInvalidNameChars } from "../utils/namePatterns";
+import { useCleanText } from "../utils/textQuality";
 // <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" in the browser's local time.
 function nowForDateTimeInput() {
   const now = new Date();
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
   return now.toISOString().slice(0, 16);
+}
+
+function currentYearMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function emptyTransferForm() {
@@ -24,9 +42,14 @@ function emptyTransferForm() {
 
 export default function Wallets() {
   const { t } = useTranslation(["common", "wallets"]);
+  const cleanText = useCleanText();
+  // Character rule first (it names what is wrong), then profanity/junk.
+  const validateName = (value) => (hasInvalidNameChars(value) ? t("wallets:nameInvalidChars") : cleanText(value));
   const { role, userId } = useAuth();
   const isOwner = role === "OWNER";
   const [wallets, setWallets] = useState([]);
+  // Paged on the client: the full list is still needed for the wallet selects and owner checks.
+  const walletsPage = useClientPage(wallets);
   const {
     pageData: transfersPage,
     page: transfersPageIndex,
@@ -41,20 +64,52 @@ export default function Wallets() {
   const [name, setName] = useState("");
   const [currency, setCurrency] = useState("VND");
   const [initialBalance, setInitialBalance] = useState("0");
+  // "" = shared by the whole family ("ví chung"); otherwise the owning member's user id.
+  const [ownerUserId, setOwnerUserId] = useState("");
+  const [members, setMembers] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
+  const [yearMonth, setYearMonth] = useState(currentYearMonth);
+  const [reloadKey, setReloadKey] = useState(0);
 
   function load() {
     client.get("/expenses/wallets").then((res) => setWallets(res.data.data));
+    setReloadKey((k) => k + 1);
   }
 
   useEffect(load, []);
+
+  useEffect(() => {
+    client
+      .get("/auth/family/members", { params: { page: 0, size: 100 } })
+      .then((res) => setMembers(res.data.data.content))
+      .catch(() => {});
+  }, []);
+
+  function ownerName(id) {
+    if (id == null) return null;
+    return members.find((m) => String(m.id) === String(id))?.displayName ?? t("wallets:formerMember");
+  }
+
+  // Transfers go from the sender's OWN private wallet to another member's private wallet or a shared one
+  // (same rule as the backend, the OWNER included). When editing, the sender is the transfer's creator, and the
+  // wallets it already uses stay selectable (an older transfer may predate the rule).
+  const editingTransfer = editingTransferId ? transfers.find((tr) => tr.id === editingTransferId) : null;
+  const senderId = editingTransfer ? editingTransfer.createdByUserId : userId;
+  const isSendersOwn = (w) => w.ownerUserId != null && String(w.ownerUserId) === String(senderId);
+  const transferSourceWallets = wallets.filter((w) => isSendersOwn(w) || w.id === editingTransfer?.fromWalletId);
+  const transferDestinationWallets = wallets.filter((w) => !isSendersOwn(w) || w.id === editingTransfer?.toWalletId);
+
+  function walletOptionLabel(w) {
+    return `${w.name} — ${w.ownerUserId == null ? t("wallets:sharedBadge") : ownerName(w.ownerUserId)}`;
+  }
 
   function startEdit(wallet) {
     setEditingId(wallet.id);
     setName(wallet.name);
     setCurrency(wallet.currency);
     setInitialBalance(String(wallet.initialBalance));
+    setOwnerUserId(wallet.ownerUserId == null ? "" : String(wallet.ownerUserId));
   }
 
   function cancelEdit() {
@@ -62,15 +117,20 @@ export default function Wallets() {
     setName("");
     setCurrency("VND");
     setInitialBalance("0");
+    setOwnerUserId("");
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
+    const msgConfirm = editingId ? t("wallets:updateConfirm") : t("wallets:addConfirm");
+    if (!(await confirmDialog(`${msgConfirm} ${name}`, { tone: "primary", icon: "question" }))) return;
     setError("");
+
     const payload = {
       name,
       currency,
       initialBalance: Number(initialBalance),
+      ownerUserId: ownerUserId ? Number(ownerUserId) : null,
     };
     try {
       if (editingId) {
@@ -90,6 +150,8 @@ export default function Wallets() {
     setError("");
     try {
       await client.delete(`/expenses/wallets/${id}`);
+      notifyTrashChanged();
+      toast.success(t("wallets:deleteSuccess"));
       load();
     } catch (err) {
       setError(err.response?.data?.message || t("wallets:deleteFailed"));
@@ -141,13 +203,19 @@ export default function Wallets() {
       occurredAt: transferForm.occurredAt,
       note: transferForm.note || null,
     };
+
     try {
+      const formattedAmount = Number(transferForm.amount).toLocaleString("vi-VN");
       if (editingTransferId) {
+        if (!(await confirmDialog(t("wallets:transferUpdateConfirm", {amount: `${formattedAmount} ₫`})))) return;
+
         await client.put(`/expenses/transfers/${editingTransferId}`, payload);
         toast.success(t("wallets:transferUpdated"));
         cancelTransferEdit();
         reloadTransfers();
       } else {
+        if (!(await confirmDialog(t("wallets:transferAddConfirm", {amount: `${formattedAmount} ₫`})))) return;
+
         await client.post("/expenses/transfers", payload);
         toast.success(t("wallets:transferSaved"));
         setTransferForm(emptyTransferForm());
@@ -187,43 +255,58 @@ export default function Wallets() {
         <div className="section-card">
           <h2>{editingId ? t("wallets:editTitle") : t("wallets:addTitle")}</h2>
           <form className="inline-form" onSubmit={handleSubmit}>
-            <label className="field">
+            <Field>
               <span>
                 {t("wallets:nameLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <input
+              <Input
                 placeholder={t("wallets:namePlaceholder")}
-                value={name}
+                value={name} validate={validateName}
+                maxLength={LIMITS.walletName}
                 onChange={(e) => setName(e.target.value)}
                 required
               />
-            </label>
-            <label className="field">
+            </Field>
+            <Field>
               <span>
                 {t("wallets:currencyLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <input
+              <Input
                 placeholder={t("wallets:currencyPlaceholder")}
                 value={currency}
-                onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+                onChange={(e) => setCurrency(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))}
                 maxLength={3}
+                pattern="[A-Z]{3}"
+                title={t("wallets:currencyPatternHint")}
                 required
+                disabled
               />
-            </label>
-            <label className="field">
+            </Field>
+            <Field>
               <span>
                 {t("wallets:initialBalanceLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
               <AmountInput placeholder="0" value={initialBalance} onChange={setInitialBalance} required />
-            </label>
-            <button type="submit">{editingId ? t("wallets:submitUpdate") : t("wallets:submitAdd")}</button>
+            </Field>
+            <Field>
+              {t("wallets:ownerLabel")}
+              <Select value={ownerUserId} onChange={(e) => setOwnerUserId(e.target.value)}>
+                <option value="">{t("wallets:sharedWallet")}</option>
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.displayName}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Button type="submit">{editingId ? t("wallets:submitUpdate") : t("wallets:submitAdd")}</Button>
             {editingId && (
-              <button type="button" className="btn-secondary" onClick={cancelEdit}>
+              <Button variant="secondary" onClick={cancelEdit}>
                 {t("common:cancel")}
-              </button>
+              </Button>
             )}
           </form>
           {error && <p className="error-text">{error}</p>}
@@ -243,199 +326,235 @@ export default function Wallets() {
             <SeedDefaultsButton onDone={load} />
           </div>
         ) : (
-          <table>
-            <thead>
+          <Table>
+            <THead>
               <tr>
-                <th>{t("wallets:colName")}</th>
-                <th>{t("wallets:colCurrency")}</th>
-                <th>{t("wallets:colInitialBalance")}</th>
-                <th>{t("wallets:colCurrentBalance")}</th>
-                <th></th>
+                <Th>{t("wallets:colName")}</Th>
+                <Th>{t("wallets:colOwner")}</Th>
+                <Th>{t("wallets:colCurrency")}</Th>
+                <Th align="right">{t("wallets:colInitialBalance")}</Th>
+                <Th align="right">{t("wallets:colCurrentBalance")}</Th>
+                <Th></Th>
               </tr>
-            </thead>
-            <tbody>
-              {wallets.map((w) => (
+            </THead>
+            <TBody>
+              {walletsPage.rows.map((w) => (
                 <tr key={w.id}>
-                  <td data-label={t("wallets:colName")}>
+                  <Td data-label={t("wallets:colName")}>
                     <span className="table-cell-icon">
                       <WalletIcon /> {w.name}
                     </span>
-                  </td>
-                  <td data-label={t("wallets:colCurrency")}>{w.currency}</td>
-                  <td data-label={t("wallets:colInitialBalance")}>{formatCurrency(w.initialBalance, w.currency)}</td>
-                  <td data-label={t("wallets:colCurrentBalance")}>
+                  </Td>
+                  <Td data-label={t("wallets:colOwner")}>
+                    {w.ownerUserId == null ? (
+                      <span className="badge badge-neutral">{t("wallets:sharedBadge")}</span>
+                    ) : (
+                      ownerName(w.ownerUserId)
+                    )}
+                  </Td>
+                  <Td data-label={t("wallets:colCurrency")}>{w.currency}</Td>
+                  <Td data-label={t("wallets:colInitialBalance")} align="right">{formatCurrency(w.initialBalance, w.currency)}</Td>
+                  <Td data-label={t("wallets:colCurrentBalance")} align="right">
                     <strong>{formatCurrency(w.currentBalance, w.currency)}</strong>
-                  </td>
-                  <td className="row-actions">
+                  </Td>
+                  <Td actions>
                     {isOwner && (
                       <>
-                        <button
-                          type="button"
-                          className="icon-btn"
+                        <IconButton
                           onClick={() => startEdit(w)}
                           aria-label={t("common:edit")}
                         >
                           <EditIcon />
-                        </button>
-                        <button
-                          type="button"
-                          className="icon-btn icon-btn-danger"
+                        </IconButton>
+                        <IconButton variant="danger"
                           onClick={() => handleDelete(w.id)}
                           aria-label={t("common:delete")}
                         >
                           <TrashIcon />
-                        </button>
+                        </IconButton>
                       </>
                     )}
-                  </td>
+                  </Td>
                 </tr>
               ))}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         )}
+        <Pagination pageData={walletsPage.pageData} onPageChange={walletsPage.setPage} />
+      </div>
+
+      <div className="section-card">
+        <div className="page-header">
+          <h2>{t("wallets:monthlyTitle")}</h2>
+          <label className="month-picker">
+            <CalendarIcon />
+            <input type="month" value={yearMonth} onChange={(e) => setYearMonth(e.target.value)} />
+          </label>
+        </div>
+        <p className="page-header-subtitle">{t("wallets:monthlyHint")}</p>
+        <WalletMonthlyTable yearMonth={yearMonth} reloadKey={reloadKey} />
       </div>
 
       <div className="section-card" ref={transferFormRef}>
         <h2>{editingTransferId ? t("wallets:transferEditTitle") : t("wallets:transferTitle")}</h2>
         <p className="page-header-subtitle">{t("wallets:transferSubtitle")}</p>
-        {wallets.length < 2 ? (
-          <p className="empty-state">{t("wallets:transferNeedTwoWallets")}</p>
+        {transferSourceWallets.length === 0 ? (
+          <p className="empty-state">{t("wallets:transferNoOwnWallet")}</p>
+        ) : transferDestinationWallets.length === 0 ? (
+          <p className="empty-state">{t("wallets:transferNoDestination")}</p>
         ) : (
           <form className="inline-form" onSubmit={handleTransferSubmit}>
-            <label className="field">
+            <Field>
               <span>
                 {t("wallets:fromWalletLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <select
+              <Select
                 value={transferForm.fromWalletId}
                 onChange={(e) => updateTransferField("fromWalletId", e.target.value)}
                 required
               >
                 <option value="">{t("wallets:selectWallet")}</option>
-                {wallets.map((w) => (
+                {transferSourceWallets.map((w) => (
                   <option key={w.id} value={w.id}>
-                    {w.name}
+                    {walletOptionLabel(w)}
                   </option>
                 ))}
-              </select>
-            </label>
-            <label className="field">
+              </Select>
+            </Field>
+            <Field>
               <span>
                 {t("wallets:toWalletLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <select
+              <Select
                 value={transferForm.toWalletId}
                 onChange={(e) => updateTransferField("toWalletId", e.target.value)}
                 required
+                validate={(v) => (v && v === transferForm.fromWalletId ? t("validation:walletsMustDiffer") : "")}
               >
                 <option value="">{t("wallets:selectWallet")}</option>
-                {wallets
+                {transferDestinationWallets
                   .filter((w) => String(w.id) !== transferForm.fromWalletId)
                   .map((w) => (
                     <option key={w.id} value={w.id}>
-                      {w.name}
+                      {walletOptionLabel(w)}
                     </option>
                   ))}
-              </select>
-            </label>
-            <label className="field">
+              </Select>
+            </Field>
+            <Field>
               <span>
                 {t("wallets:transferAmountLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <AmountInput placeholder="0" value={transferForm.amount} onChange={(v) => updateTransferField("amount", v)} required />
-            </label>
-            <label className="field">
+              <AmountInput
+                placeholder="0"
+                value={transferForm.amount}
+                onChange={(v) => updateTransferField("amount", v)}
+                required
+                positive
+                min={LIMITS.minTransactionAmount}
+                max={LIMITS.maxTransactionAmount}
+              />
+            </Field>
+            <Field>
               <span>
                 {t("wallets:transferTimeLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <input
+              <Input
                 type="datetime-local"
                 value={transferForm.occurredAt}
                 onChange={(e) => updateTransferField("occurredAt", e.target.value)}
+                min={minDateTime()}
+                max={maxDateTime()}
                 required
               />
-            </label>
-            <label className="field">
+            </Field>
+            <Field>
               {t("wallets:transferNoteLabel")}
-              <input
+              <Input
                 placeholder={t("wallets:transferNotePlaceholder")}
-                value={transferForm.note}
-                maxLength={255}
+                value={transferForm.note} validate={cleanText}
+                maxLength={LIMITS.transferNote}
                 onChange={(e) => updateTransferField("note", e.target.value)}
               />
-            </label>
-            <button type="submit">
+            </Field>
+            <Button type="submit">
               {editingTransferId ? t("wallets:transferSubmitUpdate") : t("wallets:transferSubmit")}
-            </button>
+            </Button>
             {editingTransferId && (
-              <button type="button" className="btn-secondary" onClick={cancelTransferEdit}>
+              <Button variant="secondary" onClick={cancelTransferEdit}>
                 {t("common:cancel")}
-              </button>
+              </Button>
             )}
           </form>
         )}
         {transferError && <p className="error-text">{transferError}</p>}
       </div>
 
+      <TransferRequests
+        wallets={wallets}
+        userId={userId}
+        walletOptionLabel={walletOptionLabel}
+        onTransferred={() => {
+          load();
+          reloadTransfers();
+        }}
+      />
+
       <div className="section-card">
         <h2>{t("wallets:transferHistoryTitle")}</h2>
         {transfers.length === 0 ? (
           <p className="empty-state">{t("wallets:transferEmpty")}</p>
         ) : (
-          <table>
-            <thead>
+          <Table>
+            <THead>
               <tr>
-                <th>{t("wallets:colTime")}</th>
-                <th>{t("wallets:colFromWallet")}</th>
-                <th>{t("wallets:colToWallet")}</th>
-                <th>{t("wallets:colAmount")}</th>
-                <th>{t("wallets:colNote")}</th>
-                <th></th>
+                <Th>{t("wallets:colTime")}</Th>
+                <Th>{t("wallets:colFromWallet")}</Th>
+                <Th>{t("wallets:colToWallet")}</Th>
+                <Th align="right">{t("wallets:colAmount")}</Th>
+                <Th>{t("wallets:colNote")}</Th>
+                <Th></Th>
               </tr>
-            </thead>
-            <tbody>
+            </THead>
+            <TBody>
               {transfers.map((tr) => {
                 const currency = wallets.find((w) => w.id === tr.fromWalletId)?.currency;
                 return (
                   <tr key={tr.id}>
-                    <td data-label={t("wallets:colTime")}>{tr.occurredAt.replace("T", " ").slice(0, 16)}</td>
-                    <td data-label={t("wallets:colFromWallet")}>{walletName(tr.fromWalletId)}</td>
-                    <td data-label={t("wallets:colToWallet")}>{walletName(tr.toWalletId)}</td>
-                    <td data-label={t("wallets:colAmount")}>
+                    <Td data-label={t("wallets:colTime")}>{tr.occurredAt.replace("T", " ").slice(0, 16)}</Td>
+                    <Td data-label={t("wallets:colFromWallet")}>{walletName(tr.fromWalletId)}</Td>
+                    <Td data-label={t("wallets:colToWallet")}>{walletName(tr.toWalletId)}</Td>
+                    <Td data-label={t("wallets:colAmount")} align="right">
                       <strong>{formatCurrency(tr.amount, currency)}</strong>
-                    </td>
-                    <td data-label={t("wallets:colNote")}>{tr.note || "-"}</td>
-                    <td className="row-actions">
+                    </Td>
+                    <Td data-label={t("wallets:colNote")}>{tr.note || "-"}</Td>
+                    <Td actions>
                       {canDeleteTransfer(tr) && (
                         <>
-                          <button
-                            type="button"
-                            className="icon-btn"
+                          <IconButton
                             onClick={() => startTransferEdit(tr)}
                             aria-label={t("common:edit")}
                           >
                             <EditIcon />
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-btn icon-btn-danger"
+                          </IconButton>
+                          <IconButton variant="danger"
                             onClick={() => handleTransferDelete(tr.id)}
                             aria-label={t("common:delete")}
                           >
                             <TrashIcon />
-                          </button>
+                          </IconButton>
                         </>
                       )}
-                    </td>
+                    </Td>
                   </tr>
                 );
               })}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         )}
         <Pagination pageData={transfersPage} onPageChange={setTransfersPage} />
       </div>

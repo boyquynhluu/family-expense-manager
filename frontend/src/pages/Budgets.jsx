@@ -2,13 +2,17 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
-import { AlertIcon, EditIcon, TrashIcon } from "../components/AppIcons";
 import AmountInput from "../components/AmountInput";
+import { AlertIcon, EditIcon, TrashIcon } from "../components/AppIcons";
 import Pagination from "../components/Pagination";
-import { confirmDialog } from "../utils/confirm";
-import { formatCurrency } from "../utils/format";
+import { Button, IconButton } from "../components/ui/Button";
+import { Field } from "../components/ui/Field";
+import { Input, Select } from "../components/ui/Input";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
+import { confirmDialog } from "../utils/confirm";
+import { formatCurrency, formatYearMonth } from "../utils/format";
+import { LIMITS } from "../utils/inputLimits";
 
 function currentYearMonth() {
   const now = new Date();
@@ -22,13 +26,33 @@ function previousYearMonth() {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function statusOf(spent, limit) {
+// Same rule as the budget e-mails (expense-service TransactionService#publishBudgetCrossing): only
+// spending strictly MORE than the limit is "over budget" — exactly the limit has reached it, not exceeded it.
+// Compared in whole cents (amounts are DECIMAL(18, 2)): the overall budget's spend is a client-side sum of
+// per-category totals, and float addition can land a hair above the limit (0.1 + 0.2 = 0.30000000000000004).
+function toCents(amount) {
+  return Math.round(Number(amount) * 100);
+}
+
+function statusOf(spentAmount, limitAmount) {
+  const spent = toCents(spentAmount);
+  const limit = toCents(limitAmount);
   if (limit <= 0) return "safe";
-  const percent = (spent / limit) * 100;
-  if (percent >= 100) return "danger";
-  if (percent >= 80) return "warning";
+  if (spent > limit) return "danger";
+  if (spent === limit) return "reached";
+  if (spent * 10 >= limit * 8) return "warning";
   return "safe";
 }
+
+const STATUS_LABEL_KEYS = {
+  danger: "budgets:statusDanger",
+  reached: "budgets:statusReached",
+  warning: "budgets:statusWarning",
+  safe: "budgets:statusSafe",
+};
+
+// "Reached" shares the amber warning look; only an actual overspend turns red.
+const STATUS_STYLE = { danger: "danger", reached: "warning", warning: "warning", safe: "safe" };
 
 export default function Budgets() {
   const { t } = useTranslation(["common", "budgets"]);
@@ -92,6 +116,9 @@ export default function Budgets() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    const confirmKey = editingId ? "budgets:updateConfirm" : "budgets:addConfirm";
+    const confirmVars = { amount: formatCurrency(Number(limitAmount)), month: formatYearMonth(periodMonth) };
+    if (!(await confirmDialog(t(confirmKey, confirmVars), { tone: "primary", icon: "question" }))) return;
     setError("");
     const payload = {
       categoryId: categoryId === "" ? null : Number(categoryId),
@@ -128,6 +155,7 @@ export default function Budgets() {
       toast.error(t("budgets:copySameMonth"));
       return;
     }
+    if (!(await confirmDialog(t("budgets:copyConfirm", { from: formatYearMonth(copyFrom), to: formatYearMonth(copyTo) }), { tone: "primary", icon: "question" }))) return;
     setCopying(true);
     try {
       const res = await client.post("/expenses/budgets/copy", { fromMonth: copyFrom, toMonth: copyTo });
@@ -166,36 +194,44 @@ export default function Budgets() {
           <div className="section-card">
             <h2>{editingId ? t("budgets:editTitle") : t("budgets:newTitle")}</h2>
             <form className="inline-form" onSubmit={handleSubmit}>
-              <label className="field">
+              <Field>
                 {t("budgets:categoryLabel")}
-                <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
                   <option value="">{t("budgets:overallOption")}</option>
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
                   ))}
-                </select>
-              </label>
-              <label className="field">
+                </Select>
+              </Field>
+              <Field>
                 <span>
                   {t("budgets:monthLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
-                <input type="month" value={periodMonth} onChange={(e) => setPeriodMonth(e.target.value)} required />
-              </label>
-              <label className="field">
+                <Input type="month" value={periodMonth} onChange={(e) => setPeriodMonth(e.target.value)} required />
+              </Field>
+              <Field>
                 <span>
                   {t("budgets:limitLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
-                <AmountInput placeholder="0" value={limitAmount} onChange={setLimitAmount} required />
-              </label>
-              <button type="submit">{editingId ? t("budgets:updateButton") : t("budgets:createButton")}</button>
+                <AmountInput
+                    placeholder="0"
+                    value={limitAmount}
+                    onChange={setLimitAmount}
+                    required
+                    positive
+                    min={LIMITS.minTransactionAmount}
+                    max={LIMITS.maxTransactionAmount}
+                />
+              </Field>
+              <Button type="submit">{editingId ? t("budgets:updateButton") : t("budgets:createButton")}</Button>
               {editingId && (
-                <button type="button" className="btn-secondary" onClick={cancelEdit}>
+                <Button variant="secondary" onClick={cancelEdit}>
                   {t("common:cancel")}
-                </button>
+                </Button>
               )}
             </form>
             {error && <p className="error-text">{error}</p>}
@@ -205,23 +241,29 @@ export default function Budgets() {
             <h2>{t("budgets:copyTitle")}</h2>
             <p className="page-header-subtitle">{t("budgets:copyHint")}</p>
             <form className="inline-form" onSubmit={handleCopy}>
-              <label className="field">
+              <Field>
                 <span>
                   {t("budgets:copyFromLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
-                <input type="month" value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)} required />
-              </label>
-              <label className="field">
+                <Input type="month" value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)} required />
+              </Field>
+              <Field>
                 <span>
                   {t("budgets:copyToLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
-                <input type="month" value={copyTo} onChange={(e) => setCopyTo(e.target.value)} required />
-              </label>
-              <button type="submit" disabled={copying}>
+                <Input
+                  type="month"
+                  value={copyTo}
+                  onChange={(e) => setCopyTo(e.target.value)}
+                  required
+                  validate={(v) => (v && v === copyFrom ? t("validation:monthsMustDiffer") : "")}
+                />
+              </Field>
+              <Button type="submit" disabled={copying}>
                 {t("budgets:copyButton")}
-              </button>
+              </Button>
             </form>
           </div>
         </>
@@ -249,40 +291,32 @@ export default function Budgets() {
                       <span className="budget-month">{b.periodMonth}</span>
                     </span>
                     <span className="category-row-amount">
-                      <span className={`badge budget-badge-${status}`}>
+                      <span className={`badge budget-badge-${STATUS_STYLE[status]}`}>
                         {status === "danger" && <AlertIcon />}
-                        {status === "danger"
-                          ? t("budgets:statusDanger")
-                          : status === "warning"
-                            ? t("budgets:statusWarning")
-                            : t("budgets:statusSafe")}
+                        {t(STATUS_LABEL_KEYS[status])}
                       </span>
                       {formatCurrency(spent)} / {formatCurrency(b.limitAmount)}
                       {isOwner && (
                         <span className="row-actions">
-                          <button
-                            type="button"
-                            className="icon-btn"
+                          <IconButton
                             onClick={() => startEdit(b)}
                             aria-label={t("common:edit")}
                           >
                             <EditIcon />
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-btn icon-btn-danger"
+                          </IconButton>
+                          <IconButton variant="danger"
                             onClick={() => handleDelete(b.id)}
                             aria-label={t("common:delete")}
                           >
                             <TrashIcon />
-                          </button>
+                          </IconButton>
                         </span>
                       )}
                     </span>
                   </div>
                   <div className="category-bar-track">
                     <div
-                      className={`category-bar-fill budget-bar-${status}`}
+                      className={`category-bar-fill budget-bar-${STATUS_STYLE[status]}`}
                       style={{ width: `${Math.min(percent, 100)}%` }}
                     />
                   </div>

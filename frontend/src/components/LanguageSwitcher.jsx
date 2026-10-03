@@ -20,17 +20,22 @@ export default function LanguageSwitcher({ variant }) {
       role="group"
       aria-label={t("language")}
     >
-      {LANGUAGES.map((lang) => (
-        <button
-          key={lang.code}
-          type="button"
-          className={`language-toggle-btn${i18n.language === lang.code ? " is-active" : ""}`}
-          onClick={() => i18n.changeLanguage(lang.code)}
-          aria-pressed={i18n.language === lang.code}
-        >
-          {lang.label}
-        </button>
-      ))}
+      {LANGUAGES.map((lang) => {
+        const active = i18n.language === lang.code;
+        return (
+          <button
+            key={lang.code}
+            type="button"
+            className={`cursor-pointer rounded-full border-0 px-4 py-1.5 text-[0.72rem] font-bold tracking-wide font-[inherit] transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 ${
+              active ? "bg-indigo-600 text-white shadow-sm" : "bg-transparent text-slate-400 hover:text-slate-100"
+            }`}
+            onClick={() => i18n.changeLanguage(lang.code)}
+            aria-pressed={active}
+          >
+            {lang.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

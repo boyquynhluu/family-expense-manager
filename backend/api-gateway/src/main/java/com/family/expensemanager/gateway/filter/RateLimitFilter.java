@@ -24,6 +24,8 @@ import lombok.extern.slf4j.Slf4j;
  * infra/docker-compose.yml). If the gateway is ever scaled to multiple instances,
  * this would need a shared store (e.g. Redis, already used by expense-service) so
  * limits are enforced consistently across instances.
+ *
+ * @author boyquynhluu
  */
 @Component
 @Slf4j(topic = "RateLimitFilter")
@@ -34,6 +36,8 @@ public class RateLimitFilter extends OncePerRequestFilter implements Ordered {
 
     private static final List<Rule> RULES = List.of(
             new Rule("POST", "/api/auth/login", 10, 60_000),
+            // Second login step: a 6-digit code is guessable, so cap attempts per IP on top of the per-account lockout.
+            new Rule("POST", "/api/auth/2fa/verify-login", 10, 60_000),
             new Rule("POST", "/api/auth/register", 5, 60_000),
             new Rule("POST", "/api/auth/resend-verification", 3, 60_000),
             new Rule("POST", "/api/auth/forgot-password", 5, 60_000),

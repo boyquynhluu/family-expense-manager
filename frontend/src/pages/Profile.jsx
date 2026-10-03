@@ -7,12 +7,20 @@ import client from "../api/client";
 import { LogoutIcon, TrashIcon } from "../components/AppIcons";
 import { EyeIcon, EyeOffIcon } from "../components/AuthIcons";
 import Pagination from "../components/Pagination";
+import TwoFactorSetupModal from "../components/TwoFactorSetupModal";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
 import { formatServerDateTime, truncate } from "../utils/format";
+import { LIMITS } from "../utils/inputLimits";
 import { clearTokens } from "../utils/tokenStorage";
 
+import { Button, IconButton } from "../components/ui/Button";
+import { Field } from "../components/ui/Field";
+import { Input, Select } from "../components/ui/Input";
+import { Table, TBody, Td, Th, THead } from "../components/ui/Table";
+import { formatPhone, isValidPhone, normalizePhone } from "../utils/phone";
+import { useCleanText } from "../utils/textQuality";
 // The stored value is always this fixed Vietnamese word regardless of UI language —
 // only the displayed label is translated (see relationshipLabelFor below) — otherwise
 // switching languages would change what gets saved to the DB and orphan existing data
@@ -81,43 +89,39 @@ function PendingInvitesSection({ reloadSignal }) {
       {invites.length === 0 ? (
         <p className="empty-state">{t("noPendingInvites")}</p>
       ) : (
-        <table>
-          <thead>
+        <Table>
+          <THead>
             <tr>
-              <th>{t("emailLabel")}</th>
-              <th>{t("invitedAtHeader")}</th>
-              <th>{t("expiresAtHeader")}</th>
-              <th></th>
+              <Th>{t("emailLabel")}</Th>
+              <Th>{t("invitedAtHeader")}</Th>
+              <Th>{t("expiresAtHeader")}</Th>
+              <Th></Th>
             </tr>
-          </thead>
-          <tbody>
+          </THead>
+          <TBody>
             {invites.map((invite) => (
               <tr key={invite.id}>
-                <td data-label={t("emailLabel")}>{invite.email}</td>
-                <td data-label={t("invitedAtHeader")}>{formatServerDateTime(invite.createdAt)}</td>
-                <td data-label={t("expiresAtHeader")}>{formatServerDateTime(invite.expiresAt)}</td>
-                <td className="row-actions">
-                  <button
-                    type="button"
-                    className="btn-secondary"
+                <Td data-label={t("emailLabel")}>{invite.email}</Td>
+                <Td data-label={t("invitedAtHeader")}>{formatServerDateTime(invite.createdAt)}</Td>
+                <Td data-label={t("expiresAtHeader")}>{formatServerDateTime(invite.expiresAt)}</Td>
+                <Td actions>
+                  <Button variant="secondary" size="sm"
                     onClick={() => handleResendInvite(invite)}
                     disabled={busyInviteId === invite.id}
                   >
                     {t("resendInviteButton")}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary"
+                  </Button>
+                  <Button variant="danger-outline" size="sm"
                     onClick={() => handleCancelInvite(invite)}
                     disabled={busyInviteId === invite.id}
                   >
                     {t("cancelInviteButton")}
-                  </button>
-                </td>
+                  </Button>
+                </Td>
               </tr>
             ))}
-          </tbody>
-        </table>
+          </TBody>
+        </Table>
       )}
       <Pagination pageData={pageData} onPageChange={setPage} />
     </div>
@@ -126,6 +130,7 @@ function PendingInvitesSection({ reloadSignal }) {
 
 export default function Profile() {
   const { t } = useTranslation(["profile", "common"]);
+  const cleanText = useCleanText();
   const { familyId, loginWithTokens } = useAuth();
 
   function relationshipLabelFor(value) {
@@ -136,6 +141,8 @@ export default function Profile() {
   const [profile, setProfile] = useState(null);
   const [displayName, setDisplayName] = useState("");
   const [relationship, setRelationship] = useState("");
+  // Login phone number, shown as "0912 345 678"; empty removes it.
+  const [phone, setPhone] = useState("");
   const [profileError, setProfileError] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
@@ -143,6 +150,8 @@ export default function Profile() {
   const [newPassword, setNewPassword] = useState("");
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showEmailCredential, setShowEmailCredential] = useState(false);
+  const [showDeleteCredential, setShowDeleteCredential] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
 
@@ -164,6 +173,7 @@ export default function Profile() {
   const [twoFactorCode, setTwoFactorCode] = useState("");
   const [twoFactorError, setTwoFactorError] = useState("");
   const [confirmingTwoFactor, setConfirmingTwoFactor] = useState(false);
+  const [startingTwoFactor, setStartingTwoFactor] = useState(false);
   const [recoveryCodes, setRecoveryCodes] = useState(null);
   const [disablingTwoFactor, setDisablingTwoFactor] = useState(false);
   const [disablePassword, setDisablePassword] = useState("");
@@ -187,6 +197,7 @@ export default function Profile() {
       setProfile(res.data.data);
       setDisplayName(res.data.data.displayName);
       setRelationship(res.data.data.relationship ?? "");
+      setPhone(formatPhone(res.data.data.phone));
     });
   }, []);
 
@@ -223,6 +234,7 @@ export default function Profile() {
   }
 
   async function handleStartTwoFactorSetup() {
+    setStartingTwoFactor(true);
     try {
       const res = await client.post("/auth/2fa/setup");
       const { secret, otpAuthUri } = res.data.data;
@@ -232,6 +244,8 @@ export default function Profile() {
       setTwoFactorError("");
     } catch (err) {
       toast.error(err.response?.data?.message || t("twoFactorSetupStartFailed"));
+    } finally {
+      setStartingTwoFactor(false);
     }
   }
 
@@ -253,6 +267,7 @@ export default function Profile() {
 
   async function handleDisableTwoFactor(e) {
     e.preventDefault();
+    if (!(await confirmDialog(t("disableTwoFactorConfirm"), { tone: "warning" }))) return;
     setDisableError("");
     setSavingTwoFactor(true);
     try {
@@ -288,6 +303,7 @@ export default function Profile() {
 
   async function handleRenameFamily(e) {
     e.preventDefault();
+    if (!(await confirmDialog(t("renameFamilyConfirm", { name: familyName.trim() }), { tone: "primary", icon: "question" }))) return;
     setRenamingFamily(true);
     try {
       const res = await client.put("/auth/family", { name: familyName.trim() });
@@ -301,7 +317,9 @@ export default function Profile() {
   }
 
   async function handleTransferOwnership(member) {
-    if (!(await confirmDialog(t("transferOwnershipConfirm", { name: member.displayName })))) return;
+    if (!(await confirmDialog(t("transferOwnershipConfirm", { name: member.displayName }), { tone: "warning" }))) {
+      return;
+    }
     try {
       const res = await client.post("/auth/family/transfer-ownership", { userId: member.id });
       // The role claim in the old token would still say OWNER, so swap in the fresh tokens.
@@ -316,7 +334,7 @@ export default function Profile() {
   }
 
   async function handleLeaveFamily() {
-    if (!(await confirmDialog(t("leaveFamilyConfirm")))) return;
+    if (!(await confirmDialog(t("leaveFamilyConfirm"), { tone: "warning" }))) return;
     setLeavingFamily(true);
     try {
       const res = await client.post("/auth/family/leave");
@@ -331,6 +349,7 @@ export default function Profile() {
 
   async function handleInviteSubmit(e) {
     e.preventDefault();
+    if (!(await confirmDialog(t("inviteConfirm", { email: inviteEmail.trim() }), { tone: "primary", icon: "question" }))) return;
     setInviteError("");
     setInviting(true);
     try {
@@ -347,11 +366,17 @@ export default function Profile() {
 
   async function handleProfileSubmit(e) {
     e.preventDefault();
+    if (!(await confirmDialog(t("profileUpdateConfirm"), { tone: "primary", icon: "question" }))) return;
     setProfileError("");
     setSavingProfile(true);
     try {
-      const res = await client.put("/auth/me", { displayName, relationship: relationship || null });
+      const res = await client.put("/auth/me", {
+        displayName,
+        relationship: relationship || null,
+        phone: normalizePhone(phone),
+      });
       setProfile(res.data.data);
+      setPhone(formatPhone(res.data.data.phone));
       loadMembers();
       toast.success(t("profileUpdateSuccess"));
     } catch (err) {
@@ -363,6 +388,7 @@ export default function Profile() {
 
   async function handlePasswordSubmit(e) {
     e.preventDefault();
+    if (!(await confirmDialog(t("passwordChangeConfirm"), { tone: "warning" }))) return;
     setPasswordError("");
     setSavingPassword(true);
     try {
@@ -380,6 +406,7 @@ export default function Profile() {
 
   async function handleChangeEmailSubmit(e) {
     e.preventDefault();
+    if (!(await confirmDialog(t("changeEmailConfirm", { email: newEmail.trim() }), { tone: "warning" }))) return;
     setEmailError("");
     setChangingEmail(true);
     try {
@@ -447,36 +474,48 @@ export default function Profile() {
     return hasPassword ? { password: value } : { code: value };
   }
 
-  function renderCredentialField(value, onChange) {
+  function renderCredentialField(value, onChange, showValue, setShowValue) {
     return hasPassword ? (
-      <label className="field">
+      <Field>
         <span>
           {t("currentPasswordLabel")}
           <span className="required-mark" aria-hidden="true"> *</span>
         </span>
-        <input
-          type="password"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          autoComplete="current-password"
-          required
-        />
-      </label>
+        <div className="password-field-wrapper">
+          <Input
+            type={showValue ? "text" : "password"}
+            value={value}
+            maxLength={LIMITS.password}
+            onChange={(e) => onChange(e.target.value)}
+            autoComplete="current-password"
+            required
+          />
+          <IconButton variant="bare" className="password-toggle-btn"
+            onClick={() => setShowValue((v) => !v)}
+            aria-label={showValue ? t("hidePassword") : t("showPassword")}
+          >
+            {showValue ? <EyeOffIcon /> : <EyeIcon />}
+          </IconButton>
+        </div>
+      </Field>
     ) : (
-      <label className="field">
+      <Field>
         <span>
           {t("verificationCodeLabel")}
           <span className="required-mark" aria-hidden="true"> *</span>
         </span>
-        <input
+        <Input
           value={value}
+          maxLength={LIMITS.totpCode}
           onChange={(e) => onChange(e.target.value)}
           placeholder={t("sixDigitCodePlaceholder")}
           inputMode="numeric"
           autoComplete="one-time-code"
           required
+          pattern={`[0-9]{${LIMITS.totpCode}}`}
+          messages={{ patternMismatch: t("validation:codeDigits", { count: LIMITS.totpCode }) }}
         />
-      </label>
+      </Field>
     );
   }
 
@@ -492,35 +531,47 @@ export default function Profile() {
       <div className="section-card">
         <h2>{t("personalInfoTitle")}</h2>
         <form className="inline-form" onSubmit={handleProfileSubmit}>
-          <label className="field">
+          <Field>
             {t("emailLabel")}
-            <input value={profile.email} disabled />
-          </label>
-          <label className="field">
+            <Input value={profile.email} disabled />
+          </Field>
+          <Field>
             <span>
               {t("displayNameLabel")}
               <span className="required-mark" aria-hidden="true"> *</span>
             </span>
-            <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
-          </label>
-          <label className="field">
+            <Input value={displayName} validate={cleanText} maxLength={LIMITS.displayName} onChange={(e) => setDisplayName(e.target.value)} required />
+          </Field>
+          <Field>
+            {t("phoneLabel")}
+            <Input
+              type="tel"
+              autoComplete="tel"
+              value={phone}
+              maxLength={LIMITS.phone}
+              onChange={(e) => setPhone(e.target.value)}
+              validate={(v) => (v.trim() && !isValidPhone(v) ? t("validation:phoneInvalid") : "")}
+              placeholder={t("phonePlaceholder")}
+            />
+          </Field>
+          <Field>
             {t("relationshipLabel")}
-            <select value={relationship} onChange={(e) => setRelationship(e.target.value)}>
+            <Select value={relationship} onChange={(e) => setRelationship(e.target.value)}>
               <option value="">{t("relationshipNone")}</option>
               {RELATIONSHIP_OPTIONS.map(([value, key]) => (
                 <option key={value} value={value}>
                   {t(key)}
                 </option>
               ))}
-            </select>
-          </label>
-          <label className="field">
+            </Select>
+          </Field>
+          <Field>
             {t("roleLabel")}
-            <input value={profile.role} disabled />
-          </label>
-          <button type="submit" disabled={savingProfile}>
+            <Input value={profile.role} disabled />
+          </Field>
+          <Button type="submit" disabled={savingProfile}>
             {savingProfile ? t("common:saving") : t("saveChanges")}
-          </button>
+          </Button>
         </form>
         {profileError && <p className="error-text">{profileError}</p>}
       </div>
@@ -533,54 +584,52 @@ export default function Profile() {
           </p>
         ) : (
           <form className="inline-form" onSubmit={handlePasswordSubmit}>
-            <label className="field">
+            <Field>
               <span>
                 {t("currentPasswordLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
               <div className="password-field-wrapper">
-                <input
+                <Input
                   type={showCurrentPassword ? "text" : "password"}
                   value={currentPassword}
+                  maxLength={LIMITS.password}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   required
                 />
-                <button
-                  type="button"
-                  className="password-toggle-btn"
+                <IconButton variant="bare" className="password-toggle-btn"
                   onClick={() => setShowCurrentPassword((v) => !v)}
                   aria-label={showCurrentPassword ? t("hidePassword") : t("showPassword")}
                 >
                   {showCurrentPassword ? <EyeOffIcon /> : <EyeIcon />}
-                </button>
+                </IconButton>
               </div>
-            </label>
-            <label className="field">
+            </Field>
+            <Field>
               <span>
                 {t("newPasswordLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
               <div className="password-field-wrapper">
-                <input
+                <Input
                   type={showNewPassword ? "text" : "password"}
                   value={newPassword}
+                  minLength={LIMITS.newPasswordMin}
+                  maxLength={LIMITS.newPasswordMax}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  minLength={8}
                   required
                 />
-                <button
-                  type="button"
-                  className="password-toggle-btn"
+                <IconButton variant="bare" className="password-toggle-btn"
                   onClick={() => setShowNewPassword((v) => !v)}
                   aria-label={showNewPassword ? t("hidePassword") : t("showPassword")}
                 >
                   {showNewPassword ? <EyeOffIcon /> : <EyeIcon />}
-                </button>
+                </IconButton>
               </div>
-            </label>
-            <button type="submit" disabled={savingPassword}>
+            </Field>
+            <Button type="submit" disabled={savingPassword}>
               {savingPassword ? t("common:saving") : t("changePasswordButton")}
-            </button>
+            </Button>
           </form>
         )}
         {passwordError && <p className="error-text">{passwordError}</p>}
@@ -593,23 +642,24 @@ export default function Profile() {
           <p className="empty-state">{t("reauthNeedsTwoFactor", { provider: profile.provider })}</p>
         ) : (
           <form className="inline-form" onSubmit={handleChangeEmailSubmit}>
-            <label className="field">
+            <Field>
               <span>
                 {t("newEmailLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <input
+              <Input
                 type="email"
                 value={newEmail}
+                maxLength={LIMITS.email}
                 onChange={(e) => setNewEmail(e.target.value)}
                 placeholder={t("emailPlaceholderExample")}
                 required
               />
-            </label>
-            {renderCredentialField(emailCredential, setEmailCredential)}
-            <button type="submit" disabled={changingEmail}>
+            </Field>
+            {renderCredentialField(emailCredential, setEmailCredential, showEmailCredential, setShowEmailCredential)}
+            <Button type="submit" disabled={changingEmail}>
               {changingEmail ? t("sendingChangeEmail") : t("changeEmailButton")}
-            </button>
+            </Button>
           </form>
         )}
         {emailError && <p className="error-text">{emailError}</p>}
@@ -619,72 +669,70 @@ export default function Profile() {
         <h2>{t("familyMembersTitle")}</h2>
         {profile.role === "OWNER" && (
           <form className="inline-form" onSubmit={handleRenameFamily}>
-            <label className="field">
+            <Field>
               <span>
                 {t("familyNameLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <input value={familyName} onChange={(e) => setFamilyName(e.target.value)} maxLength={100} required />
-            </label>
-            <button type="submit" disabled={renamingFamily || !familyName.trim()}>
+              <Input value={familyName} validate={cleanText} onChange={(e) => setFamilyName(e.target.value)} maxLength={LIMITS.familyName} required />
+            </Field>
+            <Button type="submit" disabled={renamingFamily || !familyName.trim()}>
               {renamingFamily ? t("common:saving") : t("renameFamilyButton")}
-            </button>
+            </Button>
           </form>
         )}
         {members.length === 0 ? (
           <p className="empty-state">{t("noMembers")}</p>
         ) : (
-          <table>
-            <thead>
+          <Table>
+            <THead>
               <tr>
-                <th>{t("displayNameLabel")}</th>
-                <th>{t("emailLabel")}</th>
-                <th>{t("roleLabel")}</th>
-                <th>{t("relationshipColumnHeader")}</th>
-                {profile.role === "OWNER" && <th></th>}
+                <Th>{t("displayNameLabel")}</Th>
+                <Th>{t("emailLabel")}</Th>
+                <Th>{t("roleLabel")}</Th>
+                <Th>{t("relationshipColumnHeader")}</Th>
+                {profile.role === "OWNER" && <Th></Th>}
               </tr>
-            </thead>
-            <tbody>
+            </THead>
+            <TBody>
               {members.map((m) => (
                 <tr key={m.id}>
-                  <td data-label={t("displayNameLabel")}>{m.displayName}</td>
-                  <td data-label={t("emailLabel")}>{m.email}</td>
-                  <td data-label={t("roleLabel")}>{m.role}</td>
-                  <td data-label={t("relationshipColumnHeader")}>
+                  <Td data-label={t("displayNameLabel")}>{m.displayName}</Td>
+                  <Td data-label={t("emailLabel")}>{m.email}</Td>
+                  <Td data-label={t("roleLabel")}>{m.role}</Td>
+                  <Td data-label={t("relationshipColumnHeader")}>
                     {m.relationship ? relationshipLabelFor(m.relationship) : t("notAvailable")}
-                  </td>
+                  </Td>
                   {profile.role === "OWNER" && (
-                    <td className="row-actions">
+                    <Td actions>
                       {m.role !== "OWNER" && (
                         <>
-                          <button type="button" className="btn-secondary" onClick={() => handleTransferOwnership(m)}>
+                          <Button variant="warning-outline" size="sm" onClick={() => handleTransferOwnership(m)}>
                             {t("transferOwnershipButton")}
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-btn icon-btn-danger"
+                          </Button>
+                          <IconButton variant="danger"
                             onClick={() => handleRemoveMember(m)}
                             aria-label={t("common:delete")}
                           >
                             <TrashIcon />
-                          </button>
+                          </IconButton>
                         </>
                       )}
-                    </td>
+                    </Td>
                   )}
                 </tr>
               ))}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         )}
         <Pagination pageData={membersPage} onPageChange={setMembersPage} />
 
         {profile.role !== "OWNER" && (
           <div className="leave-family-action">
-            <button type="button" className="btn-outline-warning" onClick={handleLeaveFamily} disabled={leavingFamily}>
+            <Button variant="warning-outline" onClick={handleLeaveFamily} disabled={leavingFamily}>
               <LogoutIcon />
               {leavingFamily ? t("common:saving") : t("leaveFamilyButton")}
-            </button>
+            </Button>
           </div>
         )}
 
@@ -692,22 +740,23 @@ export default function Profile() {
           <>
             <h3>{t("inviteMemberTitle")}</h3>
             <form className="inline-form" onSubmit={handleInviteSubmit}>
-              <label className="field">
+              <Field>
                 <span>
                   {t("emailLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
-                <input
+                <Input
                   type="email"
                   value={inviteEmail}
+                  maxLength={LIMITS.email}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   placeholder={t("emailPlaceholderExample")}
                   required
                 />
-              </label>
-              <button type="submit" disabled={inviting}>
+              </Field>
+              <Button type="submit" disabled={inviting}>
                 {inviting ? t("sendingInvite") : t("sendInviteButton")}
-              </button>
+              </Button>
             </form>
             {inviteError && <p className="error-text">{inviteError}</p>}
           </>
@@ -717,53 +766,54 @@ export default function Profile() {
       {profile.role === "OWNER" && <PendingInvitesSection reloadSignal={invitesReloadSignal} />}
 
       <div className="section-card">
-        <h2>{t("sessionsTitle")}</h2>
+        {/* Title on the left, "log out other devices" on the right edge, above the table. */}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 [&>h2]:mb-0">
+          <h2>{t("sessionsTitle")}</h2>
+          {(sessionsPage.totalElements > 1 || sessions.some((s) => !s.isCurrent)) && (
+            <Button variant="danger-outline" onClick={handleRevokeOtherSessions} disabled={revokingOthers}>
+              {revokingOthers ? t("revokingOthersLoading") : t("revokeOtherSessionsButton")}
+            </Button>
+          )}
+        </div>
         {sessions.length === 0 ? (
           <p className="empty-state">{t("noSessions")}</p>
         ) : (
-          <table>
-            <thead>
+          <Table>
+            <THead>
               <tr>
-                <th>{t("deviceHeader")}</th>
-                <th>{t("ipAddressHeader")}</th>
-                <th>{t("loginAtHeader")}</th>
-                <th>{t("lastActiveHeader")}</th>
-                <th></th>
+                <Th>{t("deviceHeader")}</Th>
+                <Th>{t("ipAddressHeader")}</Th>
+                <Th>{t("loginAtHeader")}</Th>
+                <Th>{t("lastActiveHeader")}</Th>
+                <Th></Th>
               </tr>
-            </thead>
-            <tbody>
+            </THead>
+            <TBody>
               {sessions.map((s) => (
                 <tr key={s.id}>
-                  <td data-label={t("deviceHeader")} title={s.deviceInfo || undefined}>
+                  <Td data-label={t("deviceHeader")} title={s.deviceInfo || undefined}>
                     {truncate(s.deviceInfo, 50) || t("unknownDevice")}
                     {s.isCurrent && <span className="badge">{t("currentSessionBadge")}</span>}
-                  </td>
-                  <td data-label={t("ipAddressHeader")}>{s.ipAddress || t("notAvailable")}</td>
-                  <td data-label={t("loginAtHeader")}>{formatDateTime(s.createdAt)}</td>
-                  <td data-label={t("lastActiveHeader")}>{formatDateTime(s.lastUsedAt)}</td>
-                  <td className="row-actions">
+                  </Td>
+                  <Td data-label={t("ipAddressHeader")}>{s.ipAddress || t("notAvailable")}</Td>
+                  <Td data-label={t("loginAtHeader")}>{formatDateTime(s.createdAt)}</Td>
+                  <Td data-label={t("lastActiveHeader")}>{formatDateTime(s.lastUsedAt)}</Td>
+                  <Td actions>
                     {!s.isCurrent && (
-                      <button
-                        type="button"
-                        className="icon-btn icon-btn-danger"
+                      <IconButton variant="danger"
                         onClick={() => handleRevokeSession(s)}
                         aria-label={t("revokeSessionAriaLabel")}
                       >
                         <TrashIcon />
-                      </button>
+                      </IconButton>
                     )}
-                  </td>
+                  </Td>
                 </tr>
               ))}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         )}
         <Pagination pageData={sessionsPage} onPageChange={setSessionsPage} />
-        {(sessionsPage.totalElements > 1 || sessions.some((s) => !s.isCurrent)) && (
-          <button type="button" onClick={handleRevokeOtherSessions} disabled={revokingOthers}>
-            {revokingOthers ? t("revokingOthersLoading") : t("revokeOtherSessionsButton")}
-          </button>
-        )}
       </div>
 
       <div className="section-card">
@@ -781,87 +831,70 @@ export default function Profile() {
                 </li>
               ))}
             </ul>
-            <button type="button" onClick={() => setRecoveryCodes(null)}>
+            <Button onClick={() => setRecoveryCodes(null)}>
               {t("recoveryCodesSavedButton")}
-            </button>
+            </Button>
           </>
-        ) : twoFactorSetup ? (
-          <form className="inline-form" onSubmit={handleConfirmTwoFactor}>
-            <p>{t("scanQrNotice")}</p>
-            <img src={twoFactorSetup.qrDataUrl} alt={t("qrCodeAlt")} width={200} height={200} />
-            <p>
-              {t("secretKeyLabel")} <code>{twoFactorSetup.secret}</code>
-            </p>
-            <label className="field">
-              <span>
-                {t("verificationCodeLabel")}
-                <span className="required-mark" aria-hidden="true"> *</span>
-              </span>
-              <input
-                value={twoFactorCode}
-                onChange={(e) => setTwoFactorCode(e.target.value)}
-                placeholder={t("sixDigitCodePlaceholder")}
-                autoFocus
-                required
-              />
-            </label>
-            <button type="submit" disabled={confirmingTwoFactor}>
-              {confirmingTwoFactor ? t("confirmingTwoFactorLoading") : t("confirmAndEnableButton")}
-            </button>
-            <button type="button" onClick={() => setTwoFactorSetup(null)}>
-              {t("common:cancel")}
-            </button>
-            {twoFactorError && <p className="error-text">{twoFactorError}</p>}
-          </form>
         ) : profile.totpEnabled ? (
           disablingTwoFactor ? (
             <form className="inline-form" onSubmit={handleDisableTwoFactor}>
-              <label className="field">
+              <Field>
                 <span>
                   {hasPassword ? t("confirmDisablePasswordLabel") : t("confirmDisableCodeLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
-                <input
+                <Input
                   type={hasPassword ? "password" : "text"}
                   value={disablePassword}
+                  maxLength={hasPassword ? LIMITS.password : LIMITS.twoFactorCode}
                   onChange={(e) => setDisablePassword(e.target.value)}
                   placeholder={hasPassword ? undefined : t("codeOrRecoveryPlaceholder")}
                   autoComplete={hasPassword ? "current-password" : "one-time-code"}
                   required
                 />
-              </label>
-              <button type="submit" disabled={savingTwoFactor}>
+              </Field>
+              <Button variant="danger" type="submit" disabled={savingTwoFactor}>
                 {savingTwoFactor ? t("disablingTwoFactorLoading") : t("confirmDisableButton")}
-              </button>
-              <button type="button" onClick={() => setDisablingTwoFactor(false)}>
+              </Button>
+              <Button variant="secondary" onClick={() => setDisablingTwoFactor(false)}>
                 {t("common:cancel")}
-              </button>
+              </Button>
               {disableError && <p className="error-text">{disableError}</p>}
             </form>
           ) : (
             <>
               <p>{t("twoFactorStatusPrefix")} <strong>{t("enabledWord")}</strong> {t("twoFactorStatusEnabledSuffix")}</p>
-              <button type="button" onClick={() => setDisablingTwoFactor(true)}>
+              <Button variant="danger-outline" onClick={() => setDisablingTwoFactor(true)}>
                 {t("disableTwoFactorButton")}
-              </button>
+              </Button>
             </>
           )
         ) : (
           <>
             <p>{t("twoFactorStatusPrefix")} <strong>{t("disabledWord")}</strong> {t("twoFactorStatusDisabledSuffix")}</p>
-            <button type="button" onClick={handleStartTwoFactorSetup}>
-              {t("enableTwoFactorButton")}
-            </button>
+            <Button onClick={handleStartTwoFactorSetup} disabled={startingTwoFactor}>
+              {startingTwoFactor ? t("startingTwoFactorLoading") : t("enableTwoFactorButton")}
+            </Button>
           </>
         )}
       </div>
 
+      <TwoFactorSetupModal
+        setup={twoFactorSetup}
+        code={twoFactorCode}
+        onCodeChange={setTwoFactorCode}
+        onSubmit={handleConfirmTwoFactor}
+        onClose={() => setTwoFactorSetup(null)}
+        confirming={confirmingTwoFactor}
+        error={twoFactorError}
+      />
+
       <div className="section-card">
         <h2>{t("exportDataTitle")}</h2>
         <p>{t("exportDataNotice")}</p>
-        <button type="button" onClick={handleExportData} disabled={exporting}>
+        <Button variant="secondary" onClick={handleExportData} disabled={exporting}>
           {exporting ? t("exportingData") : t("exportDataButton")}
-        </button>
+        </Button>
       </div>
 
       <div className="section-card">
@@ -871,10 +904,10 @@ export default function Profile() {
           <p className="empty-state">{t("reauthNeedsTwoFactor", { provider: profile.provider })}</p>
         ) : (
           <form className="inline-form" onSubmit={handleDeleteAccount}>
-            {renderCredentialField(deleteCredential, setDeleteCredential)}
-            <button type="submit" disabled={deletingAccount} style={{ background: "#dc2626" }}>
+            {renderCredentialField(deleteCredential, setDeleteCredential, showDeleteCredential, setShowDeleteCredential)}
+            <Button variant="danger" type="submit" disabled={deletingAccount}>
               {deletingAccount ? t("deletingAccountLoading") : t("deleteAccountButton")}
-            </button>
+            </Button>
           </form>
         )}
         {deleteError && <p className="error-text">{deleteError}</p>}

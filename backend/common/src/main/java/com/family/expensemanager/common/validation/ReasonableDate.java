@@ -12,6 +12,8 @@ import jakarta.validation.Payload;
 /**
  * A date/date-time that isn't absurd: not before {@value ReasonableDateValidator#MIN_YEAR}-01-01 and not more
  * than {@link #maxYearsAhead()} years after today. Works on {@code LocalDate} and {@code LocalDateTime}.
+ *
+ * @author boyquynhluu
  */
 @Documented
 @Constraint(validatedBy = {ReasonableDateValidator.ForLocalDate.class, ReasonableDateValidator.ForLocalDateTime.class})

@@ -21,6 +21,8 @@ import static org.springframework.web.servlet.function.RequestPredicates.path;
  * see README "Bảo mật" / auth-service, expense-service, notification-service
  * controllers, which all listen on the same {@code /api/<service>/...} paths for that
  * reason.
+ *
+ * @author boyquynhluu
  */
 @Configuration
 public class GatewayRoutesConfig {

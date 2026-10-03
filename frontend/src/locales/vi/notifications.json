@@ -4,6 +4,7 @@
   "listTitle": "Danh sách thông báo",
   "unreadBadge": "{{count}} chưa đọc",
   "markAllReadButton": "Đánh dấu tất cả đã đọc",
+  "makeAllReadConfirm": "Bạn muốn đánh dấu tất đã đọc",
   "noNotifications": "Chưa có thông báo nào",
   "loadFailed": "Không tải được thông báo",
   "markReadFailed": "Không đánh dấu được thông báo đã đọc",
@@ -30,6 +31,11 @@
     "MEMBER_JOINED": "Thành viên mới tham gia",
     "MEMBER_LEFT": "Thành viên rời gia đình",
     "MEMBER_REMOVED": "Thành viên bị xoá khỏi gia đình",
-    "WALLET_TRANSFERRED": "Chuyển tiền giữa các ví"
-  }
+    "WALLET_TRANSFERRED": "Chuyển tiền giữa các ví",
+    "EXPENSE_DELETED": "Giao dịch bị xoá",
+    "TRANSFER_REQUESTED": "Yêu cầu chuyển tiền",
+    "TRANSFER_REQUEST_APPROVED": "Yêu cầu chuyển tiền được duyệt",
+    "TRANSFER_REQUEST_REJECTED": "Yêu cầu chuyển tiền bị từ chối"
+  },
+  "savePreferencesConfirm": "Lưu tuỳ chọn thông báo?"
 }

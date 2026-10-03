@@ -33,6 +33,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * @author boyquynhluu
+ */
 @ExtendWith(MockitoExtension.class)
 class ExpenseEventListenerTest {
 
@@ -83,6 +86,57 @@ class ExpenseEventListenerTest {
                 .isEqualTo("Đã ghi giao dịch định kỳ \"Tiền nhà\" (Nhà ở) 5,000,000 vào ngày 01/02/2026");
         assertThat(saved.getPayloadJson()).contains("RECURRING_EXECUTED");
         verify(mailSender, never()).createMimeMessage();
+    }
+
+    @Test
+    void onExpenseEvent_recordsWhoDeletedWhat_whenOneTransactionDeleted() throws Exception {
+        listener.onExpenseEvent(new ExpenseEvent(
+                ExpenseEvent.EXPENSE_DELETED, 1L, 10L, 55L, 7L, new BigDecimal("150000"), null, null, null, null,
+                null, "An", Instant.now(), LocalDate.of(2026, 9, 12), "Tiền chợ", null, null, 1));
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(notificationCaptor.capture());
+        Notification saved = notificationCaptor.getValue();
+        assertThat(saved.getType()).isEqualTo(ExpenseEvent.EXPENSE_DELETED);
+        assertThat(saved.getTitle()).isEqualTo("Giao dịch đã bị xoá");
+        assertThat(saved.getMessage()).isEqualTo(
+                "An đã xoá giao dịch 150,000 vào ngày 12/09/2026 \"Tiền chợ\". Có thể khôi phục trong Thùng rác.");
+        verify(mailSender, never()).createMimeMessage();
+    }
+
+    @Test
+    void onExpenseEvent_masksTheDetails_whenAPrivateTransactionIsDeleted() throws Exception {
+        // As published by expense-service for a private transaction: no id/amount/date/note at all.
+        listener.onExpenseEvent(new ExpenseEvent(
+                ExpenseEvent.EXPENSE_DELETED, 1L, 10L, null, null, null, null, null, null, null,
+                null, "An", Instant.now(), null, null, null, null, 1, true));
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(notificationCaptor.capture());
+        assertThat(notificationCaptor.getValue().getMessage())
+                .isEqualTo("An đã xoá 1 giao dịch riêng tư (***). Có thể khôi phục trong Thùng rác.");
+    }
+
+    @Test
+    void expenseEvent_readsOldJsonWithoutPrivateEntry() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
+        ExpenseEvent old = mapper.readValue(
+                "{\"eventType\":\"EXPENSE_DELETED\",\"familyId\":1,\"userId\":10,\"itemCount\":1}", ExpenseEvent.class);
+        assertThat(old.privateEntry()).isNull();
+        assertThat(old.hidesDetails()).isFalse();
+        assertThat(mapper.writeValueAsString(old)).contains("\"privateEntry\":null").doesNotContain("hidesDetails");
+    }
+
+    @Test
+    void onExpenseEvent_recordsOneSummary_whenManyTransactionsDeletedAtOnce() throws Exception {
+        listener.onExpenseEvent(new ExpenseEvent(
+                ExpenseEvent.EXPENSE_DELETED, 1L, 10L, null, null, null, null, null, null, null,
+                null, "An", Instant.now(), null, null, null, null, 12));
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(notificationCaptor.capture());
+        assertThat(notificationCaptor.getValue().getMessage())
+                .isEqualTo("An đã xoá 12 giao dịch. Có thể khôi phục trong Thùng rác.");
     }
 
     @Test
@@ -321,5 +375,56 @@ class ExpenseEventListenerTest {
                 ExpenseEvent.WALLET_TRANSFERRED, 1L, 10L, null, null, BigDecimal.valueOf(200000),
                 null, null, null, null, userEmail, "Chủ hộ", Instant.now(), LocalDate.of(2026, 2, 1), note,
                 "Ví tiền mặt", "Ví ngân hàng");
+    }
+
+    @Test
+    void onExpenseEvent_emailsOnlyTheWalletOwner_whenATransferIsRequested() throws Exception {
+        MimeMessage mail = new MimeMessage(Session.getInstance(new Properties()));
+        when(mailSender.createMimeMessage()).thenReturn(mail);
+        when(preferenceService.isEmailEnabled(10L, NotificationType.TRANSFER_REQUESTED)).thenReturn(true);
+        when(memberDirectory.listMembers(1L)).thenReturn(List.of(
+                new FamilyMemberDirectory.Member(10L, "chong@b.com", "Chồng"),
+                new FamilyMemberDirectory.Member(11L, "vo@b.com", "Vợ")));
+
+        listener.onExpenseEvent(transferRequestEvent(ExpenseEvent.TRANSFER_REQUESTED, 11L, "Vợ", 10L));
+
+        verify(mailSender).send(mail);
+        assertThat(mail.getAllRecipients()).hasSize(1);
+        assertThat(mail.getAllRecipients()[0].toString()).isEqualTo("chong@b.com");
+        assertThat(mail.getSubject()).contains("Vợ").contains("500,000");
+        ArgumentCaptor<Notification> saved = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(saved.capture());
+        assertThat(saved.getValue().getMessage()).contains("Vợ yêu cầu chuyển 500,000").contains("đang chờ");
+    }
+
+    @Test
+    void onExpenseEvent_emailsTheRequester_whenTheRequestIsRejected() throws Exception {
+        MimeMessage mail = new MimeMessage(Session.getInstance(new Properties()));
+        when(mailSender.createMimeMessage()).thenReturn(mail);
+        when(preferenceService.isEmailEnabled(11L, NotificationType.TRANSFER_REQUEST_REJECTED)).thenReturn(true);
+        when(memberDirectory.listMembers(1L)).thenReturn(List.of(
+                new FamilyMemberDirectory.Member(10L, "chong@b.com", "Chồng"),
+                new FamilyMemberDirectory.Member(11L, "vo@b.com", "Vợ")));
+
+        listener.onExpenseEvent(transferRequestEvent(ExpenseEvent.TRANSFER_REQUEST_REJECTED, 10L, "Chồng", 11L));
+
+        verify(mailSender).send(mail);
+        assertThat(mail.getAllRecipients()[0].toString()).isEqualTo("vo@b.com");
+        assertThat(mail.getSubject()).contains("từ chối");
+    }
+
+    @Test
+    void onExpenseEvent_recordsInAppOnly_whenTheRequestIsApproved() throws Exception {
+        listener.onExpenseEvent(transferRequestEvent(ExpenseEvent.TRANSFER_REQUEST_APPROVED, 10L, "Chồng", 11L));
+
+        ArgumentCaptor<Notification> saved = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(saved.capture());
+        assertThat(saved.getValue().getMessage()).contains("Chồng đã đồng ý và chuyển 500,000");
+        verify(mailSender, never()).send(any(MimeMessage.class));
+    }
+
+    private static ExpenseEvent transferRequestEvent(String type, Long actorId, String actorName, Long targetId) {
+        return new ExpenseEvent(type, 1L, actorId, null, null, new BigDecimal("500000"), null, null, null, null,
+                null, actorName, Instant.now(), null, "tiền chợ", "Ví Chồng", "Ví Vợ", null, null, targetId);
     }
 }

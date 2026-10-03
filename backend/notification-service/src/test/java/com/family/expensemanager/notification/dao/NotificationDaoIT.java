@@ -27,6 +27,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * Excluded from the fast {@code mvn test} unit-test loop (see maven-failsafe-plugin in
  * pom.xml) — runs via {@code mvn verify}, needs a local Docker daemon.
+ *
+ * @author boyquynhluu
  */
 @Testcontainers
 class NotificationDaoIT {

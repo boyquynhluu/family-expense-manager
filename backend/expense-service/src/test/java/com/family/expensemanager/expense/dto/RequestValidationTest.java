@@ -14,6 +14,9 @@ import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
 
+/**
+ * @author boyquynhluu
+ */
 class RequestValidationTest {
 
     private static ValidatorFactory factory;
@@ -51,8 +54,8 @@ class RequestValidationTest {
 
     @Test
     void transaction_rejectsNoteLongerThanColumn() {
-        assertThat(validator.validate(transaction("10", LocalDateTime.now(), "x".repeat(501)))).hasSize(1);
-        assertThat(validator.validate(transaction("10", LocalDateTime.now(), "x".repeat(500)))).isEmpty();
+        assertThat(validator.validate(transaction("10", LocalDateTime.now(), text(501)))).hasSize(1);
+        assertThat(validator.validate(transaction("10", LocalDateTime.now(), text(500)))).isEmpty();
     }
 
     @Test
@@ -72,7 +75,7 @@ class RequestValidationTest {
 
     @Test
     void wallet_rejectsTooLongNameAndTooManyDecimals() {
-        assertThat(validator.validate(new CreateWalletRequest("x".repeat(256), "VND", BigDecimal.ZERO))).hasSize(1);
+        assertThat(validator.validate(new CreateWalletRequest(text(256), "VND", BigDecimal.ZERO))).hasSize(1);
         assertThat(validator.validate(new CreateWalletRequest("Ví", "VND", new BigDecimal("1.001")))).hasSize(1);
     }
 
@@ -90,7 +93,49 @@ class RequestValidationTest {
         assertThat(validator.validate(new CreateCategoryRequest("Ăn", "EXPENSE", null, null))).isEmpty();
         assertThat(validator.validate(new CreateCategoryRequest("Ăn", "EXPENSE", null, "red"))).hasSize(1);
         assertThat(validator.validate(new CreateCategoryRequest("Ăn", "EXPENSE", "i".repeat(51), null))).hasSize(1);
-        assertThat(validator.validate(new CreateCategoryRequest("n".repeat(256), "EXPENSE", null, null))).hasSize(1);
+        assertThat(validator.validate(new CreateCategoryRequest(text(256), "EXPENSE", null, null))).hasSize(1);
+    }
+
+    @Test
+    void categoryName_allowsLettersDigitsAndCommonSeparators_only() {
+        for (String ok : new String[] {"Ăn uống & cà phê", "Điện/nước", "Học phí (con)", "Quà 8-3", "Xăng xe.", "Nhà's"}) {
+            assertThat(validator.validate(new CreateCategoryRequest(ok, "EXPENSE", null, null))).as(ok).isEmpty();
+        }
+        for (String bad : new String[] {"<script>", "Ăn uống!", "Tiền $", "a@b", "#hashtag", "Ăn 🍔", "\"quote\"", "123"}) {
+            assertThat(validator.validate(new CreateCategoryRequest(bad, "EXPENSE", null, null))).as(bad)
+                    .extracting(v -> v.getMessage()).contains(CreateCategoryRequest.NAME_MESSAGE);
+        }
+    }
+
+    @Test
+    void walletName_allowsLettersDigitsAndCommonSeparators_only() {
+        for (String ok : new String[] {"Ví Chồng", "Tiền mặt", "Ví 2", "Thẻ VCB (lương)", "Ví chung/nhà"}) {
+            assertThat(validator.validate(new CreateWalletRequest(ok, "VND", BigDecimal.ZERO))).as(ok).isEmpty();
+        }
+        for (String bad : new String[] {"<script>", "Ví $", "Ví#1", "💰 Ví", "1", "Ví!"}) {
+            assertThat(validator.validate(new CreateWalletRequest(bad, "VND", BigDecimal.ZERO))).as(bad)
+                    .extracting(v -> v.getMessage()).contains(CreateWalletRequest.NAME_MESSAGE);
+        }
+    }
+
+    @Test
+    void categoryIcon_allowsShortCodesAndEmoji_butNoSymbols() {
+        for (String ok : new String[] {"AI", "DX", "🍔", "❤️", "👍🏽", "👨‍👩‍👧", "1️⃣", "🇻🇳", "🛒 mua"}) {
+            assertThat(validator.validate(new CreateCategoryRequest("Ăn", "EXPENSE", ok, null))).as(ok).isEmpty();
+        }
+        for (String bad : new String[] {"<b>", "$$", "a;b", "%", "{x}"}) {
+            assertThat(validator.validate(new CreateCategoryRequest("Ăn", "EXPENSE", bad, null))).as(bad)
+                    .extracting(v -> v.getMessage()).contains(CreateCategoryRequest.ICON_MESSAGE);
+        }
+    }
+
+    @Test
+    void categoryIcon_rejectsProfanity_butNotShortCodesThatLookLikeJunk() {
+        assertThat(validator.validate(new CreateCategoryRequest("Ăn", "EXPENSE", "fuck", null))).singleElement()
+                .satisfies(v -> assertThat(v.getMessage()).isEqualTo("Nội dung có từ ngữ không phù hợp"));
+        for (String icon : new String[] {"AI", "DX", "abc", "xx", "🍔"}) {
+            assertThat(validator.validate(new CreateCategoryRequest("Ăn", "EXPENSE", icon, null))).as(icon).isEmpty();
+        }
     }
 
     @Test
@@ -107,5 +152,10 @@ class RequestValidationTest {
     void transfer_amountScaleChecked() {
         var bad = new CreateWalletTransferRequest(1L, 2L, new BigDecimal("1.234"), LocalDateTime.now(), null);
         assertThat(validator.validate(bad)).hasSize(1);
+    }
+
+    /** Real-looking text of exactly {@code length} chars — a single repeated letter ("xxx...") is junk to @CleanText. */
+    private static String text(int length) {
+        return "Tiền chợ tuần này ".repeat(length / 18 + 1).substring(0, length);
     }
 }

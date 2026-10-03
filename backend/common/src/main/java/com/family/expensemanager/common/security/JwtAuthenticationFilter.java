@@ -24,6 +24,8 @@ import lombok.extern.slf4j.Slf4j;
  * see README "Bảo mật"). On a valid token it populates the SecurityContext with the
  * user id as principal and a ROLE_&lt;role&gt; authority; on a missing/invalid token it
  * simply leaves the context empty and lets Spring Security's access rules decide.
+ *
+ * @author boyquynhluu
  */
 @RequiredArgsConstructor
 @Slf4j(topic = "JwtAuthenticationFilter")
