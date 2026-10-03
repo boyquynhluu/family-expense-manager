@@ -1,0 +1,364 @@
+# Production compose for a VPS (see infra/DEPLOY.md). Differences from docker-compose.yml:
+#   - no JDWP debug agents / debug ports, and NO host ports except nginx's 80/443 — MySQL, Kafka, Redis,
+#     Eureka, the services and the monitoring stack are only reachable on the internal fem-network
+#     (Docker writes its own iptables rules, so a host firewall like UFW would NOT block a published port);
+#   - nginx in front: HTTPS (Let's Encrypt via certbot), /api → api-gateway, everything else → frontend;
+#   - restart: unless-stopped, memory limits, log rotation, pinned image versions.
+# First time:  ./init-letsencrypt.sh   (gets the certificate nginx needs to start)
+# Run:         docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+name: family-expense-manager
+
+x-restart: &restart
+  restart: unless-stopped
+
+# json-file logs grow forever by default and fill the disk — keep 3 × 10 MB per container.
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+# Each JVM sizes its heap from the container limit (75%), instead of from the whole VPS's RAM.
+x-java-opts: &java-opts "-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
+
+networks:
+  fem-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  receipt-uploads:
+  certbot-etc:
+  certbot-www:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+
+services:
+  # Reverse proxy + TLS. The template in ./nginx/templates is rendered with ${DOMAIN} at startup. The loop
+  # reloads nginx every 6h so a certificate renewed by the certbot service below is picked up without downtime.
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: fem-nginx
+    <<: [*restart, *logging]
+    mem_limit: 64m
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - certbot-etc:/etc/letsencrypt:ro
+      - certbot-www:/var/www/certbot:ro
+    command: /bin/sh -c "while :; do sleep 6h & wait $$!; nginx -s reload; done & exec /docker-entrypoint.sh nginx -g 'daemon off;'"
+    depends_on:
+      - api-gateway
+      - frontend
+    networks:
+      - fem-network
+
+  # Renews the certificate (webroot, served by nginx on :80) twice a day; certbot only actually renews when
+  # it is within 30 days of expiry. The first certificate comes from ./init-letsencrypt.sh.
+  certbot:
+    image: certbot/certbot:v2.11.0
+    container_name: fem-certbot
+    <<: [*restart, *logging]
+    mem_limit: 64m
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $$!; done"
+
+  mysql-db:
+    image: mysql:8.4
+    container_name: fem-mysql-db
+    <<: [*restart, *logging]
+    mem_limit: 768m
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: fem_auth
+      MYSQL_USER: ${FEM_AUTH_DB_USER}
+      MYSQL_PASSWORD: ${FEM_AUTH_DB_PASSWORD}
+      FEM_EXPENSE_DB_USER: ${FEM_EXPENSE_DB_USER}
+      FEM_EXPENSE_DB_PASSWORD: ${FEM_EXPENSE_DB_PASSWORD}
+      FEM_NOTIFY_DB_USER: ${FEM_NOTIFY_DB_USER}
+      FEM_NOTIFY_DB_PASSWORD: ${FEM_NOTIFY_DB_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - fem-network
+
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: fem-kafka
+    <<: [*restart, *logging]
+    mem_limit: 768m
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_HEAP_OPTS: "-Xms256m -Xmx512m"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - fem-network
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: fem-redis
+    <<: [*restart, *logging]
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fem-network
+
+  eureka-server:
+    build:
+      context: ../backend
+      dockerfile: eureka-server/Dockerfile
+    container_name: fem-eureka-server
+    <<: [*restart, *logging]
+    mem_limit: 384m
+    environment:
+      JAVA_TOOL_OPTIONS: *java-opts
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8761/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    networks:
+      - fem-network
+
+  api-gateway:
+    build:
+      context: ../backend
+      dockerfile: api-gateway/Dockerfile
+    container_name: fem-api-gateway
+    <<: [*restart, *logging]
+    mem_limit: 512m
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka/
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ALLOWED_ORIGINS: https://${DOMAIN}
+      # Behind nginx: build redirects/links from X-Forwarded-Proto/Host (https://<domain>), not from the
+      # internal http://api-gateway:8080 the request actually arrived on.
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+      JAVA_TOOL_OPTIONS: *java-opts
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - fem-network
+
+  auth-service:
+    build:
+      context: ../backend
+      dockerfile: auth-service/Dockerfile
+    container_name: fem-auth-service
+    <<: [*restart, *logging]
+    mem_limit: 640m
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka/
+      MYSQL_HOST: mysql-db
+      MYSQL_PORT: 3306
+      FEM_AUTH_DB_USER: ${FEM_AUTH_DB_USER}
+      FEM_AUTH_DB_PASSWORD: ${FEM_AUTH_DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY}
+      TOTP_ENCRYPTION_KEY_PREVIOUS: ${TOTP_ENCRYPTION_KEY_PREVIOUS:-}
+      AUTH_UNVERIFIED_CLEANUP_RETENTION_DAYS: ${AUTH_UNVERIFIED_CLEANUP_RETENTION_DAYS:-7}
+      AUTH_UNVERIFIED_CLEANUP_CRON: ${AUTH_UNVERIFIED_CLEANUP_CRON:-0 30 2 * * *}
+      APP_BASE_URL: https://${DOMAIN}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      FACEBOOK_CLIENT_ID: ${FACEBOOK_CLIENT_ID}
+      FACEBOOK_CLIENT_SECRET: ${FACEBOOK_CLIENT_SECRET}
+      OAUTH2_SUCCESS_REDIRECT_URL: https://${DOMAIN}/oauth2/callback
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+      JAVA_TOOL_OPTIONS: *java-opts
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      mysql-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - fem-network
+
+  expense-service:
+    build:
+      context: ../backend
+      dockerfile: expense-service/Dockerfile
+    container_name: fem-expense-service
+    <<: [*restart, *logging]
+    mem_limit: 640m
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka/
+      MYSQL_HOST: mysql-db
+      MYSQL_PORT: 3306
+      FEM_EXPENSE_DB_USER: ${FEM_EXPENSE_DB_USER}
+      FEM_EXPENSE_DB_PASSWORD: ${FEM_EXPENSE_DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET}
+      RECEIPT_STORAGE_PATH: /data/receipts
+      TRASH_RETENTION_DAYS: ${TRASH_RETENTION_DAYS:-30}
+      JAVA_TOOL_OPTIONS: *java-opts
+    volumes:
+      - receipt-uploads:/data/receipts
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      mysql-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - fem-network
+
+  notification-service:
+    build:
+      context: ../backend
+      dockerfile: notification-service/Dockerfile
+    container_name: fem-notification-service
+    <<: [*restart, *logging]
+    mem_limit: 512m
+    environment:
+      EUREKA_URL: http://eureka-server:8761/eureka/
+      MYSQL_HOST: mysql-db
+      MYSQL_PORT: 3306
+      FEM_NOTIFY_DB_USER: ${FEM_NOTIFY_DB_USER}
+      FEM_NOTIFY_DB_PASSWORD: ${FEM_NOTIFY_DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM}
+      APP_BASE_URL: https://${DOMAIN}
+      FRONTEND_BASE_URL: https://${DOMAIN}
+      JAVA_TOOL_OPTIONS: *java-opts
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      mysql-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - fem-network
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: https://${DOMAIN}/api
+    container_name: fem-frontend
+    <<: [*restart, *logging]
+    mem_limit: 64m
+    networks:
+      - fem-network
+
+  # --- Monitoring (optional): docker compose -f docker-compose.prod.yml --profile monitoring up -d
+  # No public port: Grafana listens on the VPS's 127.0.0.1 only — open it through an SSH tunnel
+  # (ssh -L 3001:127.0.0.1:3001 user@vps, then http://localhost:3001).
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: fem-prometheus
+    profiles: [monitoring]
+    <<: [*restart, *logging]
+    mem_limit: 256m
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - fem-network
+
+  loki:
+    image: grafana/loki:3.1.0
+    container_name: fem-loki
+    profiles: [monitoring]
+    <<: [*restart, *logging]
+    mem_limit: 256m
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    networks:
+      - fem-network
+
+  promtail:
+    image: grafana/promtail:3.1.0
+    container_name: fem-promtail
+    profiles: [monitoring]
+    <<: [*restart, *logging]
+    mem_limit: 128m
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on:
+      - loki
+    networks:
+      - fem-network
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: fem-grafana
+    profiles: [monitoring]
+    <<: [*restart, *logging]
+    mem_limit: 256m
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - fem-network
