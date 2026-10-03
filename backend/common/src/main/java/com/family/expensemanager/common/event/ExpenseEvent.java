@@ -35,6 +35,11 @@ import java.time.LocalDate;
  * listed family-wide, so the publisher already leaves the details OUT of such an event (amount/date/note/
  * category/transactionId null) — nothing private ever reaches notification-service, not even its stored
  * payload — and the consumer phrases the message generically. Null (older producers) = not private.
+ * {@link #TRANSFER_REQUESTED} / {@link #TRANSFER_REQUEST_APPROVED} / {@link #TRANSFER_REQUEST_REJECTED}
+ * ("yêu cầu chuyển tiền"): {@code userId}/{@code userDisplayName} are who acted (the requester, then the wallet
+ * owner who decided), {@code targetUserId} is who must be told (the wallet owner, then the requester) — the
+ * consumer looks their email up itself. {@code amount}/{@code note}/{@code fromWalletName}/{@code toWalletName}
+ * describe the request. {@code targetUserId} is null for every other event type.
  *
  * @author boyquynhluu
  */
@@ -57,7 +62,8 @@ public record ExpenseEvent(
         String fromWalletName,
         String toWalletName,
         Integer itemCount,
-        Boolean privateEntry) {
+        Boolean privateEntry,
+        Long targetUserId) {
 
     public static final String EXPENSE_CREATED = "EXPENSE_CREATED";
     public static final String BUDGET_EXCEEDED = "BUDGET_EXCEEDED";
@@ -66,10 +72,24 @@ public record ExpenseEvent(
     public static final String RECURRING_FAILED = "RECURRING_FAILED";
     public static final String WALLET_TRANSFERRED = "WALLET_TRANSFERRED";
     public static final String EXPENSE_DELETED = "EXPENSE_DELETED";
+    public static final String TRANSFER_REQUESTED = "TRANSFER_REQUESTED";
+    public static final String TRANSFER_REQUEST_APPROVED = "TRANSFER_REQUEST_APPROVED";
+    public static final String TRANSFER_REQUEST_REJECTED = "TRANSFER_REQUEST_REJECTED";
 
     // Explicit because the extra constructors below would otherwise leave Jackson's record-creator choice ambiguous.
     @JsonCreator
     public ExpenseEvent {
+    }
+
+    /** Pre-targetUserId shape — every publisher except the transfer-request ones. */
+    public ExpenseEvent(String eventType, Long familyId, Long userId, Long transactionId, Long categoryId,
+                        BigDecimal amount, String periodMonth, BigDecimal limitAmount, BigDecimal totalSpent,
+                        String categoryName, String userEmail, String userDisplayName, Instant occurredAt,
+                        LocalDate occurredOn, String note, String fromWalletName, String toWalletName,
+                        Integer itemCount, Boolean privateEntry) {
+        this(eventType, familyId, userId, transactionId, categoryId, amount, periodMonth, limitAmount, totalSpent,
+                categoryName, userEmail, userDisplayName, occurredAt, occurredOn, note, fromWalletName, toWalletName,
+                itemCount, privateEntry, null);
     }
 
     /** Pre-privateEntry shape — every publisher except a private transaction's own events. */

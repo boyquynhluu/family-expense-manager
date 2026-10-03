@@ -4,15 +4,15 @@ import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import AmountInput from "../components/AmountInput";
 import {
-  CloseIcon,
-  EditIcon,
-  FileTextIcon,
-  FileSpreadsheetIcon,
-  HistoryIcon,
-  ImageIcon,
-  LockIcon,
-  TrashIcon,
-  UploadIcon,
+    CloseIcon,
+    EditIcon,
+    FileSpreadsheetIcon,
+    FileTextIcon,
+    HistoryIcon,
+    ImageIcon,
+    LockIcon,
+    TrashIcon,
+    UploadIcon,
 } from "../components/AppIcons";
 import Pagination from "../components/Pagination";
 import SeedDefaultsButton from "../components/SeedDefaultsButton";
@@ -26,10 +26,10 @@ import { LIMITS } from "../utils/inputLimits";
 import { notifyTrashChanged } from "../utils/trashEvents";
 import { canUseWallet, usableWallets } from "../utils/walletAccess";
 
-import { Table, THead, TBody, Th, Td } from "../components/ui/Table";
 import { Button, IconButton } from "../components/ui/Button";
-import { Checkbox, Input, Select } from "../components/ui/Input";
 import { Field } from "../components/ui/Field";
+import { Checkbox, Input, Select } from "../components/ui/Input";
+import { Table, TBody, Td, Th, THead } from "../components/ui/Table";
 import { useCleanText } from "../utils/textQuality";
 // Shown in place of every detail of another member's private transaction.
 const MASK = "***";
@@ -371,6 +371,7 @@ export default function Transactions() {
     try {
       await client.delete(`/expenses/transactions/${id}`);
       notifyTrashChanged();
+      toast.success(t("transactions:deleteSuccess"));
       setSelectedIds((prev) => {
         if (!prev.has(id)) return prev;
         const next = new Set(prev);
@@ -425,6 +426,7 @@ export default function Transactions() {
     setError("");
     try {
       await client.delete(`/expenses/transactions/${id}/receipt`);
+      toast.success(t("transactions:deleteSuccess"));
       load();
     } catch (err) {
       setError(err.response?.data?.message || t("transactions:deleteReceiptFailed"));

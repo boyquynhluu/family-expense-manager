@@ -30,6 +30,7 @@
   "saveFailed": "Failed to save transaction",
   "deleteConfirm": "Delete this transaction? You can restore it later from Trash.",
   "deleteFailed": "Failed to delete transaction",
+  "deleteSuccess": "Delete Success",
   "uploadReceiptFailed": "Failed to upload receipt image",
   "viewReceiptFailed": "Failed to load receipt image",
   "deleteReceiptConfirm": "Delete this receipt image?",

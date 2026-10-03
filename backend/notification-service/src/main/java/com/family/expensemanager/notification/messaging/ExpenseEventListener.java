@@ -59,6 +59,8 @@ public class ExpenseEventListener {
     private static final String TEMPLATE_PATH = "mail-templates/budget-exceeded-email.html";
     private static final String WALLET_TRANSFER_TEMPLATE_PATH = "mail-templates/wallet-transfer-email.html";
     private static final String WALLET_TRANSFER_RECEIVED_TEMPLATE_PATH = "mail-templates/wallet-transfer-received-email.html";
+    private static final String TRANSFER_REQUEST_TEMPLATE_PATH = "mail-templates/transfer-request-email.html";
+    private static final String TRANSFER_REQUEST_REJECTED_TEMPLATE_PATH = "mail-templates/transfer-request-rejected-email.html";
     private static final String OVERALL_BUDGET_LABEL = "Tổng chi tiêu";
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter TIME_FORMAT =
@@ -73,6 +75,8 @@ public class ExpenseEventListener {
     private final String template;
     private final String walletTransferTemplate;
     private final String walletTransferReceivedTemplate;
+    private final String transferRequestTemplate;
+    private final String transferRequestRejectedTemplate;
     private final FamilyMemberDirectory memberDirectory;
 
     public ExpenseEventListener(NotificationDao notificationDao,
@@ -92,6 +96,8 @@ public class ExpenseEventListener {
         this.template = loadTemplate(TEMPLATE_PATH);
         this.walletTransferTemplate = loadTemplate(WALLET_TRANSFER_TEMPLATE_PATH);
         this.walletTransferReceivedTemplate = loadTemplate(WALLET_TRANSFER_RECEIVED_TEMPLATE_PATH);
+        this.transferRequestTemplate = loadTemplate(TRANSFER_REQUEST_TEMPLATE_PATH);
+        this.transferRequestRejectedTemplate = loadTemplate(TRANSFER_REQUEST_REJECTED_TEMPLATE_PATH);
     }
 
     // Non-blocking retry: a processing failure (DB hiccup, uncaught bug...) is retried 3 times with
@@ -117,6 +123,27 @@ public class ExpenseEventListener {
             save(event, "Giao dịch định kỳ không thực hiện được",
                     "Không ghi được " + recurringLabel(event) + dateSuffix(event)
                             + ". Hệ thống sẽ thử lại vào lần chạy tiếp theo");
+            return;
+        }
+        if (ExpenseEvent.TRANSFER_REQUESTED.equals(event.eventType())) {
+            save(event, "Yêu cầu chuyển tiền", actor(event) + " yêu cầu chuyển " + formatAmount(event.amount())
+                    + " từ " + event.fromWalletName() + " sang " + event.toWalletName() + " — đang chờ chủ ví đồng ý");
+            sendTransferRequestEmail(event, transferRequestTemplate, NotificationType.TRANSFER_REQUESTED,
+                    actor(event) + " yêu cầu bạn chuyển " + formatAmount(event.amount()));
+            return;
+        }
+        if (ExpenseEvent.TRANSFER_REQUEST_APPROVED.equals(event.eventType())) {
+            // In-app only: the transfer itself (WALLET_TRANSFERRED) already emails the family, requester included.
+            save(event, "Yêu cầu chuyển tiền đã được duyệt", actor(event) + " đã đồng ý và chuyển "
+                    + formatAmount(event.amount()) + " từ " + event.fromWalletName() + " sang " + event.toWalletName());
+            return;
+        }
+        if (ExpenseEvent.TRANSFER_REQUEST_REJECTED.equals(event.eventType())) {
+            save(event, "Yêu cầu chuyển tiền bị từ chối", actor(event) + " đã từ chối yêu cầu chuyển "
+                    + formatAmount(event.amount()) + " từ " + nameOr(event.fromWalletName()) + " sang "
+                    + nameOr(event.toWalletName()));
+            sendTransferRequestEmail(event, transferRequestRejectedTemplate, NotificationType.TRANSFER_REQUEST_REJECTED,
+                    "Yêu cầu chuyển " + formatAmount(event.amount()) + " đã bị từ chối");
             return;
         }
         if (ExpenseEvent.WALLET_TRANSFERRED.equals(event.eventType())) {
@@ -343,6 +370,58 @@ public class ExpenseEventListener {
                 log.error("Không gửi được email nhận tiền familyId={}, userId={}", event.familyId(), member.userId(), e);
             }
         }
+    }
+
+    /**
+     * One email, to the event's {@code targetUserId} only (the wallet owner for a new request, the requester for a
+     * rejection), looked up through {@link FamilyMemberDirectory}. Failures are logged, never thrown: Kafka would
+     * otherwise redeliver the event and insert its in-app notification again.
+     */
+    private void sendTransferRequestEmail(ExpenseEvent event, String template, NotificationType type, String subject) {
+        if (event.targetUserId() == null) {
+            log.warn("Bỏ qua email yêu cầu chuyển tiền vì thiếu targetUserId, familyId={}", event.familyId());
+            return;
+        }
+        if (!preferenceService.isEmailEnabled(event.targetUserId(), type)) {
+            log.info("Bỏ qua email {} vì người dùng đã tắt, familyId={}, userId={}", type, event.familyId(),
+                    event.targetUserId());
+            return;
+        }
+        FamilyMemberDirectory.Member recipient = memberDirectory.listMembers(event.familyId()).stream()
+                .filter(m -> m.userId().equals(event.targetUserId()) && m.email() != null)
+                .findFirst()
+                .orElse(null);
+        if (recipient == null) {
+            log.warn("Không tìm thấy email người nhận yêu cầu chuyển tiền, familyId={}, userId={}",
+                    event.familyId(), event.targetUserId());
+            return;
+        }
+        String recipientName = recipient.displayName() != null ? recipient.displayName() : recipient.email();
+        String html = template
+                .replace("{{recipientName}}", escape(recipientName))
+                // New request: the sender is the requester; rejection: the request was the recipient's own.
+                .replace("{{senderName}}", escape(ExpenseEvent.TRANSFER_REQUESTED.equals(event.eventType())
+                        ? actor(event) : recipientName))
+                .replace("{{deciderName}}", escape(actor(event)))
+                .replace("{{occurredAt}}", event.occurredAt() == null ? "" : TIME_FORMAT.format(event.occurredAt()))
+                .replace("{{amount}}", formatAmount(event.amount()))
+                .replace("{{fromWalletName}}", escape(nameOr(event.fromWalletName())))
+                .replace("{{toWalletName}}", escape(nameOr(event.toWalletName())))
+                .replace("{{noteBlock}}", noteBlock(event))
+                .replace("{{walletsLink}}", frontendUrl + "/wallets");
+        try {
+            sendHtml(recipient.email(), subject, html);
+        } catch (MessagingException | MailException e) {
+            log.error("Không gửi được email {} familyId={}, userId={}", type, event.familyId(), event.targetUserId(), e);
+        }
+    }
+
+    private static String actor(ExpenseEvent event) {
+        return event.userDisplayName() != null ? event.userDisplayName() : "Một thành viên";
+    }
+
+    private static String nameOr(String walletName) {
+        return walletName != null ? walletName : "ví đã xoá";
     }
 
     private String noteBlock(ExpenseEvent event) {

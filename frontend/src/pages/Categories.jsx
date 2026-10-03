@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { EditIcon, TrashIcon } from "../components/AppIcons";
@@ -9,17 +10,9 @@ import { Input, Select } from "../components/ui/Input";
 import { useAuth } from "../hooks/useAuth";
 import { confirmDialog } from "../utils/confirm";
 import { LIMITS } from "../utils/inputLimits";
+import { hasInvalidIconChars, hasInvalidNameChars } from "../utils/namePatterns";
 import { useCleanText } from "../utils/textQuality";
 import { notifyTrashChanged } from "../utils/trashEvents";
-
-// Same allowed characters as backend CreateCategoryRequest.NAME_REGEX / ICON_REGEX — keep in sync.
-// Name: letters (with accents), digits, spaces and - _ . , & ( ) / ' +, at least one letter.
-const NAME_PATTERN = /^(?=.*\p{L})[\p{L}\p{M}\p{N} .,&()/'+_-]+$/u;
-// Icon: a short code ("AI") or emoji, incl. joiners, variation selectors, skin tones, keycaps and flags.
-const ICON_PATTERN =
-  // The class lists emoji joiners/modifiers one by one on purpose (each code point is allowed alone).
-  // eslint-disable-next-line no-misleading-character-class
-  /^[\p{L}\p{M}\p{N}\p{Extended_Pictographic}‍️⃣\u{1F3FB}-\u{1F3FF}\u{1F1E6}-\u{1F1FF} _-]*$/u;
 
 export default function Categories() {
   const { t } = useTranslation(["common", "categories"]);
@@ -28,9 +21,9 @@ export default function Categories() {
   const cleanIcon = useCleanText({ junk: false });
   // Character rule first (it names what is wrong), then profanity/junk.
   const validateName = (value) =>
-    value.trim() && !NAME_PATTERN.test(value) ? t("categories:nameInvalidChars") : cleanText(value);
+    hasInvalidNameChars(value) ? t("categories:nameInvalidChars") : cleanText(value);
   const validateIcon = (value) =>
-    value && !ICON_PATTERN.test(value) ? t("categories:iconInvalidChars") : cleanIcon(value);
+    hasInvalidIconChars(value) ? t("categories:iconInvalidChars") : cleanIcon(value);
   const { role } = useAuth();
   const isOwner = role === "OWNER";
   const [categories, setCategories] = useState([]);
@@ -88,6 +81,7 @@ export default function Categories() {
     try {
       await client.delete(`/expenses/categories/${id}`);
       notifyTrashChanged();
+      toast.success(t("categories:deleteSuccess"));
       load();
     } catch (err) {
       setError(err.response?.data?.message || t("categories:deleteFailed"));

@@ -14,7 +14,10 @@ public enum NotificationType {
     MEMBER_LEFT(false),
     MEMBER_REMOVED(false),
     WALLET_TRANSFERRED(true),
-    EXPENSE_DELETED(false);
+    EXPENSE_DELETED(false),
+    TRANSFER_REQUESTED(true),
+    TRANSFER_REQUEST_APPROVED(false),
+    TRANSFER_REQUEST_REJECTED(true);
 
     private final boolean emailSupported;
 

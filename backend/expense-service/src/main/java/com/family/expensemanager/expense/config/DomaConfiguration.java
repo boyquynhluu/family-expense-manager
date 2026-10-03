@@ -15,6 +15,8 @@ import com.family.expensemanager.expense.dao.TransactionAuditLogDao;
 import com.family.expensemanager.expense.dao.TransactionAuditLogDaoImpl;
 import com.family.expensemanager.expense.dao.TransactionDao;
 import com.family.expensemanager.expense.dao.TransactionDaoImpl;
+import com.family.expensemanager.expense.dao.TransferRequestDao;
+import com.family.expensemanager.expense.dao.TransferRequestDaoImpl;
 import com.family.expensemanager.expense.dao.WalletDao;
 import com.family.expensemanager.expense.dao.WalletDaoImpl;
 import com.family.expensemanager.expense.dao.WalletTransferDao;
@@ -65,6 +67,11 @@ public class DomaConfiguration {
     @Bean
     public WalletTransferDao walletTransferDao(Config domaConfig) {
         return new WalletTransferDaoImpl(domaConfig);
+    }
+
+    @Bean
+    public TransferRequestDao transferRequestDao(Config domaConfig) {
+        return new TransferRequestDaoImpl(domaConfig);
     }
 
     @Bean

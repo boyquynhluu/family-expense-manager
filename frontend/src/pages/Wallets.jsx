@@ -6,6 +6,7 @@ import AmountInput from "../components/AmountInput";
 import { CalendarIcon, EditIcon, TrashIcon, WalletIcon } from "../components/AppIcons";
 import Pagination from "../components/Pagination";
 import SeedDefaultsButton from "../components/SeedDefaultsButton";
+import TransferRequests from "../components/TransferRequests";
 import WalletMonthlyTable from "../components/WalletMonthlyTable";
 import { useAuth } from "../hooks/useAuth";
 import { useClientPage } from "../hooks/useClientPage";
@@ -21,6 +22,7 @@ import { Button, IconButton } from "../components/ui/Button";
 import { Field } from "../components/ui/Field";
 import { Input, Select } from "../components/ui/Input";
 import { Table, TBody, Td, Th, THead } from "../components/ui/Table";
+import { hasInvalidNameChars } from "../utils/namePatterns";
 import { useCleanText } from "../utils/textQuality";
 // <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" in the browser's local time.
 function nowForDateTimeInput() {
@@ -41,6 +43,8 @@ function emptyTransferForm() {
 export default function Wallets() {
   const { t } = useTranslation(["common", "wallets"]);
   const cleanText = useCleanText();
+  // Character rule first (it names what is wrong), then profanity/junk.
+  const validateName = (value) => (hasInvalidNameChars(value) ? t("wallets:nameInvalidChars") : cleanText(value));
   const { role, userId } = useAuth();
   const isOwner = role === "OWNER";
   const [wallets, setWallets] = useState([]);
@@ -147,6 +151,7 @@ export default function Wallets() {
     try {
       await client.delete(`/expenses/wallets/${id}`);
       notifyTrashChanged();
+      toast.success(t("wallets:deleteSuccess"));
       load();
     } catch (err) {
       setError(err.response?.data?.message || t("wallets:deleteFailed"));
@@ -257,7 +262,7 @@ export default function Wallets() {
               </span>
               <Input
                 placeholder={t("wallets:namePlaceholder")}
-                value={name} validate={cleanText}
+                value={name} validate={validateName}
                 maxLength={LIMITS.walletName}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -488,6 +493,16 @@ export default function Wallets() {
         )}
         {transferError && <p className="error-text">{transferError}</p>}
       </div>
+
+      <TransferRequests
+        wallets={wallets}
+        userId={userId}
+        walletOptionLabel={walletOptionLabel}
+        onTransferred={() => {
+          load();
+          reloadTransfers();
+        }}
+      />
 
       <div className="section-card">
         <h2>{t("wallets:transferHistoryTitle")}</h2>

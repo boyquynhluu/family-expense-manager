@@ -376,4 +376,55 @@ class ExpenseEventListenerTest {
                 null, null, null, null, userEmail, "Chủ hộ", Instant.now(), LocalDate.of(2026, 2, 1), note,
                 "Ví tiền mặt", "Ví ngân hàng");
     }
+
+    @Test
+    void onExpenseEvent_emailsOnlyTheWalletOwner_whenATransferIsRequested() throws Exception {
+        MimeMessage mail = new MimeMessage(Session.getInstance(new Properties()));
+        when(mailSender.createMimeMessage()).thenReturn(mail);
+        when(preferenceService.isEmailEnabled(10L, NotificationType.TRANSFER_REQUESTED)).thenReturn(true);
+        when(memberDirectory.listMembers(1L)).thenReturn(List.of(
+                new FamilyMemberDirectory.Member(10L, "chong@b.com", "Chồng"),
+                new FamilyMemberDirectory.Member(11L, "vo@b.com", "Vợ")));
+
+        listener.onExpenseEvent(transferRequestEvent(ExpenseEvent.TRANSFER_REQUESTED, 11L, "Vợ", 10L));
+
+        verify(mailSender).send(mail);
+        assertThat(mail.getAllRecipients()).hasSize(1);
+        assertThat(mail.getAllRecipients()[0].toString()).isEqualTo("chong@b.com");
+        assertThat(mail.getSubject()).contains("Vợ").contains("500,000");
+        ArgumentCaptor<Notification> saved = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(saved.capture());
+        assertThat(saved.getValue().getMessage()).contains("Vợ yêu cầu chuyển 500,000").contains("đang chờ");
+    }
+
+    @Test
+    void onExpenseEvent_emailsTheRequester_whenTheRequestIsRejected() throws Exception {
+        MimeMessage mail = new MimeMessage(Session.getInstance(new Properties()));
+        when(mailSender.createMimeMessage()).thenReturn(mail);
+        when(preferenceService.isEmailEnabled(11L, NotificationType.TRANSFER_REQUEST_REJECTED)).thenReturn(true);
+        when(memberDirectory.listMembers(1L)).thenReturn(List.of(
+                new FamilyMemberDirectory.Member(10L, "chong@b.com", "Chồng"),
+                new FamilyMemberDirectory.Member(11L, "vo@b.com", "Vợ")));
+
+        listener.onExpenseEvent(transferRequestEvent(ExpenseEvent.TRANSFER_REQUEST_REJECTED, 10L, "Chồng", 11L));
+
+        verify(mailSender).send(mail);
+        assertThat(mail.getAllRecipients()[0].toString()).isEqualTo("vo@b.com");
+        assertThat(mail.getSubject()).contains("từ chối");
+    }
+
+    @Test
+    void onExpenseEvent_recordsInAppOnly_whenTheRequestIsApproved() throws Exception {
+        listener.onExpenseEvent(transferRequestEvent(ExpenseEvent.TRANSFER_REQUEST_APPROVED, 10L, "Chồng", 11L));
+
+        ArgumentCaptor<Notification> saved = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(saved.capture());
+        assertThat(saved.getValue().getMessage()).contains("Chồng đã đồng ý và chuyển 500,000");
+        verify(mailSender, never()).send(any(MimeMessage.class));
+    }
+
+    private static ExpenseEvent transferRequestEvent(String type, Long actorId, String actorName, Long targetId) {
+        return new ExpenseEvent(type, 1L, actorId, null, null, new BigDecimal("500000"), null, null, null, null,
+                null, actorName, Instant.now(), null, "tiền chợ", "Ví Chồng", "Ví Vợ", null, null, targetId);
+    }
 }

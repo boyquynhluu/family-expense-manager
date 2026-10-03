@@ -30,6 +30,7 @@
   "saveFailed": "Lưu giao dịch thất bại",
   "deleteConfirm": "Xoá giao dịch này? Có thể khôi phục sau trong Thùng rác.",
   "deleteFailed": "Xoá giao dịch thất bại",
+  "deleteSuccess": "Xóa giao dịch thành công",
   "uploadReceiptFailed": "Tải ảnh hoá đơn thất bại",
   "viewReceiptFailed": "Không tải được ảnh hoá đơn",
   "deleteReceiptConfirm": "Xoá ảnh hoá đơn này?",

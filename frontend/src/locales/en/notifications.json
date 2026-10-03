@@ -4,6 +4,7 @@
   "listTitle": "Notification list",
   "unreadBadge": "{{count}} unread",
   "markAllReadButton": "Mark all as read",
+  "makeAllReadConfirm": "You want to mark all as read",
   "noNotifications": "No notifications yet",
   "loadFailed": "Failed to load notifications",
   "markReadFailed": "Failed to mark notification as read",
@@ -31,7 +32,10 @@
     "MEMBER_LEFT": "Member left the family",
     "MEMBER_REMOVED": "Member removed from the family",
     "WALLET_TRANSFERRED": "Wallet transfer",
-    "EXPENSE_DELETED": "Transaction deleted"
+    "EXPENSE_DELETED": "Transaction deleted",
+    "TRANSFER_REQUESTED": "Transfer request",
+    "TRANSFER_REQUEST_APPROVED": "Transfer request approved",
+    "TRANSFER_REQUEST_REJECTED": "Transfer request rejected"
   },
   "savePreferencesConfirm": "Save notification preferences?"
 }

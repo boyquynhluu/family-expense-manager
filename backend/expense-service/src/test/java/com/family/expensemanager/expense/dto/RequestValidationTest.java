@@ -108,6 +108,17 @@ class RequestValidationTest {
     }
 
     @Test
+    void walletName_allowsLettersDigitsAndCommonSeparators_only() {
+        for (String ok : new String[] {"Ví Chồng", "Tiền mặt", "Ví 2", "Thẻ VCB (lương)", "Ví chung/nhà"}) {
+            assertThat(validator.validate(new CreateWalletRequest(ok, "VND", BigDecimal.ZERO))).as(ok).isEmpty();
+        }
+        for (String bad : new String[] {"<script>", "Ví $", "Ví#1", "💰 Ví", "1", "Ví!"}) {
+            assertThat(validator.validate(new CreateWalletRequest(bad, "VND", BigDecimal.ZERO))).as(bad)
+                    .extracting(v -> v.getMessage()).contains(CreateWalletRequest.NAME_MESSAGE);
+        }
+    }
+
+    @Test
     void categoryIcon_allowsShortCodesAndEmoji_butNoSymbols() {
         for (String ok : new String[] {"AI", "DX", "🍔", "❤️", "👍🏽", "👨‍👩‍👧", "1️⃣", "🇻🇳", "🛒 mua"}) {
             assertThat(validator.validate(new CreateCategoryRequest("Ăn", "EXPENSE", ok, null))).as(ok).isEmpty();

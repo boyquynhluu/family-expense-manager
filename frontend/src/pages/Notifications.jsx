@@ -4,10 +4,10 @@ import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { BellIcon, TrashIcon } from "../components/AppIcons";
 import Pagination from "../components/Pagination";
-import { usePagedList } from "../hooks/usePagedList";
-import { confirmDialog } from "../utils/confirm";
 import { Button, IconButton } from "../components/ui/Button";
 import { Checkbox } from "../components/ui/Input";
+import { usePagedList } from "../hooks/usePagedList";
+import { confirmDialog } from "../utils/confirm";
 
 export default function Notifications() {
   const { t } = useTranslation("notifications");
@@ -62,6 +62,7 @@ export default function Notifications() {
   }
 
   async function markAllAsRead() {
+    if (!(await confirmDialog(t("makeAllReadConfirm")))) return;
     setError("");
     try {
       await client.put("/notifications/read-all");

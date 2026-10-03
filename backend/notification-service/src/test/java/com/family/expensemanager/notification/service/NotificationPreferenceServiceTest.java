@@ -52,7 +52,7 @@ class NotificationPreferenceServiceTest {
         assertThat(result).allMatch(p -> p.inAppEnabled() && p.emailEnabled());
         assertThat(result).filteredOn(NotificationPreferenceResponse::emailSupported)
                 .extracting(NotificationPreferenceResponse::type)
-                .containsExactly("BUDGET_EXCEEDED", "WALLET_TRANSFERRED");
+                .containsExactly("BUDGET_EXCEEDED", "WALLET_TRANSFERRED", "TRANSFER_REQUESTED", "TRANSFER_REQUEST_REJECTED");
     }
 
     @Test
