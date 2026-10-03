@@ -1159,3 +1159,34 @@ Tức là hệ thống **chưa chạy trên VPS nào** — backend đang chạy 
 **Không cấp thiết, có thể làm sau (housekeeping, tích rác rất chậm ở quy mô project hiện tại):**
 - [ ] Job dọn định kỳ bảng `IDEMPOTENCY_KEYS` (expense-service) — mỗi request tạo giao dịch/chuyển ví có gửi `Idempotency-Key` sẽ ghi 1 dòng, không có gì xoá sau khi đã dùng xong; nên purge các dòng cũ hơn vài ngày (dòng chỉ cần sống lâu hơn `IN_FLIGHT_TIMEOUT` 1 phút trong `IdempotencyGuard` một chút, không cần giữ lâu).
 - [ ] Job dọn `REFRESH_TOKENS` và `FAMILY_INVITES` đã hết hạn (auth-service) — hiện chỉ bị xoá khi có hành động cụ thể (logout, đổi mật khẩu, xoá lời mời...), token/invite hết hạn nhưng chưa ai đụng tới sẽ nằm lại trong DB vô hạn.
+
+
+===============Deploy==============
+Windows
+   │
+   │ git push
+   ▼
+GitHub
+   │
+   │ lần đầu: clone
+   ▼
+VPS
+   │
+   ├── Docker
+   │
+   ├── Git
+   │
+   └── /opt/family-expense-manager
+          │
+          └── infra/.env
+                 │
+                 ▼
+          Docker Compose
+                 │
+        ┌────────┼─────────┐
+        ▼        ▼         ▼
+      MySQL    Redis     Kafka
+        │
+   ┌────┼─────┐
+   ▼    ▼     ▼
+ auth expense notify
