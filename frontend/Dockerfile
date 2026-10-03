@@ -3,6 +3,10 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install
 COPY . .
+# Where the browser calls the API. Empty = the default in src/api/client.js (http://localhost:8080/api, dev).
+# On a VPS behind nginx set it to "https://<domain>/api" (docker-compose.prod.yml passes it from .env).
+ARG VITE_API_BASE_URL=
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 RUN npm run build
 
 FROM nginx:1.27-alpine

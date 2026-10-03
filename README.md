@@ -1138,23 +1138,23 @@ Bảng port của các service/tool phổ biến trong hạ tầng nói chung �
 
 Tức là hệ thống **chưa chạy trên VPS nào** — backend đang chạy trên máy local, lộ ra ngoài qua Cloudflare Quick Tunnel (URL ngẫu nhiên, đổi mỗi lần container `cloudflared` restart). Đây là mô hình để demo/test, chưa phải production.
 
-### Việc cần làm khi có VPS (chưa làm — TODO)
+### Triển khai lên VPS
 
-**Phải sửa trước khi mở ra ngoài Internet (bảo mật nghiêm trọng):**
-- [ ] Bỏ toàn bộ cổng debug JDWP (`JAVA_TOOL_OPTIONS: -agentlib:jdwp=...` và `ports: "500x:500x"`) khỏi mọi service trong `docker-compose.yml` bản chạy thật — JDWP không xác thực mở ra Internet là đường RCE tức thời. Nên tách một `docker-compose.prod.yml` không có các dòng này thay vì sửa trực tiếp file dev.
-- [ ] Bỏ `ports:` publish ra host của `mysql-db` (3307), `kafka` (9092), `redis` (6379) — Docker tự chèn luật iptables NAT nên UFW/firewall thường không chặn được, kể cả khi tưởng đã đóng cổng ở tầng OS. Chỉ nên giao tiếp qua mạng nội bộ `fem-network`.
-- [ ] Bỏ publish cổng Eureka Dashboard (8761) ra ngoài.
-- [ ] Thêm `restart: unless-stopped` cho mọi service (hiện chỉ `cloudflared` có) — VPS reboot hoặc container crash thì cả hệ thống không tự dậy lại.
+Hướng dẫn từng bước: **[infra/DEPLOY.md](infra/DEPLOY.md)**. Các file dùng cho VPS:
 
-**Cần có trước khi chạy thật:**
-- [ ] TLS/HTTPS thật qua Nginx/Caddy/Traefik + Let's Encrypt + tên miền riêng (hiện dựa vào HTTPS do Cloudflare Tunnel cấp sẵn).
-- [ ] Đổi `APP_BASE_URL`, `OAUTH2_SUCCESS_REDIRECT_URL` trong `.env` từ `localhost` sang domain thật, đồng thời cập nhật lại Redirect URI ở Google/Facebook Console.
-- [ ] Giới hạn tài nguyên container (`mem_limit`/`deploy.resources.limits`) cho từng service, tương xứng cấu hình VPS — hiện không giới hạn, nhiều JVM cùng chạy có thể chiếm hết RAM khi traffic tăng.
-- [ ] Cấu hình log rotation cho Docker (`logging: driver: json-file, options: {max-size, max-file}`) — mặc định log tích luỹ vô hạn, dễ đầy đĩa VPS.
-- [ ] Có backup định kỳ cho MySQL (`mysqldump` theo lịch, hoặc snapshot volume `mysql-data`) — hiện chưa có.
-- [ ] Ghim version cụ thể cho `grafana/grafana`, `prom/prometheus`, `grafana/loki` (đang dùng `:latest`, không tái lập được).
-- [ ] Chặn `/actuator/**` của `api-gateway` ở tầng reverse proxy/firewall, chỉ cho phép truy cập nội bộ — hiện `/actuator/health` và `/actuator/prometheus` public không cần đăng nhập trên cổng 8080 publish ra ngoài.
-- [ ] CI/CD deploy tự động lên VPS (hiện chỉ có CI build/test — `backend-ci.yml`, `frontend-ci.yml` — chưa có bước SSH/push image + `docker compose pull && up -d` trên VPS; deploy đang hoàn toàn thủ công).
+| File | Vai trò |
+|---|---|
+| `infra/docker-compose.prod.yml` | Bản chạy thật: không JDWP, không publish cổng nào ngoài nginx 80/443, `restart: unless-stopped`, `mem_limit` + `MaxRAMPercentage`, xoay log, image ghim phiên bản, monitoring tách vào profile và Grafana chỉ nghe trên 127.0.0.1 |
+| `infra/nginx/templates/default.conf.template` | Nginx: HTTP → HTTPS, `/api/*` → api-gateway, còn lại → frontend; `/actuator/**` không ra ngoài |
+| `infra/init-letsencrypt.sh` + service `certbot` | Lấy chứng chỉ Let's Encrypt lần đầu; certbot tự gia hạn, nginx tự reload mỗi 6 giờ |
+| `infra/.env.prod.example` | Mẫu biến môi trường (`.env.prod` đã nằm trong `.gitignore`); các URL đều suy ra từ `DOMAIN` |
+| `infra/backup-mysql.sh` | `mysqldump` 3 database mỗi đêm qua cron, giữ 14 ngày |
+
+Đã xử lý: bỏ JDWP, bỏ cổng MySQL/Kafka/Redis/Eureka, restart policy, TLS + domain, URL theo domain, giới hạn RAM, xoay log, backup MySQL, ghim phiên bản image, chặn actuator.
+
+**Còn lại:**
+- [ ] CI/CD deploy tự động lên VPS (hiện chỉ có CI build/test — `backend-ci.yml`, `frontend-ci.yml`; deploy vẫn thủ công theo DEPLOY.md bước 8).
+- [ ] Đẩy file backup ra ngoài VPS (rclone/rsync) — script chỉ ghi vào `/var/backups/fem` trên chính VPS.
 
 **Không cấp thiết, có thể làm sau (housekeeping, tích rác rất chậm ở quy mô project hiện tại):**
 - [ ] Job dọn định kỳ bảng `IDEMPOTENCY_KEYS` (expense-service) — mỗi request tạo giao dịch/chuyển ví có gửi `Idempotency-Key` sẽ ghi 1 dòng, không có gì xoá sau khi đã dùng xong; nên purge các dòng cũ hơn vài ngày (dòng chỉ cần sống lâu hơn `IN_FLIGHT_TIMEOUT` 1 phút trong `IdempotencyGuard` một chút, không cần giữ lâu).
@@ -1190,3 +1190,6 @@ VPS
    ┌────┼─────┐
    ▼    ▼     ▼
  auth expense notify
+
+Sau này khi có domain + HTTPS thì Internet chỉ cần:
+Port: 80/443
