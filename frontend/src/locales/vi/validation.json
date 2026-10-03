@@ -20,6 +20,7 @@
   "dateMax": "{{label}} không được sau {{max}}",
   "amountPositive": "Số tiền phải lớn hơn 0",
   "amountMin": "Số tiền tối thiểu là {{min}}đ",
+  "amountMax": "Số tiền tối đa là {{max}}đ",
   "endDateAfterStart": "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu",
   "monthsMustDiffer": "Tháng nguồn và tháng đích phải khác nhau",
   "walletsMustDiffer": "Ví đích phải khác ví nguồn",

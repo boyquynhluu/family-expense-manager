@@ -100,6 +100,17 @@ class RecurringTransactionServiceTest {
     }
 
     @Test
+    void create_rejectsRuleAboveFiveMillion() {
+        var request = new CreateRecurringTransactionRequest(
+                5L, 7L, "EXPENSE", BigDecimal.valueOf(10000000), null, null, 1, null, null, LocalDate.of(2026, 2, 1), null);
+
+        assertThatThrownBy(() -> service.create(1L, 10L, "a@b.com", "An", request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Số tiền giao dịch tối đa là 5.000.000đ");
+        verify(recurringTransactionDao, never()).insert(any());
+    }
+
+    @Test
     void create_setsNextRunDate_toNextMonth_whenDayOfMonthAlreadyPassedInStartMonth() {
         // startDate is the 15th but the bill runs on the 1st — the 1st of the start
         // month already passed, so the first real occurrence is next month's 1st.

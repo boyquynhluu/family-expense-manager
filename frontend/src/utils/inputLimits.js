@@ -4,6 +4,8 @@
 export const LIMITS = {
   // Smallest thu/chi amount (and recurring rule) — backend expense TransactionAmounts.MIN.
   minTransactionAmount: 10000,
+  // Largest thu/chi, recurring or transfer amount — backend expense TransactionAmounts.MAX.
+  maxTransactionAmount: 5000000,
   email: 255,
   // Typed form, separators included ("+84 912.345.678" = 15); stored normalised as +84XXXXXXXXX.
   phone: 20,

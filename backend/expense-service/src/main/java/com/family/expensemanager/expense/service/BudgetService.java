@@ -1,5 +1,22 @@
 package com.family.expensemanager.expense.service;
 
+import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
+
+import java.io.UncheckedIOException;
+import java.math.BigDecimal;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+
+import org.seasar.doma.jdbc.OptimisticLockException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.family.expensemanager.common.dto.PageResponse;
 import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
@@ -11,24 +28,9 @@ import com.family.expensemanager.expense.dto.BudgetResponse;
 import com.family.expensemanager.expense.dto.CopyBudgetsRequest;
 import com.family.expensemanager.expense.dto.CopyBudgetsResponse;
 import com.family.expensemanager.expense.dto.CreateBudgetRequest;
-import java.io.UncheckedIOException;
-import org.seasar.doma.jdbc.OptimisticLockException;
-import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.HashSet;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
-import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
 
 /**
  * @author boyquynhluu
@@ -40,6 +42,8 @@ import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
 public class BudgetService {
 
     private static final int MAX_PAGE_SIZE = 100;
+    private static final long MIN_AMOUNT_BUDGET = 10_000L;
+    private static final long MAX_AMOUNT_BUDGET = 5_000_000L;
 
     private final BudgetDao budgetDao;
     private final CategoryService categoryService;
@@ -156,6 +160,12 @@ public class BudgetService {
     }
 
     private void validateTarget(Long familyId, CreateBudgetRequest request, Long selfId) {
+        if(request.limitAmount().compareTo(BigDecimal.valueOf(MIN_AMOUNT_BUDGET)) < 0) {
+            throw logged(log, new BadRequestException("Hạn mức không được dưới 10.000 đ"));
+        }
+        if(request.limitAmount().compareTo(BigDecimal.valueOf(MAX_AMOUNT_BUDGET)) > 0) {
+            throw logged(log, new BadRequestException("Hạn mức không được vượt quá 5.000.000 đ"));
+        }
         Optional<Budget> duplicate;
         if (request.categoryId() == null) {
             duplicate = budgetDao.selectOverallByPeriod(familyId, request.periodMonth());

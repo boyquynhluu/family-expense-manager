@@ -443,7 +443,15 @@ export default function Wallets() {
                 {t("wallets:transferAmountLabel")}
                 <span className="required-mark" aria-hidden="true"> *</span>
               </span>
-              <AmountInput placeholder="0" value={transferForm.amount} onChange={(v) => updateTransferField("amount", v)} required positive />
+              <AmountInput
+                placeholder="0"
+                value={transferForm.amount}
+                onChange={(v) => updateTransferField("amount", v)}
+                required
+                positive
+                min={LIMITS.minTransactionAmount}
+                max={LIMITS.maxTransactionAmount}
+              />
             </Field>
             <Field>
               <span>

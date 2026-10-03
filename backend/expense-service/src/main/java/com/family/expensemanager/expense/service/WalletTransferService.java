@@ -22,6 +22,7 @@ import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.expense.dao.WalletTransferDao;
+import com.family.expensemanager.expense.domain.TransactionAmounts;
 import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.domain.entity.WalletTransfer;
 import com.family.expensemanager.expense.dto.CreateWalletTransferRequest;
@@ -44,7 +45,6 @@ import lombok.extern.slf4j.Slf4j;
 public class WalletTransferService {
 
     private static final String ROLE_OWNER = "OWNER";
-    private static final BigDecimal MIN_AMOUNT = new BigDecimal("10000");
     private static final int MAX_PAGE_SIZE = 100;
     private static final String IDEMPOTENCY_SCOPE = "CREATE_WALLET_TRANSFER";
 
@@ -137,9 +137,10 @@ public class WalletTransferService {
         if (request.fromWalletId().equals(request.toWalletId())) {
             throw logged(log, new BadRequestException("Ví nguồn và ví đích phải khác nhau"));
         }
-        if (request.amount().compareTo(MIN_AMOUNT) < 0) {
-            throw logged(log, new BadRequestException("Số tiền chuyển phải >= 10.000"));
-        }
+        // Same 10.000đ–5.000.000đ range as a transaction, on create and on every edit.
+        TransactionAmounts.problem(request.amount()).ifPresent(message -> {
+            throw logged(log, new BadRequestException(message));
+        });
         // From the sender's own private wallet, to another member's private wallet or a shared one. On edit, a side
         // is only re-checked when it changes — fixing the amount/note of an older transfer (made before this rule,
         // e.g. out of a shared wallet) stays possible.

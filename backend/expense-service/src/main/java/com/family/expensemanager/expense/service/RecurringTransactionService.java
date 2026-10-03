@@ -93,7 +93,7 @@ public class RecurringTransactionService {
         try {
             log.info("create - start, familyId={}, walletId={}, categoryId={}",
                     familyId, request.walletId(), request.categoryId());
-            requireMinimumAmount(request);
+            requireAmountInRange(request);
             Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
             walletService.requireUsableBy(wallet, userId, callerIsOwner);
             categoryService.requireOwnedByFamily(request.categoryId(), familyId, request.type());
@@ -150,7 +150,7 @@ public class RecurringTransactionService {
             log.info("update - start, id={}, familyId={}", id, familyId);
             RecurringTransaction r = requireOwnedByFamily(id, familyId);
             requireCanModify(r, callerUserId, callerIsOwner);
-            requireMinimumAmount(request);
+            requireAmountInRange(request);
             Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
             if (!request.walletId().equals(r.getWalletId())) {
                 walletService.requireUsableBy(wallet, callerUserId, callerIsOwner);
@@ -400,11 +400,14 @@ public class RecurringTransactionService {
         return month.withDayOfMonth(Math.min(dayOfMonth, month.lengthOfMonth()));
     }
 
-    /** Always, also on update: a rule below the floor would make every scheduled run fail in TransactionService.create. */
-    private void requireMinimumAmount(CreateRecurringTransactionRequest request) {
-        if (TransactionAmounts.isBelowMinimum(request.amount())) {
-            throw logged(log, new BadRequestException(TransactionAmounts.BELOW_MIN_MESSAGE));
-        }
+    /**
+     * Always, also on an update that keeps the amount: a rule outside the range would make every scheduled run
+     * fail in TransactionService.create, so it has to be fixed before anything else on it is saved.
+     */
+    private void requireAmountInRange(CreateRecurringTransactionRequest request) {
+        TransactionAmounts.problem(request.amount()).ifPresent(message -> {
+            throw logged(log, new BadRequestException(message));
+        });
     }
 
     private void requireCanModify(RecurringTransaction r, Long callerUserId, boolean callerIsOwner) {

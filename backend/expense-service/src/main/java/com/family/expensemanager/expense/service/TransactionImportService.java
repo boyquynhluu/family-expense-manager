@@ -194,8 +194,9 @@ public class TransactionImportService {
             return;
         }
         // TransactionService.create would reject it too, but as a whole-request 400 rather than a per-row error.
-        if (TransactionAmounts.isBelowMinimum(amount)) {
-            errors.add(new ImportRowError(rowNumber, TransactionAmounts.BELOW_MIN_MESSAGE + ": \"" + amountStr + "\""));
+        Optional<String> amountProblem = TransactionAmounts.problem(amount);
+        if (amountProblem.isPresent()) {
+            errors.add(new ImportRowError(rowNumber, amountProblem.get() + ": \"" + amountStr + "\""));
             return;
         }
 

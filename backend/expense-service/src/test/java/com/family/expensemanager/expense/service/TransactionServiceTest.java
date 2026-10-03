@@ -163,6 +163,15 @@ class TransactionServiceTest {
     }
 
     @Test
+    void create_rejectsAmountAboveFiveMillion() {
+        assertThatThrownBy(() -> transactionService.create(1L, CREATOR_ID, "user@b.com", "Chủ hộ",
+                new TransactionRequest(5L, 7L, "INCOME", new BigDecimal("5000000.01"), LocalDateTime.now(), null), null))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Số tiền giao dịch tối đa là 5.000.000đ");
+        verify(transactionDao, never()).insert(any(Transaction.class));
+    }
+
+    @Test
     void create_acceptsExactlyTenThousand() {
         Wallet wallet = new Wallet();
         wallet.setId(5L);
@@ -177,15 +186,15 @@ class TransactionServiceTest {
     }
 
     @Test
-    void update_keepsAnOldSmallAmount_whenOnlyOtherFieldsChange() {
-        Transaction target = transaction(1L); // amount 10, from before the floor existed
-        stubUpdateDependencies(target);
+    void update_rejectsAnOldOutOfRangeAmount_evenWhenOnlyOtherFieldsChange() {
+        Transaction target = transaction(1L); // amount 10, from before the range existed
+        when(transactionDao.selectById(1L)).thenReturn(Optional.of(target));
 
-        var response = transactionService.update(1L, 1L, CREATOR_ID, "An", false,
-                new TransactionRequest(5L, 7L, "EXPENSE", new BigDecimal("10.00"), LocalDateTime.now(), "sửa ghi chú"));
-
-        assertThat(response.note()).isEqualTo("sửa ghi chú");
-        verify(transactionDao).update(target);
+        assertThatThrownBy(() -> transactionService.update(1L, 1L, CREATOR_ID, "An", false,
+                new TransactionRequest(5L, 7L, "EXPENSE", new BigDecimal("10.00"), LocalDateTime.now(), "sửa ghi chú")))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Số tiền giao dịch tối thiểu là 10.000đ");
+        verify(transactionDao, never()).update(any(Transaction.class));
     }
 
     @Test

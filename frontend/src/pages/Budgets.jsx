@@ -2,16 +2,17 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
-import { AlertIcon, EditIcon, TrashIcon } from "../components/AppIcons";
 import AmountInput from "../components/AmountInput";
+import { AlertIcon, EditIcon, TrashIcon } from "../components/AppIcons";
 import Pagination from "../components/Pagination";
-import { confirmDialog } from "../utils/confirm";
-import { formatCurrency, formatYearMonth } from "../utils/format";
+import { Button, IconButton } from "../components/ui/Button";
+import { Field } from "../components/ui/Field";
+import { Input, Select } from "../components/ui/Input";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
-import { Button, IconButton } from "../components/ui/Button";
-import { Input, Select } from "../components/ui/Input";
-import { Field } from "../components/ui/Field";
+import { confirmDialog } from "../utils/confirm";
+import { formatCurrency, formatYearMonth } from "../utils/format";
+import { LIMITS } from "../utils/inputLimits";
 
 function currentYearMonth() {
   const now = new Date();
@@ -216,7 +217,15 @@ export default function Budgets() {
                   {t("budgets:limitLabel")}
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
-                <AmountInput placeholder="0" value={limitAmount} onChange={setLimitAmount} required positive />
+                <AmountInput
+                    placeholder="0"
+                    value={limitAmount}
+                    onChange={setLimitAmount}
+                    required
+                    positive
+                    min={LIMITS.minTransactionAmount}
+                    max={LIMITS.maxTransactionAmount}
+                />
               </Field>
               <Button type="submit">{editingId ? t("budgets:updateButton") : t("budgets:createButton")}</Button>
               {editingId && (

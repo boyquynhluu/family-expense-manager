@@ -20,6 +20,7 @@
   "dateMax": "{{label}} can't be after {{max}}",
   "amountPositive": "Amount must be greater than 0",
   "amountMin": "The minimum amount is {{min}}",
+  "amountMax": "The maximum amount is {{max}}",
   "endDateAfterStart": "End date must be on or after the start date",
   "monthsMustDiffer": "Source and target months must be different",
   "walletsMustDiffer": "Destination wallet must differ from the source wallet",

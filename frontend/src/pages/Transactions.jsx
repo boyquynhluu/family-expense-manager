@@ -102,9 +102,6 @@ export default function Transactions() {
   // Wallet of the entry being edited — kept selectable even if it has since become another
   // member's private wallet (the backend only re-checks ownership when the wallet CHANGES).
   const [editingWalletId, setEditingWalletId] = useState(null);
-  // Amount the edited entry had when the form opened — the 10.000đ floor only applies once it is changed,
-  // so older smaller entries can still have their note/date fixed (same rule as TransactionService.update).
-  const [editingAmount, setEditingAmount] = useState(null);
   // Creator of the entry being edited: only they may change its private flag.
   const [editingCreatorId, setEditingCreatorId] = useState(null);
   const [categories, setCategories] = useState([]);
@@ -201,7 +198,6 @@ export default function Transactions() {
   function startEdit(transaction) {
     setEditingId(transaction.id);
     setEditingWalletId(transaction.walletId);
-    setEditingAmount(transaction.amount);
     setEditingCreatorId(transaction.userId);
     setForm({
       walletId: String(transaction.walletId),
@@ -217,7 +213,6 @@ export default function Transactions() {
   function cancelEdit() {
     setEditingId(null);
     setEditingWalletId(null);
-    setEditingAmount(null);
     setEditingCreatorId(null);
     setReceiptFile(null);
     setReceiptInputKey((k) => k + 1);
@@ -227,7 +222,6 @@ export default function Transactions() {
   function startDuplicate(transaction) {
     setEditingId(null);
     setEditingWalletId(null);
-    setEditingAmount(null);
     setEditingCreatorId(null);
     setReceiptFile(null);
     setReceiptInputKey((k) => k + 1);
@@ -609,7 +603,8 @@ export default function Transactions() {
                 onChange={(v) => updateField("amount", v)}
                 required
                 positive
-                min={editingId && Number(form.amount) === Number(editingAmount) ? undefined : LIMITS.minTransactionAmount}
+                min={LIMITS.minTransactionAmount}
+                max={LIMITS.maxTransactionAmount}
               />
             </Field>
             <Field>
