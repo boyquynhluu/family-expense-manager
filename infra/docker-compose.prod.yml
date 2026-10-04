@@ -25,6 +25,10 @@ x-java-opts: &java-opts "-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
 networks:
   fem-network:
     driver: bridge
+    # IPv6-only VPS: with IPv6 on the network, Docker forwards published IPv6 ports via ip6tables and nginx sees
+    # the visitor's real address (without it, docker-proxy hands every IPv6 visitor over as the bridge gateway,
+    # so the gateway's per-IP login limit would lump everyone together). Needs Docker Engine >= 27.
+    enable_ipv6: true
 
 volumes:
   mysql-data:
