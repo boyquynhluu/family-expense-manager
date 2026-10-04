@@ -1,5 +1,6 @@
 # Production compose for a VPS (see infra/DEPLOY.md). Differences from docker-compose.yml:
-#   - no JDWP debug agents / debug ports, and NO host ports except nginx's 80/443 — MySQL, Kafka, Redis,
+#   - no JDWP debug agents / debug ports, and NO public host ports except nginx's 80/443 (MySQL is bound to the
+#     VPS's 127.0.0.1 only, for SSH tunnels) — MySQL, Kafka, Redis,
 #     Eureka, the services and the monitoring stack are only reachable on the internal fem-network
 #     (Docker writes its own iptables rules, so a host firewall like UFW would NOT block a published port);
 #   - nginx in front: HTTPS (Let's Encrypt via certbot), /api → api-gateway, everything else → frontend;
@@ -89,6 +90,10 @@ services:
       FEM_EXPENSE_DB_PASSWORD: ${FEM_EXPENSE_DB_PASSWORD}
       FEM_NOTIFY_DB_USER: ${FEM_NOTIFY_DB_USER}
       FEM_NOTIFY_DB_PASSWORD: ${FEM_NOTIFY_DB_PASSWORD}
+    # Loopback only — not reachable from the internet. For DB tools on your own machine via an SSH tunnel:
+    #   ssh -L 3307:127.0.0.1:3306 <vps>   then connect to localhost:3307
+    ports:
+      - "127.0.0.1:3306:3306"
     volumes:
       - mysql-data:/var/lib/mysql
       - ./mysql/init:/docker-entrypoint-initdb.d
