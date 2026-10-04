@@ -19,6 +19,23 @@ MySQL, Kafka, Redis, Eureka: chỉ trong mạng nội bộ fem-network, không c
 | DNS | Bản ghi **A** trỏ tên miền về IP của VPS (và AAAA nếu VPS có IPv6). Chờ DNS cập nhật trước bước 4 — Let's Encrypt cần nó để cấp chứng chỉ |
 | SMTP | Gmail: bật 2FA cho tài khoản Google rồi tạo **App Password** |
 
+### VPS chỉ có IPv6 → đưa tên miền qua Cloudflare
+
+Nếu VPS chỉ có IPv6 (IPv4 chỉ là địa chỉ nội bộ để đi ra ngoài), người dùng mạng chỉ có IPv4 sẽ không vào
+được. Cloudflare (gói Free) nhận cả IPv4 lẫn IPv6 rồi chuyển vào VPS bằng IPv6:
+
+1. Tạo tài khoản ở cloudflare.com → **Add a site** → nhập tên miền → chọn gói **Free**.
+2. Cloudflare đưa 2 nameserver (dạng `xxx.ns.cloudflare.com`). Vào trang quản lý tên miền (nơi đăng ký) →
+   đổi **Nameserver** sang 2 địa chỉ đó. Chờ Cloudflare báo **Active** (vài phút đến vài giờ).
+3. Cloudflare → **DNS → Records**: thêm bản ghi **AAAA**, Name `@`, IPv6 = địa chỉ IPv6 của VPS,
+   Proxy status **DNS only (đám mây xám)** — để xám cho tới khi lấy xong chứng chỉ ở bước 4.
+4. Lấy chứng chỉ (bước 4 bên dưới). Xong thì quay lại bật **Proxied (đám mây cam)**.
+5. Cloudflare → **SSL/TLS → Overview**: chọn **Full (strict)**. (Không chọn *Flexible* — sẽ lặp redirect vô hạn.)
+
+Cấu hình nginx hiện **không** đọc `CF-Connecting-IP` (deploy hiện tại không dùng Cloudflare — tin header đó khi
+không có Cloudflare sẽ cho phép giả IP). Nếu chuyển sang Cloudflare, cần thêm `set_real_ip_from` (dải IP Cloudflare)
++ `real_ip_header CF-Connecting-IP;` vào `nginx/templates/default.conf.template`.
+
 ## 1. Cài Docker và tường lửa trên VPS
 
 ```bash
