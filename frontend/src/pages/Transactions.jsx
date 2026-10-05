@@ -19,6 +19,9 @@ import SeedDefaultsButton from "../components/SeedDefaultsButton";
 import TransactionHistoryModal from "../components/TransactionHistoryModal";
 import { useAuth } from "../hooks/useAuth";
 import { PAGE_SIZE } from "../hooks/usePagedList";
+import RefundModal from "../components/RefundModal";
+import TransactionApprovals from "../components/TransactionApprovals";
+import { usePeriodLocks } from "../hooks/usePeriodLocks";
 import { confirmDialog } from "../utils/confirm";
 import { maxDateTime, minDateTime } from "../utils/dateLimits";
 import { formatCurrency } from "../utils/format";
@@ -48,6 +51,7 @@ function filterParams(filter) {
   if (filter.q.trim()) params.q = filter.q.trim();
   if (filter.minAmount !== "") params.minAmount = filter.minAmount;
   if (filter.maxAmount !== "") params.maxAmount = filter.maxAmount;
+  if (filter.tagId) params.tagId = filter.tagId;
   return params;
 }
 
@@ -59,7 +63,18 @@ const emptyForm = {
   occurredAt: "",
   note: "",
   isPrivate: false,
+  // README C6: comma-separated tag names.
+  tags: "",
+  // README C5: [] = not split; otherwise [{ categoryId, amount }] adding up to the amount.
+  splits: [],
 };
+
+function tagsOf(text) {
+  return text
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
 
 const emptyFilter = {
   walletId: "",
@@ -70,6 +85,7 @@ const emptyFilter = {
   q: "",
   minAmount: "",
   maxAmount: "",
+  tagId: "",
 };
 
 // <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" in the browser's local time.
@@ -97,6 +113,7 @@ export default function Transactions() {
   const { t } = useTranslation(["common", "transactions"]);
   const cleanText = useCleanText();
   const { role, userId } = useAuth();
+  const { isLocked } = usePeriodLocks();
   const [pageData, setPageData] = useState(emptyPage);
   const [wallets, setWallets] = useState([]);
   // Wallet of the entry being edited — kept selectable even if it has since become another
@@ -106,6 +123,9 @@ export default function Transactions() {
   const [editingCreatorId, setEditingCreatorId] = useState(null);
   const [categories, setCategories] = useState([]);
   const [historyTransactionId, setHistoryTransactionId] = useState(null);
+  const [tagOptions, setTagOptions] = useState([]);
+  const [refundTarget, setRefundTarget] = useState(null);
+  const [approvalsKey, setApprovalsKey] = useState(0);
   const [members, setMembers] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
@@ -161,7 +181,12 @@ export default function Transactions() {
   useEffect(() => setSelectedIds(new Set()), [filter]);
   useEffect(load, [filter, page, t]);
 
+  function loadTags() {
+    client.get("/expenses/tags").then((res) => setTagOptions(res.data.data)).catch(() => {});
+  }
+
   function loadWalletsAndCategories() {
+    loadTags();
     client.get("/expenses/wallets").then((res) => setWallets(res.data.data));
     client.get("/expenses/categories").then((res) => {
       setCategories(res.data.data);
@@ -175,6 +200,8 @@ export default function Transactions() {
       .get("/auth/family/members", { params: { page: 0, size: 100 } })
       .then((res) => setMembers(res.data.data.content))
       .catch(() => {});
+    // Load once on mount; loadWalletsAndCategories is also re-run by hand after seeding defaults.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Wallets this member may record into (their own + shared; any for the OWNER) — the add/edit
@@ -195,6 +222,26 @@ export default function Transactions() {
     setForm((f) => ({ ...f, [field]: value }));
   }
 
+  function toCents(value) {
+    return Math.round(Number(value || 0) * 100);
+  }
+
+  function splitTotal() {
+    return form.splits.reduce((sum, p) => sum + toCents(p.amount), 0);
+  }
+
+  // README C5: start splitting with two parts — the current category with the whole amount, and an empty one.
+  function toggleSplits(enabled) {
+    setForm((f) => ({
+      ...f,
+      splits: enabled ? [{ categoryId: f.categoryId, amount: f.amount }, { categoryId: "", amount: "" }] : [],
+    }));
+  }
+
+  function updateSplit(index, field, value) {
+    setForm((f) => ({ ...f, splits: f.splits.map((p, i) => (i === index ? { ...p, [field]: value } : p)) }));
+  }
+
   function startEdit(transaction) {
     setEditingId(transaction.id);
     setEditingWalletId(transaction.walletId);
@@ -207,6 +254,8 @@ export default function Transactions() {
       occurredAt: transaction.occurredAt.slice(0, 16),
       note: transaction.note ?? "",
       isPrivate: Boolean(transaction.isPrivate),
+      tags: (transaction.tags ?? []).join(", "),
+      splits: (transaction.splits ?? []).map((p) => ({ categoryId: String(p.categoryId), amount: String(p.amount) })),
     });
   }
 
@@ -239,6 +288,8 @@ export default function Transactions() {
       note: transaction.note ?? "",
       // A private entry we see is necessarily our own — keep the copy private too.
       isPrivate: Boolean(transaction.isPrivate),
+      tags: (transaction.tags ?? []).join(", "),
+      splits: (transaction.splits ?? []).map((p) => ({ categoryId: String(p.categoryId), amount: String(p.amount) })),
     });
     formCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -255,7 +306,7 @@ export default function Transactions() {
   // The header checkbox only (un)ticks the CURRENT page's rows — selections made on
   // other pages are left untouched.
   function toggleSelectAll() {
-    const selectableIds = pageData.content.filter(canModify).map((r) => r.id);
+    const selectableIds = pageData.content.filter(canChange).map((r) => r.id);
     const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -279,13 +330,17 @@ export default function Transactions() {
       let deleted = 0;
       let skipped = 0;
       let forbidden = 0;
+      let locked = 0;
       for (let i = 0; i < ids.length; i += BULK_DELETE_MAX) {
         const res = await client.post("/expenses/transactions/bulk-delete", { ids: ids.slice(i, i + BULK_DELETE_MAX) });
         deleted += res.data.data.deleted;
         skipped += res.data.data.skipped;
         forbidden += res.data.data.forbidden;
+        locked += res.data.data.locked ?? 0;
       }
-      const message = t("transactions:bulkDeleteResult", { deleted, skipped, forbidden });
+      const message =
+        t("transactions:bulkDeleteResult", { deleted, skipped, forbidden }) +
+        (locked > 0 ? ` ${t("transactions:bulkDeleteLocked", { locked })}` : "");
       if (deleted > 0) {
         notifyTrashChanged();
         toast.success(message);
@@ -314,7 +369,15 @@ export default function Transactions() {
       occurredAt: form.occurredAt,
       note: form.note || null,
       isPrivate: form.isPrivate,
+      tags: tagsOf(form.tags),
+      splits: form.splits.length > 0
+        ? form.splits.map((p) => ({ categoryId: Number(p.categoryId), amount: Number(p.amount) }))
+        : null,
     };
+    if (form.splits.length > 0 && splitTotal() !== toCents(form.amount)) {
+      setError(t("transactions:splitMismatch"));
+      return;
+    }
     let savedId;
     try {
       if (editingId) {
@@ -322,8 +385,17 @@ export default function Transactions() {
         savedId = editingId;
       } else {
         const res = await client.post("/expenses/transactions", payload);
+        if (res.status === 202) {
+          // README A5: above the approval threshold — nothing is recorded until the OWNER approves.
+          toast(t("transactions:sentForApproval"), { icon: "⏳" });
+          if (receiptFile) toast(t("transactions:receiptAfterApproval"), { icon: "ℹ️" });
+          cancelEdit();
+          setApprovalsKey((k) => k + 1);
+          return;
+        }
         savedId = res.data.data.id;
       }
+      loadTags();
     } catch (err) {
       setError(err.response?.data?.message || t("transactions:saveFailed"));
       return;
@@ -454,6 +526,17 @@ export default function Transactions() {
     return !isMasked(row) && (role === "OWNER" || String(row.userId) === String(userId));
   }
 
+  // README C4: an expense (not itself a refund) the caller may modify, in an open month.
+  function canRefund(row) {
+    return row.type === "EXPENSE" && Number(row.amount) > 0 && canChange(row);
+  }
+
+  // Edit/delete/select also need the row's month to be open (README B2 "chốt sổ"); a receipt doesn't change
+  // any number, so it stays attachable in a closed month.
+  function canChange(row) {
+    return canModify(row) && !isLocked(row.occurredAt);
+  }
+
   function updateFilter(field, value) {
     setFilter((f) => ({ ...f, [field]: value }));
     setPage(0);
@@ -465,7 +548,7 @@ export default function Transactions() {
   }
 
   const hasActiveFilter = Object.values(filter).some(Boolean);
-  const selectableRows = pageData.content.filter(canModify);
+  const selectableRows = pageData.content.filter(canChange);
   const allSelectableSelected = selectableRows.length > 0 && selectableRows.every((r) => selectedIds.has(r.id));
   const selectedOnPage = pageData.content.filter((r) => selectedIds.has(r.id)).length;
   // Selected rows the user can't see right now — surfaced in the bulk bar so "Xoá đã chọn"
@@ -574,19 +657,21 @@ export default function Transactions() {
                 ))}
               </Select>
             </Field>
-            <Field>
-              <span>
-                {t("transactions:categoryLabel")}
-                <span className="required-mark" aria-hidden="true"> *</span>
-              </span>
-              <Select value={form.categoryId} onChange={(e) => updateField("categoryId", e.target.value)} required>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+            {form.splits.length === 0 && (
+              <Field>
+                <span>
+                  {t("transactions:categoryLabel")}
+                  <span className="required-mark" aria-hidden="true"> *</span>
+                </span>
+                <Select value={form.categoryId} onChange={(e) => updateField("categoryId", e.target.value)} required>
+                  {categories.filter((c) => c.type === form.type).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.parentId ? `— ${c.name}` : c.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
             <Field>
               {t("transactions:typeLabel")}
               <Select value={form.type} onChange={(e) => updateField("type", e.target.value)}>
@@ -632,6 +717,65 @@ export default function Transactions() {
                 onChange={(e) => updateField("note", e.target.value)}
               />
             </Field>
+            <Field>
+              {t("transactions:tagsLabel")}
+              <Input
+                list="transaction-tag-options"
+                placeholder={t("transactions:tagsPlaceholder")}
+                value={form.tags}
+                maxLength={300}
+                onChange={(e) => updateField("tags", e.target.value)}
+              />
+              <datalist id="transaction-tag-options">
+                {tagOptions.map((tag) => (
+                  <option key={tag.id} value={tag.name} />
+                ))}
+              </datalist>
+            </Field>
+            <div className="field">
+              {t("transactions:splitLabel")}
+              <label className="inline-flex h-9 items-center gap-2 text-sm">
+                <Checkbox checked={form.splits.length > 0} onChange={(e) => toggleSplits(e.target.checked)} />
+                {t("transactions:splitToggle")}
+              </label>
+            </div>
+            {form.splits.length > 0 && (
+              <div className="w-full space-y-2 rounded-lg border border-slate-200 p-3">
+                {form.splits.map((part, index) => (
+                  <div key={index} className="flex flex-wrap items-end gap-2">
+                    <Select value={part.categoryId} onChange={(e) => updateSplit(index, "categoryId", e.target.value)} required>
+                      <option value="">{t("transactions:splitChooseCategory")}</option>
+                      {categories.filter((c) => c.type === form.type).map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.parentId ? `— ${c.name}` : c.name}
+                        </option>
+                      ))}
+                    </Select>
+                    <AmountInput value={part.amount} onChange={(v) => updateSplit(index, "amount", v)} required positive />
+                    {form.splits.length > 2 && (
+                      <IconButton variant="ghost-danger" size="sm" aria-label={t("common:delete")}
+                        onClick={() => setForm((f) => ({ ...f, splits: f.splits.filter((_, i) => i !== index) }))}>
+                        <CloseIcon />
+                      </IconButton>
+                    )}
+                  </div>
+                ))}
+                <div className="flex flex-wrap items-center gap-3 text-sm">
+                  {form.splits.length < 10 && (
+                    <Button variant="secondary" size="sm"
+                      onClick={() => setForm((f) => ({ ...f, splits: [...f.splits, { categoryId: "", amount: "" }] }))}>
+                      {t("transactions:splitAddPart")}
+                    </Button>
+                  )}
+                  <span className={splitTotal() === toCents(form.amount) ? "text-emerald-700" : "text-red-600"}>
+                    {t("transactions:splitTotal", {
+                      total: formatCurrency(splitTotal() / 100),
+                      amount: formatCurrency(Number(form.amount || 0)),
+                    })}
+                  </span>
+                </div>
+              </div>
+            )}
             <div className="field">
               {t("transactions:visibilityLabel")}
               {/* Only the creator decides (the backend ignores the flag when an OWNER edits someone
@@ -710,6 +854,14 @@ export default function Transactions() {
         onChange={handleImportFile}
       />
 
+      <TransactionApprovals
+        isOwner={role === "OWNER"}
+        walletName={walletName}
+        categoryName={categoryName}
+        reloadKey={approvalsKey}
+        onApproved={load}
+      />
+
       <div className="section-card">
         <div className="page-header">
           <h2>{t("transactions:historyTitle")}</h2>
@@ -767,6 +919,19 @@ export default function Transactions() {
               <option value="INCOME">{t("transactions:typeIncome")}</option>
             </Select>
           </Field>
+          {tagOptions.length > 0 && (
+            <Field>
+              {t("transactions:tagsLabel")}
+              <Select value={filter.tagId} onChange={(e) => updateFilter("tagId", e.target.value)}>
+                <option value="">{t("transactions:allOption")}</option>
+                {tagOptions.map((tag) => (
+                  <option key={tag.id} value={tag.id}>
+                    {tag.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
           <Field>
             {t("transactions:searchLabel")}
             <Input
@@ -910,7 +1075,7 @@ export default function Transactions() {
                   <Td>
                     <Checkbox
                       checked={selectedIds.has(row.id)}
-                      disabled={!canModify(row)}
+                      disabled={!canChange(row)}
                       onChange={() => toggleSelected(row.id)}
                       aria-label={t("transactions:selectRowAria")}
                     />
@@ -919,13 +1084,35 @@ export default function Transactions() {
                     {/* Break only between date and time — never inside "2026-09-22" at a hyphen. */}
                     <span className="whitespace-nowrap">{row.occurredAt.slice(0, 10)}</span>{" "}
                     <span className="whitespace-nowrap">{row.occurredAt.slice(11)}</span>
+                    {isLocked(row.occurredAt) && (
+                      <span
+                        className="ml-1 inline-flex align-middle text-slate-400 [&_svg]:size-3"
+                        title={t("transactions:lockedRowHint")}
+                        aria-label={t("transactions:lockedRowHint")}
+                      >
+                        <LockIcon />
+                      </span>
+                    )}
                   </Td>
                   <Td data-label={t("transactions:walletLabel")}>{walletName(row.walletId)}</Td>
-                  <Td data-label={t("transactions:categoryLabel")}>{categoryName(row.categoryId)}</Td>
+                  <Td data-label={t("transactions:categoryLabel")}>
+                    {row.splits ? (
+                      <span title={row.splits.map((p) => `${categoryName(p.categoryId)}: ${formatCurrency(p.amount)}`).join("\n")}>
+                        {row.splits.map((p) => categoryName(p.categoryId)).join(" + ")}
+                        <span className="badge badge-neutral ml-1">{t("transactions:splitBadge", { count: row.splits.length })}</span>
+                      </span>
+                    ) : (
+                      categoryName(row.categoryId)
+                    )}
+                  </Td>
                   <Td data-label={t("transactions:typeLabel")}>
-                    <span className={`badge ${row.type === "EXPENSE" ? "badge-expense" : "badge-income"}`}>
-                      {row.type === "EXPENSE" ? t("transactions:typeExpense") : t("transactions:typeIncome")}
-                    </span>
+                    {row.refundOfId ? (
+                      <span className="badge badge-income">{t("transactions:refundBadge")}</span>
+                    ) : (
+                      <span className={`badge ${row.type === "EXPENSE" ? "badge-expense" : "badge-income"}`}>
+                        {row.type === "EXPENSE" ? t("transactions:typeExpense") : t("transactions:typeIncome")}
+                      </span>
+                    )}
                   </Td>
                   <Td data-label={t("transactions:visibilityLabel")}>
                     {row.isPrivate ? (
@@ -945,12 +1132,23 @@ export default function Transactions() {
                   <Td
                     data-label={t("transactions:amountLabel")}
                     align="right"
-                    className={row.type === "EXPENSE" ? "amount-expense" : "amount-income"}
+                    className={row.type === "EXPENSE" && !row.refundOfId ? "amount-expense" : "amount-income"}
                   >
-                    {row.type === "EXPENSE" ? "-" : "+"}
-                    {formatCurrency(row.amount)}
+                    {row.refundOfId ? "+" : row.type === "EXPENSE" ? "-" : "+"}
+                    {formatCurrency(Math.abs(Number(row.amount)))}
                   </Td>
-                  <Td data-label={t("transactions:noteLabel")}>{row.note}</Td>
+                  <Td data-label={t("transactions:noteLabel")}>
+                    {row.note}
+                    {row.tags && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {row.tags.map((tag) => (
+                          <span key={tag} className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700">
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </Td>
                   <Td data-label={t("transactions:creatorLabel")}>{memberName(row)}</Td>
                   <Td actions>
                     {row.hasReceipt && (
@@ -994,18 +1192,29 @@ export default function Transactions() {
                             <ImageIcon />
                           </IconButton>
                         )}
-                        <IconButton
-                          onClick={() => startEdit(row)}
-                          aria-label={t("common:edit")}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton variant="danger"
-                          onClick={() => handleDelete(row.id)}
-                          aria-label={t("common:delete")}
-                        >
-                          <TrashIcon />
-                        </IconButton>
+                        {canRefund(row) && (
+                          <Button size="sm" variant="secondary" onClick={() => setRefundTarget(row)}>
+                            {t("transactions:refundButton")}
+                          </Button>
+                        )}
+                        {canChange(row) && (
+                          <>
+                            {!row.refundOfId && (
+                              <IconButton
+                                onClick={() => startEdit(row)}
+                              aria-label={t("common:edit")}
+                            >
+                                <EditIcon />
+                              </IconButton>
+                            )}
+                            <IconButton variant="danger"
+                              onClick={() => handleDelete(row.id)}
+                              aria-label={t("common:delete")}
+                            >
+                              <TrashIcon />
+                            </IconButton>
+                          </>
+                        )}
                       </>
                     )}
                   </Td>
@@ -1017,6 +1226,15 @@ export default function Transactions() {
 
         <Pagination pageData={pageData} onPageChange={setPage} />
       </div>
+
+      <RefundModal
+        transaction={refundTarget}
+        onClose={() => setRefundTarget(null)}
+        onDone={() => {
+          setRefundTarget(null);
+          load();
+        }}
+      />
 
       <TransactionHistoryModal
         transactionId={historyTransactionId}

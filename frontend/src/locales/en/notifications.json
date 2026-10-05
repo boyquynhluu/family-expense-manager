@@ -35,7 +35,15 @@
     "EXPENSE_DELETED": "Transaction deleted",
     "TRANSFER_REQUESTED": "Transfer request",
     "TRANSFER_REQUEST_APPROVED": "Transfer request approved",
-    "TRANSFER_REQUEST_REJECTED": "Transfer request rejected"
+    "TRANSFER_REQUEST_REJECTED": "Transfer request rejected",
+    "EXPENSE_UPDATED": "Transaction edited",
+    "RECURRING_DRAFT_CREATED": "Recurring entry to confirm",
+    "BILL_DUE_SOON": "Bill / card due soon",
+    "APPROVAL_REQUESTED": "Expense awaiting approval",
+    "APPROVAL_DECIDED": "Approval decision",
+    "LOAN_DUE_SOON": "Loan due soon",
+    "SAVINGS_MILESTONE": "Savings milestone",
+    "MONTHLY_SUMMARY": "Monthly summary"
   },
   "savePreferencesConfirm": "Save notification preferences?"
 }

@@ -1000,6 +1000,42 @@ public class AuthService {
         }
     }
 
+    /**
+     * README A5: the OWNER makes a member a plain MEMBER, a read-only VIEWER or a CHILD (spending limits are set in
+     * expense-service). The OWNER role itself only moves through {@link #transferOwnership}. The member's live access
+     * tokens are blocked so the new role applies right away (their next /refresh mints it).
+     */
+    @PreAuthorize("hasRole('OWNER')")
+    public void changeMemberRole(Long familyId, Long callerUserId, Long targetUserId, String role) {
+        try {
+            log.info("changeMemberRole - start, familyId={}, targetUserId={}, role={}", familyId, targetUserId, role);
+            if (targetUserId.equals(callerUserId)) {
+                throw logged(log, new BadRequestException("Không thể tự đổi vai trò của chính mình — hãy chuyển quyền chủ hộ"));
+            }
+            FamilyMembership membership = familyMembershipDao.selectByUserIdAndFamilyId(targetUserId, familyId)
+                    .orElseThrow(() -> logged(log, new NotFoundException("Thành viên không tồn tại: " + targetUserId)));
+            if (ROLE_OWNER.equals(membership.getRole())) {
+                throw logged(log, new BadRequestException("Không đổi được vai trò của chủ hộ — hãy chuyển quyền chủ hộ"));
+            }
+            if (role.equals(membership.getRole())) {
+                return;
+            }
+            membership.setRole(role);
+            familyMembershipDao.update(membership);
+            userDao.selectById(targetUserId).ifPresent(target -> {
+                if (familyId.equals(target.getFamilyId())) {
+                    target.setRole(role);
+                    userDao.update(target);
+                }
+            });
+            blockLiveAccessTokens(targetUserId);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("AuthService.changeMemberRole", e);
+        }
+    }
+
     @PreAuthorize("hasRole('OWNER')")
     public void removeMember(Long familyId, Long callerUserId, Long targetUserId) {
         try {

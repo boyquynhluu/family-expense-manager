@@ -6,9 +6,11 @@ import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.common.exception.ServiceException;
+import com.family.expensemanager.expense.dao.RecurringDraftDao;
 import com.family.expensemanager.expense.dao.RecurringTransactionDao;
 import com.family.expensemanager.expense.domain.TransactionAmounts;
 import com.family.expensemanager.expense.domain.entity.Category;
+import com.family.expensemanager.expense.domain.entity.RecurringDraft;
 import com.family.expensemanager.expense.domain.entity.RecurringTransaction;
 import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.dto.CreateRecurringTransactionRequest;
@@ -54,6 +56,9 @@ import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
 @Slf4j(topic = "RecurringTransactionService")
 public class RecurringTransactionService {
 
+    static final String MODE_AUTO = "AUTO";
+    static final String MODE_CONFIRM = "CONFIRM";
+
     /** Caps how many missed months a single run backfills for one rule, so a rule left
      *  inactive for years can't spawn years of back-dated transactions in one go. */
     private static final int MAX_CATCH_UP_RUNS = 24;
@@ -74,6 +79,7 @@ public class RecurringTransactionService {
     private final Clock clock;
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionTemplate transactionTemplate;
+    private final RecurringDraftDao recurringDraftDao;
 
     /** Trusted callers only (no wallet-ownership check) — user requests go through the overload below. */
     public RecurringTransactionResponse create(
@@ -109,6 +115,7 @@ public class RecurringTransactionService {
             r.setAmount(request.amount());
             r.setNote(request.note());
             applySchedule(r, request);
+            applyModeAndReminder(r, request);
             r.setActive(true);
             r.setCreatedAt(LocalDateTime.now(clock));
 
@@ -163,6 +170,7 @@ public class RecurringTransactionService {
             r.setAmount(request.amount());
             r.setNote(request.note());
             applySchedule(r, request);
+            applyModeAndReminder(r, request);
             recurringTransactionDao.update(r);
             return RecurringTransactionResponse.from(r);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
@@ -274,6 +282,23 @@ public class RecurringTransactionService {
         while (!runDate.isAfter(today) && !isPastEndDate(r, runDate) && runs < MAX_CATCH_UP_RUNS) {
             LocalDate occurrence = runDate;
             LocalDate next = nextOccurrence(occurrence, r);
+            if (MODE_CONFIRM.equals(r.getMode())) {
+                // README A4: no transaction yet — a draft to confirm with the real amount, then move on.
+                transactionTemplate.executeWithoutResult(status -> {
+                    if (recurringDraftDao.selectByRecurringAndDueDate(r.getId(), occurrence).isEmpty()) {
+                        recurringDraftDao.insert(draftOf(r, occurrence));
+                    }
+                    r.setNextRunDate(next);
+                    if (isPastEndDate(r, next)) {
+                        r.setActive(false);
+                    }
+                    recurringTransactionDao.update(r);
+                });
+                publishDraftCreated(r, occurrence);
+                runDate = next;
+                runs++;
+                continue;
+            }
             Long createdId = transactionTemplate.execute(status -> {
                 TransactionRequest request = new TransactionRequest(
                         r.getWalletId(), r.getCategoryId(), r.getType(), r.getAmount(), occurrence.atStartOfDay(),
@@ -301,6 +326,46 @@ public class RecurringTransactionService {
             r.setActive(false);
             recurringTransactionDao.update(r);
         }
+    }
+
+    private RecurringDraft draftOf(RecurringTransaction r, LocalDate occurrence) {
+        RecurringDraft draft = new RecurringDraft();
+        draft.setFamilyId(r.getFamilyId());
+        draft.setRecurringId(r.getId());
+        draft.setWalletId(r.getWalletId());
+        draft.setCategoryId(r.getCategoryId());
+        draft.setType(r.getType());
+        draft.setSuggestedAmount(r.getAmount());
+        draft.setNote(r.getNote());
+        draft.setDueDate(occurrence);
+        draft.setCreatedByUserId(r.getCreatedByUserId());
+        draft.setStatus(RecurringDraftService.STATUS_PENDING);
+        draft.setCreatedAt(LocalDateTime.now(clock));
+        return draft;
+    }
+
+    /** Never throws, like {@link #publishRecurringEvent}. */
+    private void publishDraftCreated(RecurringTransaction r, LocalDate occurrence) {
+        try {
+            String label = r.getNote() != null && !r.getNote().isBlank() ? "\"" + r.getNote().trim() + "\"" : "giao dịch định kỳ";
+            eventPublisher.publishEvent(ExpenseEvent.notice(ExpenseEvent.RECURRING_DRAFT_CREATED, r.getFamilyId(),
+                    r.getCreatedByUserId(), r.getCreatedByDisplayName(), null, null,
+                    "Có khoản định kỳ chờ xác nhận",
+                    "Đến kỳ " + label + " ngày " + occurrence + " (số tiền dự kiến "
+                            + com.family.expensemanager.common.currency.CurrencyUtil.formatCurrency(r.getAmount())
+                            + "). Vào trang Giao dịch định kỳ để nhập số tiền thật và xác nhận.",
+                    "/recurring-transactions"));
+        } catch (Exception e) {
+            log.warn("Không publish được RECURRING_DRAFT_CREATED cho recurring id={}", r.getId(), e);
+        }
+    }
+
+    /** README A4 / C2: mode defaults to AUTO; a reminder is only meaningful for an expense. */
+    private void applyModeAndReminder(RecurringTransaction r, CreateRecurringTransactionRequest request) {
+        r.setMode(request.mode() == null ? MODE_AUTO : request.mode());
+        r.setRemindDaysBefore(request.remindDaysBefore());
+        // The schedule may have moved: let the reminder for the (new) next run go out again.
+        r.setLastRemindedFor(null);
     }
 
     private static boolean isPastEndDate(RecurringTransaction r, LocalDate date) {

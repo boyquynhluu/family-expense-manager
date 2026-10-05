@@ -238,3 +238,33 @@ export function HistoryIcon() {
     </svg>
   );
 }
+
+export function HandCoinsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <circle cx="15" cy="7" r="3.5" />
+      <path d="M3 15h3l3.5 2.5H15a1.5 1.5 0 0 0 0-3h-3.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="m15 14.5 4.2-2.1a1.6 1.6 0 0 1 1.6 2.7L14 20H3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function TargetIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1.5" />
+    </svg>
+  );
+}
+
+export function BookIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2V5Z" strokeLinejoin="round" />
+      <path d="M4 19a2 2 0 0 1 2-2h13" strokeLinejoin="round" />
+      <path d="M9 7h6M9 11h4" strokeLinecap="round" />
+    </svg>
+  );
+}

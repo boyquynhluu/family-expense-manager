@@ -11,7 +11,8 @@
     "range": "Custom date range",
     "year": "By year",
     "member": "By member",
-    "compare": "Compare months"
+    "compare": "Compare months",
+    "tag": "By tag"
   },
   "fromLabel": "From date",
   "toLabel": "To date",
@@ -42,5 +43,7 @@
   "formerMember": "Former member",
   "category": "Category",
   "delta": "Change",
-  "vsMonth": "vs {{month}}"
+  "vsMonth": "vs {{month}}",
+  "tag": "Tag",
+  "tagHint": "A transaction with several tags counts in each of them."
 }

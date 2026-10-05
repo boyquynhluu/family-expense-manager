@@ -23,6 +23,9 @@ public class Category {
     @Column(name = "family_id")
     private Long familyId;
 
+    @Column(name = "parent_id")
+    private Long parentId;
+
     private String name;
 
     private String type;
@@ -88,5 +91,13 @@ public class Category {
 
     public void setDeletedAt(LocalDateTime deletedAt) {
         this.deletedAt = deletedAt;
+    }
+
+    public Long getParentId() {
+        return parentId;
+    }
+
+    public void setParentId(Long parentId) {
+        this.parentId = parentId;
     }
 }

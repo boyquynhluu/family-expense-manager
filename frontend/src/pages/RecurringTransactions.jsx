@@ -4,6 +4,7 @@ import client from "../api/client";
 import AmountInput from "../components/AmountInput";
 import { EditIcon, TrashIcon } from "../components/AppIcons";
 import Pagination from "../components/Pagination";
+import RecurringDrafts from "../components/RecurringDrafts";
 import { useAuth } from "../hooks/useAuth";
 import { usePagedList } from "../hooks/usePagedList";
 import { confirmDialog } from "../utils/confirm";
@@ -29,6 +30,8 @@ const emptyForm = {
   monthOfYear: "1",
   startDate: "",
   endDate: "",
+  mode: "AUTO",
+  remindDaysBefore: "",
 };
 
 export default function RecurringTransactions() {
@@ -81,6 +84,8 @@ export default function RecurringTransactions() {
       monthOfYear: String(rule.monthOfYear ?? 1),
       startDate: rule.startDate,
       endDate: rule.endDate ?? "",
+      mode: rule.mode ?? "AUTO",
+      remindDaysBefore: rule.remindDaysBefore == null ? "" : String(rule.remindDaysBefore),
     });
   }
 
@@ -107,6 +112,8 @@ export default function RecurringTransactions() {
       monthOfYear: form.frequency === "YEARLY" ? Number(form.monthOfYear) : null,
       startDate: form.startDate,
       endDate: form.endDate || null,
+      mode: form.mode,
+      remindDaysBefore: form.type === "EXPENSE" && form.remindDaysBefore ? Number(form.remindDaysBefore) : null,
     };
     try {
       if (editingId) {
@@ -323,6 +330,26 @@ export default function RecurringTransactions() {
               />
             </Field>
             <Field>
+              {t("recurringTransactions:modeLabel")}
+              <Select value={form.mode} onChange={(e) => updateField("mode", e.target.value)}>
+                <option value="AUTO">{t("recurringTransactions:modeAuto")}</option>
+                <option value="CONFIRM">{t("recurringTransactions:modeConfirm")}</option>
+              </Select>
+            </Field>
+            {form.type === "EXPENSE" && (
+              <Field>
+                {t("recurringTransactions:remindLabel")}
+                <Select value={form.remindDaysBefore} onChange={(e) => updateField("remindDaysBefore", e.target.value)}>
+                  <option value="">{t("recurringTransactions:remindNone")}</option>
+                  {[1, 2, 3, 5, 7, 10, 14].map((d) => (
+                    <option key={d} value={d}>
+                      {t("recurringTransactions:remindDays", { count: d })}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+            <Field>
               {t("recurringTransactions:noteLabel")}
               <Input
                 placeholder={t("recurringTransactions:optionalPlaceholder")}
@@ -343,6 +370,13 @@ export default function RecurringTransactions() {
         )}
         {error && <p className="error-text">{error}</p>}
       </div>
+
+      <RecurringDrafts
+        walletName={walletName}
+        categoryName={categoryName}
+        canDecide={(d) => isOwner || String(d.createdByUserId) === String(userId)}
+        onDecided={reload}
+      />
 
       <div className="section-card">
         <h2>{t("recurringTransactions:listTitle")}</h2>
@@ -381,7 +415,17 @@ export default function RecurringTransactions() {
                     {r.type === "EXPENSE" ? "-" : "+"}
                     {formatCurrency(r.amount)}
                   </Td>
-                  <Td data-label={t("recurringTransactions:scheduleLabel")}>{scheduleText(r)}</Td>
+                  <Td data-label={t("recurringTransactions:scheduleLabel")}>
+                    {scheduleText(r)}
+                    {r.mode === "CONFIRM" && (
+                      <span className="badge badge-neutral ml-1">{t("recurringTransactions:modeConfirmBadge")}</span>
+                    )}
+                    {r.remindDaysBefore && (
+                      <div className="text-xs text-slate-500">
+                        {t("recurringTransactions:remindDays", { count: r.remindDaysBefore })}
+                      </div>
+                    )}
+                  </Td>
                   <Td data-label={t("recurringTransactions:nextRunLabel")}>{r.active ? r.nextRunDate : "-"}</Td>
                   <Td data-label={t("recurringTransactions:executionStatusLabel")}>
                     <span className={`badge ${r.lastRunDate ? "badge-income" : "badge-neutral"}`}>

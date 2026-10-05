@@ -17,7 +17,16 @@ public enum NotificationType {
     EXPENSE_DELETED(false),
     TRANSFER_REQUESTED(true),
     TRANSFER_REQUEST_APPROVED(false),
-    TRANSFER_REQUEST_REJECTED(true);
+    TRANSFER_REQUEST_REJECTED(true),
+    // Generic notices (ExpenseEvent.notice): title/message come ready-made from expense-service.
+    EXPENSE_UPDATED(false),
+    RECURRING_DRAFT_CREATED(true),
+    BILL_DUE_SOON(true),
+    APPROVAL_REQUESTED(true),
+    APPROVAL_DECIDED(true),
+    LOAN_DUE_SOON(true),
+    SAVINGS_MILESTONE(true),
+    MONTHLY_SUMMARY(true);
 
     private final boolean emailSupported;
 

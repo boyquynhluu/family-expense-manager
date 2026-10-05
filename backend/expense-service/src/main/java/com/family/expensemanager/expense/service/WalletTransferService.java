@@ -52,6 +52,8 @@ public class WalletTransferService {
     private final WalletService walletService;
     private final ApplicationEventPublisher eventPublisher;
     private final IdempotencyGuard idempotencyGuard;
+    private final PeriodLockService periodLockService;
+    private final EntityAuditService entityAuditService;
 
     /**
      * @param idempotencyKey optional {@code Idempotency-Key} request header (see {@link IdempotencyGuard}) —
@@ -78,6 +80,7 @@ public class WalletTransferService {
                                             CreateWalletTransferRequest request) {
         try {
             log.info("create - start, familyId={}, from={}, to={}", familyId, request.fromWalletId(), request.toWalletId());
+            periodLockService.requireUnlocked(familyId, request.occurredAt());
             Wallet[] wallets = requireValidWallets(familyId, request, null, userId);
 
             WalletTransfer transfer = new WalletTransfer();
@@ -90,6 +93,8 @@ public class WalletTransferService {
             transfer.setCreatedByUserId(userId);
             transfer.setCreatedAt(LocalDateTime.now());
             walletTransferDao.insert(transfer);
+            entityAuditService.record(familyId, EntityAuditService.TRANSFER, transfer.getId(),
+                    EntityAuditService.ACTION_CREATED, null, WalletTransferResponse.from(transfer));
 
             eventPublisher.publishEvent(new ExpenseEvent(
                     ExpenseEvent.WALLET_TRANSFERRED, familyId, userId, null, null, request.amount(), null, null, null,
@@ -110,9 +115,11 @@ public class WalletTransferService {
             log.info("update - start, familyId={}, userId={}, transferId={}", familyId, userId, transferId);
             WalletTransfer transfer = requireOwnedByFamily(transferId, familyId);
             requireCreatorOrOwner(transfer, userId, role, "sửa");
+            periodLockService.requireUnlocked(familyId, transfer.getOccurredAt(), request.occurredAt());
             // The rule is about whose transfer it is — so an OWNER fixing a member's transfer is checked
             // against that member's wallets, not the OWNER's own.
             Wallet[] wallets = requireValidWallets(familyId, request, transfer, transfer.getCreatedByUserId());
+            WalletTransferResponse before = WalletTransferResponse.from(transfer);
 
             transfer.setFromWalletId(wallets[0].getId());
             transfer.setToWalletId(wallets[1].getId());
@@ -120,7 +127,10 @@ public class WalletTransferService {
             transfer.setNote(request.note());
             transfer.setOccurredAt(request.occurredAt());
             walletTransferDao.update(transfer);
-            return WalletTransferResponse.from(transfer);
+            WalletTransferResponse after = WalletTransferResponse.from(transfer);
+            entityAuditService.record(familyId, EntityAuditService.TRANSFER, transferId,
+                    EntityAuditService.ACTION_UPDATED, before, after);
+            return after;
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
             throw e;
         } catch (Exception e) {
@@ -168,8 +178,11 @@ public class WalletTransferService {
                 fromBalance = fromBalance.subtract(existing.getAmount());
             }
         }
-        if (request.amount().compareTo(fromBalance) > 0) {
-            throw logged(log, new BadRequestException("Số tiền chuyển phải <= số dư hiện tại của ví nguồn: " + CurrencyUtil.formatCurrency(fromBalance)));
+        // README A1: down to 0 for cash/bank/savings, down to -credit limit for a credit card.
+        BigDecimal available = fromBalance.subtract(walletService.balanceFloorOf(from));
+        if (request.amount().compareTo(available) > 0) {
+            throw logged(log, new BadRequestException("Số tiền chuyển phải <= số tiền còn dùng được của ví nguồn: "
+                    + CurrencyUtil.formatCurrency(available)));
         }
         return new Wallet[] {from, to};
     }
@@ -214,7 +227,10 @@ public class WalletTransferService {
             log.info("delete - start, familyId={}, userId={}, transferId={}", familyId, userId, transferId);
             WalletTransfer transfer = requireOwnedByFamily(transferId, familyId);
             requireCreatorOrOwner(transfer, userId, role, "xoá");
+            periodLockService.requireUnlocked(familyId, transfer.getOccurredAt());
             walletTransferDao.delete(transfer);
+            entityAuditService.record(familyId, EntityAuditService.TRANSFER, transferId,
+                    EntityAuditService.ACTION_DELETED, WalletTransferResponse.from(transfer), null);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
             throw e;
         } catch (Exception e) {

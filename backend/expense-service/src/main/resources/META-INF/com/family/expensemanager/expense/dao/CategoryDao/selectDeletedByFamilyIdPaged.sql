@@ -1,6 +1,7 @@
 SELECT
     id,
     family_id,
+    parent_id,
     name,
     type,
     icon,

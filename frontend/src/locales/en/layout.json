@@ -13,7 +13,11 @@
     "notifications": "Notifications",
     "trash": "Trash",
     "profile": "Profile",
-    "admin": "System admin"
+    "admin": "System admin",
+    "loans": "Loans",
+    "goals": "Savings goals",
+    "guide": "User guide"
   },
-  "logout": "Log out"
+  "logout": "Log out",
+  "viewerBanner": "You are a viewer: you can see all of the family's data but cannot add, edit or delete anything."
 }

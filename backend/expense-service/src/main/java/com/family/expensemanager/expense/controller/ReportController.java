@@ -47,6 +47,12 @@ public class ReportController {
         return ApiResponse.ok(reportService.byMember(CurrentUser.familyId(), from, to));
     }
 
+    @GetMapping("/by-tag")
+    public ApiResponse<java.util.List<com.family.expensemanager.expense.dto.TagReportItem>> byTag(
+            @RequestParam String from, @RequestParam String to) {
+        return ApiResponse.ok(reportService.byTag(CurrentUser.familyId(), from, to));
+    }
+
     @GetMapping("/compare")
     public ApiResponse<CompareReportResponse> compare(@RequestParam String month, @RequestParam String withMonth) {
         log.info("compare - start, month={}, withMonth={}", month, withMonth);

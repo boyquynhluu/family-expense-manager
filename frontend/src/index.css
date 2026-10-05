@@ -1892,3 +1892,85 @@ td .row-actions {
     width: 100%;
   }
 }
+
+/* README A5: shown on every page to a VIEWER (read-only member). */
+.viewer-banner {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 14px;
+}
+
+/* User guide page (pages/Guide.jsx, components/SimpleMarkdown.jsx). */
+.guide-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.guide-toc button {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: 13px;
+  color: #334155;
+  cursor: pointer;
+}
+.guide-toc button:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+.guide-content {
+  line-height: 1.65;
+  color: #1f2933;
+}
+.guide-content h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0 0 12px;
+  scroll-margin-top: 16px;
+}
+.guide-content h4 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 18px 0 8px;
+}
+.guide-content p {
+  margin: 8px 0;
+}
+.guide-content ul,
+.guide-content ol {
+  margin: 8px 0 8px 22px;
+}
+.guide-content ul {
+  list-style: disc;
+}
+.guide-content ol {
+  list-style: decimal;
+}
+.guide-content li {
+  margin: 4px 0;
+}
+.guide-content li > ul {
+  margin-top: 4px;
+}
+.guide-content code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  font-size: 0.9em;
+}
+.guide-content hr {
+  display: none;
+}
+.guide-note {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-left: 4px solid #6366f1;
+  border-radius: 6px;
+  background: #eef2ff;
+}

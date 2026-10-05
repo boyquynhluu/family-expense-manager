@@ -24,13 +24,15 @@ public record RecurringTransactionResponse(
         LocalDate endDate,
         LocalDate nextRunDate,
         LocalDate lastRunDate,
-        Boolean active) {
+        Boolean active,
+        String mode,
+        Integer remindDaysBefore) {
 
     public static RecurringTransactionResponse from(RecurringTransaction r) {
         return new RecurringTransactionResponse(
                 r.getId(), r.getWalletId(), r.getCategoryId(), r.getCreatedByUserId(), r.getType(), r.getAmount(), r.getNote(),
                 r.getFrequency(), r.getDayOfMonth(), r.getDayOfWeek(), r.getMonthOfYear(),
                 r.getStartDate(), r.getEndDate(), r.getNextRunDate(), r.getLastRunDate(),
-                r.getActive());
+                r.getActive(), r.getMode(), r.getRemindDaysBefore());
     }
 }

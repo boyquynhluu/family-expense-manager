@@ -1,5 +1,6 @@
 package com.family.expensemanager.notification.client;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import java.util.List;
 import java.util.Map;
 
@@ -28,7 +29,17 @@ public class FamilyMemberDirectory {
     private static final String ROLE_SERVICE = "SERVICE";
     private static final long TOKEN_TTL_MILLIS = 60_000;
 
-    public record Member(Long userId, String email, String displayName) {
+    /** {@code role}: the member's role in that family (OWNER, MEMBER, VIEWER, CHILD); null from an older auth-service. */
+    public record Member(Long userId, String email, String displayName, String role) {
+
+        // Explicit because the shorter constructor below would otherwise leave Jackson's creator choice ambiguous.
+        @JsonCreator
+        public Member {
+        }
+
+        public Member(Long userId, String email, String displayName) {
+            this(userId, email, displayName, null);
+        }
     }
 
     private record Envelope(List<Member> data) {

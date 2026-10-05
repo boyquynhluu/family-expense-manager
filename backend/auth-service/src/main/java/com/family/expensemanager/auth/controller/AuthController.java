@@ -3,6 +3,7 @@ package com.family.expensemanager.auth.controller;
 import com.family.expensemanager.auth.dto.AcceptInviteRequest;
 import com.family.expensemanager.auth.dto.AuthResponse;
 import com.family.expensemanager.auth.dto.ChangeEmailRequest;
+import com.family.expensemanager.auth.dto.ChangeMemberRoleRequest;
 import com.family.expensemanager.auth.dto.ChangePasswordRequest;
 import com.family.expensemanager.auth.dto.DeleteAccountRequest;
 import com.family.expensemanager.auth.dto.FamilyMembershipResponse;
@@ -210,6 +211,15 @@ public class AuthController {
         log.info("removeMember - start, userId={}", userId);
         authService.removeMember(CurrentUser.familyId(), CurrentUser.userId(), userId);
         return ApiResponse.ok(new MessageResponse("Đã xoá thành viên khỏi gia đình"));
+    }
+
+    /** README A5: OWNER sets a member's role to MEMBER, VIEWER or CHILD. */
+    @PutMapping("/family/members/{userId}/role")
+    public ApiResponse<MessageResponse> changeMemberRole(@PathVariable Long userId,
+                                                         @Valid @RequestBody ChangeMemberRoleRequest request) {
+        log.info("changeMemberRole - start, userId={}, role={}", userId, request.role());
+        authService.changeMemberRole(CurrentUser.familyId(), CurrentUser.userId(), userId, request.role());
+        return ApiResponse.ok(new MessageResponse("Đã đổi vai trò thành viên"));
     }
 
     @PutMapping("/family")

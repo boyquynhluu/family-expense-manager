@@ -4,6 +4,19 @@
 # Certificates: issued by infra/init-letsencrypt.sh, renewed by the certbot container (webroot below);
 # nginx reloads itself every 6h to pick up a renewed certificate.
 
+# --- Per-IP flood protection (this file is included at http{} level, so the zones can live here) ---
+# Stops one client from swamping the JVMs: excess requests are refused here with 429, before reaching Java.
+# Rates are per client address — every IPv6 device has its own, so family members don't share a budget.
+# The gateway's RateLimitFilter still adds its much tighter per-endpoint limits on login/register/... on top.
+#   fem_api:  20 req/s sustained, bursts of 40 absorbed at once (a dashboard fires ~10 API calls on load).
+#   fem_web:  static SPA files; looser, a cold page load pulls a handful of JS/CSS/font files.
+#   fem_conn: open connections per client (HTTP/2 multiplexes, so a browser needs only 1-2).
+limit_req_zone  $binary_remote_addr zone=fem_api:10m rate=20r/s;
+limit_req_zone  $binary_remote_addr zone=fem_web:10m rate=50r/s;
+limit_conn_zone $binary_remote_addr zone=fem_conn:10m;
+limit_req_status  429;
+limit_conn_status 429;
+
 # --- HTTP: Let's Encrypt challenge + redirect everything else to HTTPS ---
 server {
     listen 80;
@@ -42,6 +55,15 @@ server {
     # Receipt images are uploaded through the API — a bit more than the backend's own limit.
     client_max_body_size 12m;
 
+    limit_conn fem_conn 30;
+    # Same JSON shape as the gateway's RateLimitFilter, so the frontend shows the message either way.
+    error_page 429 = @too_many_requests;
+    location @too_many_requests {
+        default_type application/json;
+        add_header Retry-After 1 always;
+        return 429 '{"message":"Quá nhiều yêu cầu, vui lòng thử lại sau."}';
+    }
+
     gzip on;
     gzip_types text/plain text/css application/json application/javascript image/svg+xml;
 
@@ -59,6 +81,7 @@ server {
     # REST API + OAuth2 login/callback → api-gateway. X-Forwarded-* lets the backend build https://${DOMAIN}
     # URLs (OAuth2 redirect) and find the real client IP (ClientIpFilter uses the right-most X-Forwarded-For).
     location /api/ {
+        limit_req zone=fem_api burst=40 nodelay;
         proxy_pass http://api-gateway:8080;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -73,6 +96,7 @@ server {
 
     # Everything else → the React build (its own nginx handles SPA routes).
     location / {
+        limit_req zone=fem_web burst=100 nodelay;
         proxy_pass http://frontend:80;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto https;

@@ -56,6 +56,7 @@ public class CategoryService {
             category.setType(request.type());
             category.setIcon(request.icon());
             category.setColor(request.color());
+            category.setParentId(validParent(familyId, request, null));
             categoryDao.insert(category);
             return CategoryResponse.from(category);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
@@ -86,6 +87,7 @@ public class CategoryService {
             category.setType(request.type());
             category.setIcon(request.icon());
             category.setColor(request.color());
+            category.setParentId(validParent(familyId, request, categoryId));
             categoryDao.update(category);
             return CategoryResponse.from(category);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
@@ -106,6 +108,9 @@ public class CategoryService {
             }
             if (recurringTransactionDao.countByCategoryId(categoryId) > 0) {
                 throw logged(log, new ConflictException("Không thể xoá danh mục đang có giao dịch định kỳ"));
+            }
+            if (categoryDao.countActiveChildren(categoryId) > 0) {
+                throw logged(log, new ConflictException("Không thể xoá danh mục đang có danh mục con — hãy xoá hoặc chuyển chúng trước"));
             }
             category.setDeletedAt(LocalDateTime.now());
             categoryDao.update(category);
@@ -149,6 +154,35 @@ public class CategoryService {
         } catch (Exception e) {
             throw ServiceException.unexpected("CategoryService.restore", e);
         }
+    }
+
+    /** README C6: a category's direct sub-categories (a parent's budget/report/filter covers them). */
+    public List<Long> childIdsOf(Long parentId, Long familyId) {
+        return categoryDao.selectChildIds(parentId);
+    }
+
+    /**
+     * README C6: one level only — the parent must be a top-level category of the same family and type, and a
+     * category that already has children can't become one itself.
+     */
+    private Long validParent(Long familyId, CreateCategoryRequest request, Long selfId) {
+        if (request.parentId() == null) {
+            return null;
+        }
+        if (request.parentId().equals(selfId)) {
+            throw logged(log, new BadRequestException("Danh mục không thể là cha của chính nó"));
+        }
+        Category parent = requireOwnedByFamily(request.parentId(), familyId);
+        if (parent.getParentId() != null) {
+            throw logged(log, new BadRequestException("Chỉ hỗ trợ 2 cấp: danh mục cha phải là danh mục gốc"));
+        }
+        if (!parent.getType().equals(request.type())) {
+            throw logged(log, new BadRequestException("Danh mục con phải cùng loại thu/chi với danh mục cha"));
+        }
+        if (selfId != null && categoryDao.countActiveChildren(selfId) > 0) {
+            throw logged(log, new BadRequestException("Danh mục đang có danh mục con nên không thể trở thành danh mục con"));
+        }
+        return parent.getId();
     }
 
     Category requireOwnedByFamily(Long categoryId, Long familyId) {

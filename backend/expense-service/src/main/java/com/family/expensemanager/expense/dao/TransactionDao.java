@@ -19,6 +19,34 @@ import java.util.Optional;
 @Dao
 public interface TransactionDao {
 
+    /** README C4: refunds of {@code originalId} that are not in the trash. */
+    @Select
+    long countActiveRefundsOf(Long originalId);
+
+    /** README C4: every refund of {@code originalId}, trash included (they hold its foreign key). */
+    @Select
+    long countAllRefundsOf(Long originalId);
+
+    /** README C4: how much of {@code originalId} was refunded so far (a positive number; trash excluded). */
+    @Select
+    java.math.BigDecimal sumRefundedOf(Long originalId);
+
+    /**
+     * README A6: EXPENSE spent in [fromDate, toExclusive) within one budget's scope, read from the
+     * TRANSACTION_CATEGORY_LINES view (a split transaction counts per part). Null wallet/user = no restriction;
+     * {@code allCategories} = every category, otherwise {@code categoryIds} (a category with its sub-categories,
+     * README C6) — Doma refuses a null list, hence the separate flag.
+     */
+    @Select
+    java.math.BigDecimal sumExpenseForBudget(Long familyId, boolean allCategories, List<Long> categoryIds,
+                                             Long walletId, Long userId,
+                                             java.time.LocalDate fromDate, java.time.LocalDate toExclusive);
+
+    /** README A5: one member's EXPENSE total in [fromDate, toExclusive), leaving {@code excludeId} (an edit) out. */
+    @Select
+    java.math.BigDecimal sumUserExpenseBetween(Long familyId, Long userId, java.time.LocalDate fromDate,
+                                               java.time.LocalDate toExclusive, Long excludeId);
+
     @Insert
     int insert(Transaction transaction);
 
@@ -36,19 +64,20 @@ public interface TransactionDao {
     List<Transaction> selectByFamilyIdFiltered(
             Long familyId, Long viewerUserId, boolean showOthersPrivate, Long walletId, Long categoryId, String type,
             LocalDate fromDate, LocalDate toDate, String notePattern, BigDecimal minAmount, BigDecimal maxAmount,
-            int limit, int offset);
+            Long tagId, int limit, int offset);
 
     @Select
     long countByFamilyIdFiltered(
             Long familyId, Long viewerUserId, boolean showOthersPrivate, Long walletId, Long categoryId, String type,
-            LocalDate fromDate, LocalDate toDate, String notePattern, BigDecimal minAmount, BigDecimal maxAmount);
+            LocalDate fromDate, LocalDate toDate, String notePattern, BigDecimal minAmount, BigDecimal maxAmount,
+            Long tagId);
 
     /** 1 if transaction {@code targetId} matches these list filters (and the viewer sees it in full), else 0. */
     @Select
     long countFilteredMatchingId(
             Long familyId, Long viewerUserId, Long walletId, Long categoryId, String type,
             LocalDate fromDate, LocalDate toDate, String notePattern, BigDecimal minAmount, BigDecimal maxAmount,
-            Long targetId);
+            Long tagId, Long targetId);
 
     /**
      * How many rows of the filtered list come BEFORE the target in its order (occurred_at DESC, id DESC) —
@@ -58,7 +87,7 @@ public interface TransactionDao {
     long countFilteredAhead(
             Long familyId, Long viewerUserId, boolean showOthersPrivate, Long walletId, Long categoryId, String type,
             LocalDate fromDate, LocalDate toDate, String notePattern, BigDecimal minAmount, BigDecimal maxAmount,
-            LocalDateTime occurredAt, Long targetId);
+            Long tagId, LocalDateTime occurredAt, Long targetId);
 
     @Select
     Optional<Transaction> selectById(Long id);

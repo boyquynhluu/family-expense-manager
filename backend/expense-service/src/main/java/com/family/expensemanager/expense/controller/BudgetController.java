@@ -45,6 +45,14 @@ public class BudgetController {
         return ApiResponse.ok(budgetService.copy(CurrentUser.familyId(), request));
     }
 
+    /** README A6: spend, rollover and % of every budget covering {@code yearMonth}. */
+    @GetMapping("/status")
+    public ApiResponse<java.util.List<com.family.expensemanager.expense.dto.BudgetStatusResponse>> status(
+            @RequestParam String yearMonth) {
+        log.info("status - start, yearMonth={}", yearMonth);
+        return ApiResponse.ok(budgetService.status(CurrentUser.familyId(), yearMonth));
+    }
+
     @GetMapping
     public ApiResponse<PageResponse<BudgetResponse>> list(
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "5") int size) {

@@ -6,7 +6,13 @@ import { Input } from "./ui/Input";
 const MAX_INTEGER_DIGITS = 16;
 const MAX_FRACTION_DIGITS = 2;
 
-function toRaw(displayValue) {
+function toRaw(displayValue, allowNegative = false) {
+  // A leading "-" survives only where a negative amount makes sense (a wallet's real balance can be overdrawn).
+  const sign = allowNegative && displayValue.trimStart().startsWith("-") ? "-" : "";
+  return sign + toUnsignedRaw(displayValue);
+}
+
+function toUnsignedRaw(displayValue) {
   const raw = displayValue.replace(/,/g, "").replace(/[^\d.]/g, "");
   const firstDot = raw.indexOf(".");
   if (firstDot === -1) {
@@ -19,6 +25,7 @@ function toRaw(displayValue) {
 
 function format(raw) {
   if (!raw) return "";
+  if (raw.startsWith("-")) return `-${format(raw.slice(1))}`;
   const [intPart, decPart] = raw.split(".");
   const groupedInt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   return decPart === undefined ? groupedInt : `${groupedInt}.${decPart}`;
@@ -32,9 +39,9 @@ function format(raw) {
  * (native `type="number"` rejects the "," character), so `min`/`step` aren't enforced by the
  * browser here — negative and non-numeric characters are stripped as you type instead, and the
  * digits are capped at 16 before / 2 after the decimal point (a plain `maxLength` can't do this:
- * it would count the "," and "." the display inserts).
+ * it would count the "," and "." the display inserts). `allowNegative` keeps a leading "-".
  */
-export default function AmountInput({ value, onChange, positive = false, min, max, ...props }) {
+export default function AmountInput({ value, onChange, positive = false, allowNegative = false, min, max, ...props }) {
   const inputRef = useRef(null);
   const { t } = useTranslation("validation");
   // `positive`: the backend's @DecimalMin("0.01") on transaction/transfer/budget amounts —
@@ -45,7 +52,7 @@ export default function AmountInput({ value, onChange, positive = false, min, ma
     positive || min != null || max != null
       ? (display) => {
           if (display === "") return "";
-          const amount = Number(toRaw(display));
+          const amount = Number(toRaw(display, allowNegative));
           if (positive && amount <= 0) return t("amountPositive");
           if (min != null && amount < min) return t("amountMin", { min: format(String(min)) });
           if (max != null && amount > max) return t("amountMax", { max: format(String(max)) });
@@ -59,7 +66,7 @@ export default function AmountInput({ value, onChange, positive = false, min, ma
     const caret = input.selectionStart ?? prevDisplay.length;
     const digitsBeforeCaret = prevDisplay.slice(0, caret).replace(/[^\d.]/g, "").length;
 
-    const raw = toRaw(prevDisplay);
+    const raw = toRaw(prevDisplay, allowNegative);
     onChange(raw);
 
     const formatted = format(raw);
@@ -83,7 +90,7 @@ export default function AmountInput({ value, onChange, positive = false, min, ma
       {...props}
       ref={inputRef}
       type="text"
-      inputMode="decimal"
+      inputMode={allowNegative ? "text" : "decimal"}
       className="tabular-nums"
       validate={validate}
       value={format(String(value ?? ""))}

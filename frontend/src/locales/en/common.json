@@ -23,5 +23,16 @@
   "seedDefaultsFailed": "Could not create sample data",
   "seedDefaultsOwnerOnly": "Ask the household owner to create wallets and categories.",
   "typeToConfirm": "Type \"{{word}}\" to confirm",
-  "seedDefaultsConfirm": "Create a \"Cash\" wallet and the default income/expense categories for your family?"
+  "seedDefaultsConfirm": "Create a \"Cash\" wallet and the default income/expense categories for your family?",
+  "historyTitle": "Change history",
+  "historyEmpty": "No history yet",
+  "historyLoadFailed": "Could not load the history",
+  "historySystem": "System",
+  "historyAria": "View history",
+  "historyAction": {
+    "CREATED": "Created",
+    "UPDATED": "Edited",
+    "DELETED": "Deleted",
+    "RESTORED": "Restored"
+  }
 }

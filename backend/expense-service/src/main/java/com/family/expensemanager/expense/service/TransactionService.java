@@ -6,21 +6,23 @@ import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.common.exception.ServiceException;
-import com.family.expensemanager.expense.dao.BudgetDao;
+import com.family.expensemanager.expense.dao.TagDao;
 import com.family.expensemanager.expense.dao.TransactionDao;
+import com.family.expensemanager.expense.dao.TransactionSplitDao;
 import com.family.expensemanager.expense.domain.TransactionAmounts;
-import com.family.expensemanager.expense.domain.entity.Budget;
 import com.family.expensemanager.expense.domain.entity.Category;
 import com.family.expensemanager.expense.domain.entity.Transaction;
 import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.dto.BulkDeleteResult;
 import com.family.expensemanager.expense.dto.ReceiptFile;
+import com.family.expensemanager.expense.dto.RefundRequest;
 import com.family.expensemanager.expense.dto.TransactionReportFilter;
 import com.family.expensemanager.expense.dto.TransactionRequest;
 import com.family.expensemanager.expense.dto.TransactionAuditLogResponse;
 import com.family.expensemanager.expense.dto.TransactionLocation;
 import com.family.expensemanager.expense.dto.TransactionResponse;
 import com.family.expensemanager.expense.dto.TransactionSnapshot;
+import com.family.expensemanager.expense.dto.TransactionSplitPart;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.ApplicationEventPublisher;
@@ -69,7 +71,7 @@ public class TransactionService {
     private static final String IDEMPOTENCY_SCOPE = "CREATE_TRANSACTION";
 
     private final TransactionDao transactionDao;
-    private final BudgetDao budgetDao;
+    private final BudgetMonitor budgetMonitor;
     private final WalletService walletService;
     private final CategoryService categoryService;
     private final ApplicationEventPublisher eventPublisher;
@@ -77,6 +79,10 @@ public class TransactionService {
     private final ReceiptStorageService receiptStorageService;
     private final IdempotencyGuard idempotencyGuard;
     private final TransactionAuditService auditService;
+    private final PeriodLockService periodLockService;
+    private final SpendingLimitService spendingLimitService;
+    private final TransactionSplitDao transactionSplitDao;
+    private final TagDao tagDao;
 
     /**
      * @param idempotencyKey optional {@code Idempotency-Key} request header (see {@link IdempotencyGuard}) —
@@ -109,9 +115,20 @@ public class TransactionService {
             TransactionAmounts.problem(request.amount()).ifPresent(message -> {
                 throw logged(log, new BadRequestException(message));
             });
+            periodLockService.requireUnlocked(familyId, request.occurredAt());
             Wallet wallet = walletService.requireOwnedByFamily(request.walletId(), familyId);
             walletService.requireUsableBy(wallet, userId, callerIsOwner);
-            Category category = categoryService.requireOwnedByFamily(request.categoryId(), familyId, request.type());
+            List<TransactionSplitPart> parts = validSplits(familyId, request);
+            Long mainCategoryId = parts.isEmpty() ? request.categoryId() : parts.get(0).categoryId();
+            Category category = categoryService.requireOwnedByFamily(mainCategoryId, familyId, request.type());
+            if (TYPE_EXPENSE.equals(request.type())) {
+                // README A5: a member's own daily/monthly cap (trusted callers — the scheduler — pass as OWNER).
+                if (!callerIsOwner) {
+                    spendingLimitService.requireWithinLimits(familyId, userId, request.amount(), request.occurredAt(), null);
+                }
+                // README A1: cash/bank/savings never below 0, a credit card never below -its limit.
+                walletService.requireAllowedOutflow(wallet, request.amount());
+            }
 
             Transaction transaction = new Transaction();
             transaction.setWalletId(wallet.getId());
@@ -126,11 +143,10 @@ public class TransactionService {
             transaction.setIsPrivate(Boolean.TRUE.equals(request.isPrivate()));
 
             String periodMonth = periodMonthOf(request.occurredAt());
-            BigDecimal totalBefore = TYPE_EXPENSE.equals(request.type())
-                    ? transactionDao.sumAmountByCategoryPeriodAndType(familyId, category.getId(), periodMonth, TYPE_EXPENSE)
-                    : BigDecimal.ZERO;
 
             transactionDao.insert(transaction);
+            saveSplits(transaction.getId(), parts);
+            List<String> tagNames = saveTags(familyId, transaction.getId(), request.tags());
             evictCaches(familyId, periodMonth);
             auditService.record(TransactionAuditService.ACTION_CREATED, familyId, transaction.getId(), null,
                     TransactionSnapshot.of(transaction), userId, userDisplayName);
@@ -140,11 +156,13 @@ public class TransactionService {
                     transaction.getAmount(), null, null, null, null, null, null, Instant.now()));
 
             if (TYPE_EXPENSE.equals(request.type())) {
-                checkBudgetCrossing(familyId, userId, userEmail, userDisplayName, transaction, category, periodMonth,
-                        totalBefore);
+                budgetMonitor.onExpenseRecorded(familyId, userId, userEmail, userDisplayName, transaction,
+                        parts.isEmpty()
+                                ? List.of(new BudgetMonitor.Line(category.getId(), transaction.getAmount()))
+                                : parts.stream().map(p -> new BudgetMonitor.Line(p.categoryId(), p.amount())).toList());
             }
 
-            return TransactionResponse.from(transaction);
+            return TransactionResponse.from(transaction).withDetails(parts, tagNames);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
                 | OptimisticLockException e) {
             throw e;
@@ -179,15 +197,15 @@ public class TransactionService {
             boolean showOthersPrivate = filter.filtersOnlyByDate();
             long totalElements = transactionDao.countByFamilyIdFiltered(
                     familyId, viewerUserId, showOthersPrivate, filter.walletId(), filter.categoryId(), filter.type(),
-                    filter.fromDate(), filter.toDate(), notePattern, filter.minAmount(), filter.maxAmount());
+                    filter.fromDate(), filter.toDate(), notePattern, filter.minAmount(), filter.maxAmount(), filter.tagId());
             List<TransactionResponse> content = transactionDao.selectByFamilyIdFiltered(
                             familyId, viewerUserId, showOthersPrivate, filter.walletId(), filter.categoryId(),
                             filter.type(), filter.fromDate(), filter.toDate(), notePattern, filter.minAmount(),
-                            filter.maxAmount(), size, page * size)
+                            filter.maxAmount(), filter.tagId(), size, page * size)
                     .stream()
                     .map(t -> t.isVisibleTo(viewerUserId) ? TransactionResponse.from(t) : TransactionResponse.masked(t))
                     .toList();
-            return PageResponse.of(content, page, size, totalElements);
+            return PageResponse.of(withDetails(content), page, size, totalElements);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
                 | OptimisticLockException e) {
             throw e;
@@ -213,13 +231,13 @@ public class TransactionService {
             String notePattern = filter.noteLikePattern();
             boolean inList = transactionDao.countFilteredMatchingId(
                     familyId, viewerUserId, filter.walletId(), filter.categoryId(), filter.type(), filter.fromDate(),
-                    filter.toDate(), notePattern, filter.minAmount(), filter.maxAmount(), transactionId) > 0;
+                    filter.toDate(), notePattern, filter.minAmount(), filter.maxAmount(), filter.tagId(), transactionId) > 0;
             if (!inList) {
                 return new TransactionLocation(false, 0);
             }
             long ahead = transactionDao.countFilteredAhead(
                     familyId, viewerUserId, filter.filtersOnlyByDate(), filter.walletId(), filter.categoryId(), filter.type(), filter.fromDate(),
-                    filter.toDate(), notePattern, filter.minAmount(), filter.maxAmount(),
+                    filter.toDate(), notePattern, filter.minAmount(), filter.maxAmount(), filter.tagId(),
                     transaction.getOccurredAt(), transactionId);
             return new TransactionLocation(true, (int) (ahead / size));
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
@@ -244,7 +262,8 @@ public class TransactionService {
     public TransactionResponse get(Long familyId, Long transactionId, Long viewerUserId) {
         try {
             log.info("get - start, familyId={}, transactionId={}", familyId, transactionId);
-            return TransactionResponse.from(requireOwnedByFamily(transactionId, familyId, viewerUserId));
+            return withDetails(List.of(TransactionResponse.from(requireOwnedByFamily(transactionId, familyId, viewerUserId))))
+                    .get(0);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
                 | OptimisticLockException e) {
             throw e;
@@ -259,6 +278,8 @@ public class TransactionService {
             log.info("update - start, familyId={}, transactionId={}", familyId, transactionId);
             Transaction transaction = requireOwnedByFamily(transactionId, familyId, callerUserId);
             requireCanModify(transaction, callerUserId, callerIsOwner);
+            // Old AND new date: nothing may be moved into or out of a closed month either.
+            periodLockService.requireUnlocked(familyId, transaction.getOccurredAt(), request.occurredAt());
             TransactionSnapshot before = TransactionSnapshot.of(transaction);
             // Always, even when the amount is unchanged: an older entry outside 10.000đ–5.000.000đ must be
             // brought into the range before anything else on it can be saved.
@@ -271,7 +292,17 @@ public class TransactionService {
             if (!request.walletId().equals(transaction.getWalletId())) {
                 walletService.requireUsableBy(wallet, callerUserId, callerIsOwner);
             }
-            Category category = categoryService.requireOwnedByFamily(request.categoryId(), familyId, request.type());
+            List<TransactionSplitPart> parts = validSplits(familyId, request);
+            Long mainCategoryId = parts.isEmpty() ? request.categoryId() : parts.get(0).categoryId();
+            Category category = categoryService.requireOwnedByFamily(mainCategoryId, familyId, request.type());
+            if (transaction.getRefundOfId() != null) {
+                throw logged(log, new BadRequestException("Không sửa được khoản hoàn tiền — hãy xoá và tạo lại"));
+            }
+            if (TYPE_EXPENSE.equals(request.type()) && !callerIsOwner) {
+                spendingLimitService.requireWithinLimits(familyId, transaction.getUserId(), request.amount(),
+                        request.occurredAt(), transactionId);
+            }
+            requireAllowedEdit(transaction, wallet, request);
 
             String oldPeriodMonth = periodMonthOf(transaction.getOccurredAt());
 
@@ -289,6 +320,11 @@ public class TransactionService {
             transactionDao.update(transaction);
             auditService.record(TransactionAuditService.ACTION_UPDATED, familyId, transactionId, before,
                     TransactionSnapshot.of(transaction), callerUserId, callerName);
+            publishUpdated(familyId, callerUserId, callerName, transaction, before);
+            transactionSplitDao.deleteByTransactionId(transactionId);
+            saveSplits(transactionId, parts);
+            tagDao.deleteLinksByTransactionId(transactionId);
+            List<String> tagNames = saveTags(familyId, transactionId, request.tags());
 
             String newPeriodMonth = periodMonthOf(request.occurredAt());
             evictCaches(familyId, oldPeriodMonth);
@@ -296,7 +332,7 @@ public class TransactionService {
                 evictCaches(familyId, newPeriodMonth);
             }
 
-            return TransactionResponse.from(transaction);
+            return TransactionResponse.from(transaction).withDetails(parts, tagNames);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
                 | OptimisticLockException e) {
             throw e;
@@ -337,6 +373,10 @@ public class TransactionService {
                                    boolean callerIsOwner) {
         Transaction transaction = requireOwnedByFamily(transactionId, familyId, callerUserId);
         requireCanModify(transaction, callerUserId, callerIsOwner);
+        periodLockService.requireUnlocked(familyId, transaction.getOccurredAt());
+        if (transactionDao.countActiveRefundsOf(transactionId) > 0) {
+            throw logged(log, new BadRequestException("Giao dịch đã có khoản hoàn tiền — hãy xoá các khoản hoàn tiền trước"));
+        }
         transaction.setDeletedAt(LocalDateTime.now());
         transaction.setDeletedByUserId(callerUserId);
         transaction.setDeletedByName(truncateName(callerName));
@@ -358,6 +398,7 @@ public class TransactionService {
             int deleted = 0;
             int skipped = 0;
             int forbidden = 0;
+            int locked = 0;
             for (Long id : new LinkedHashSet<>(ids)) {
                 try {
                     softDelete(familyId, id, callerUserId, callerName, callerIsOwner);
@@ -365,10 +406,14 @@ public class TransactionService {
                 } catch (NotFoundException e) {
                     skipped++;
                 } catch (ApiException e) {
-                    if (e.getStatus() != HttpStatus.FORBIDDEN) {
+                    if (e.getStatus() == HttpStatus.FORBIDDEN) {
+                        forbidden++;
+                    } else if (e.getStatus() == HttpStatus.CONFLICT) {
+                        // The only 409 softDelete raises: the row's month is closed (PeriodLockService).
+                        locked++;
+                    } else {
                         throw e;
                     }
-                    forbidden++;
                 }
             }
             if (deleted > 0) {
@@ -376,7 +421,7 @@ public class TransactionService {
                         ExpenseEvent.EXPENSE_DELETED, familyId, callerUserId, null, null, null, null, null, null,
                         null, null, callerName, Instant.now(), null, null, null, null, deleted));
             }
-            return new BulkDeleteResult(deleted, skipped, forbidden);
+            return new BulkDeleteResult(deleted, skipped, forbidden, locked);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
                 | OptimisticLockException e) {
             throw e;
@@ -418,6 +463,14 @@ public class TransactionService {
                     .filter(t -> t.getFamilyId().equals(familyId) && t.isVisibleTo(callerUserId))
                     .orElseThrow(() -> logged(log, new NotFoundException("Giao dịch đã xoá không tồn tại: " + transactionId)));
             requireCanModify(deleted, callerUserId, callerIsOwner);
+            periodLockService.requireUnlocked(familyId, deleted.getOccurredAt());
+            if (deleted.getRefundOfId() != null && transactionDao.selectById(deleted.getRefundOfId()).isEmpty()) {
+                throw logged(log, new BadRequestException("Hãy khôi phục giao dịch gốc trước khi khôi phục khoản hoàn tiền"));
+            }
+            if (TYPE_EXPENSE.equals(deleted.getType()) && deleted.getAmount().signum() > 0) {
+                walletService.requireAllowedOutflow(
+                        walletService.requireOwnedByFamily(deleted.getWalletId(), familyId), deleted.getAmount());
+            }
             if (transactionDao.restore(transactionId, familyId) == 0) {
                 throw logged(log, new NotFoundException("Giao dịch đã xoá không tồn tại: " + transactionId));
             }
@@ -533,48 +586,253 @@ public class TransactionService {
         }
     }
 
-    private void checkBudgetCrossing(Long familyId, Long userId, String userEmail, String userDisplayName,
-                                      Transaction transaction, Category category, String periodMonth,
-                                      BigDecimal totalBefore) {
-        log.info("checkBudgetCrossing - start, familyId={}, categoryId={}, periodMonth={}",
-                familyId, category.getId(), periodMonth);
-        Optional<Budget> budget = budgetDao.selectByCategoryAndPeriod(category.getId(), periodMonth);
-        budget.ifPresent(b -> publishBudgetCrossing(
-                b, familyId, userId, userEmail, userDisplayName, transaction, category.getId(), category.getName(),
-                periodMonth, totalBefore, totalBefore.add(transaction.getAmount())));
+    /**
+     * README C4 "Hoàn tiền / trả hàng": records money coming back for an expense as a NEGATIVE expense in the same
+     * category and wallet, linked to it — so the category's spending, the budgets and the wallet balance all go
+     * down by it, while income stays untouched. Its creator or the OWNER; at most what is left to refund.
+     */
+    public TransactionResponse refund(Long familyId, Long originalId, Long callerUserId, String callerName,
+                                      boolean callerIsOwner, RefundRequest request) {
+        try {
+            log.info("refund - start, familyId={}, originalId={}", familyId, originalId);
+            Transaction original = requireOwnedByFamily(originalId, familyId, callerUserId);
+            requireCanModify(original, callerUserId, callerIsOwner);
+            if (!TYPE_EXPENSE.equals(original.getType()) || original.getRefundOfId() != null) {
+                throw logged(log, new BadRequestException("Chỉ hoàn tiền được cho một khoản chi"));
+            }
+            BigDecimal left = original.getAmount().subtract(transactionDao.sumRefundedOf(originalId));
+            if (request.amount().compareTo(left) > 0) {
+                throw logged(log, new BadRequestException("Số tiền hoàn vượt số còn có thể hoàn: " + money(left)));
+            }
+            if (request.occurredAt().isBefore(original.getOccurredAt())) {
+                throw logged(log, new BadRequestException("Ngày hoàn tiền không được trước ngày chi"));
+            }
+            periodLockService.requireUnlocked(familyId, request.occurredAt());
 
-        budgetDao.selectOverallByPeriod(familyId, periodMonth).ifPresent(b -> {
-            // The transaction is already inserted (same DB transaction), so this sum includes it.
-            BigDecimal overallAfter = transactionDao.sumAmountByFamilyPeriodAndType(
-                    familyId, periodMonth, TYPE_EXPENSE);
-            publishBudgetCrossing(b, familyId, userId, userEmail, userDisplayName, transaction, null,
-                    "Tổng chi tiêu", periodMonth, overallAfter.subtract(transaction.getAmount()), overallAfter);
-        });
+            Transaction refund = new Transaction();
+            refund.setWalletId(original.getWalletId());
+            refund.setCategoryId(original.getCategoryId());
+            refund.setRefundOfId(originalId);
+            refund.setFamilyId(familyId);
+            refund.setUserId(callerUserId);
+            refund.setCreatedByName(truncateName(callerName));
+            refund.setType(TYPE_EXPENSE);
+            refund.setAmount(request.amount().negate());
+            refund.setOccurredAt(request.occurredAt());
+            refund.setNote(request.note() != null && !request.note().isBlank() ? request.note()
+                    : "Hoàn tiền" + (original.getNote() != null ? ": " + original.getNote() : ""));
+            refund.setIsPrivate(original.getIsPrivate());
+            transactionDao.insert(refund);
+            auditService.record(TransactionAuditService.ACTION_CREATED, familyId, refund.getId(), null,
+                    TransactionSnapshot.of(refund), callerUserId, callerName);
+            evictCaches(familyId, periodMonthOf(request.occurredAt()));
+            return TransactionResponse.from(refund);
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
+                | OptimisticLockException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("TransactionService.refund", e);
+        }
     }
 
-    private void publishBudgetCrossing(Budget budget, Long familyId, Long userId, String userEmail,
-                                        String userDisplayName, Transaction transaction, Long categoryId,
-                                        String categoryName, String periodMonth, BigDecimal totalBefore,
-                                        BigDecimal totalAfter) {
-        BigDecimal limit = budget.getLimitAmount();
-        BigDecimal warningThreshold = limit.multiply(new BigDecimal("0.8"));
-        String eventType = null;
-        if (totalBefore.compareTo(limit) <= 0 && totalAfter.compareTo(limit) > 0) {
-            eventType = ExpenseEvent.BUDGET_EXCEEDED;
-        } else if (totalBefore.compareTo(warningThreshold) < 0 && totalAfter.compareTo(warningThreshold) >= 0
-                && totalAfter.compareTo(limit) <= 0) {
-            eventType = ExpenseEvent.BUDGET_WARNING;
+    /** Tags names: trimmed, case-insensitively de-duplicated; empty or null = no tags. */
+    static List<String> normalizeTags(List<String> tags) {
+        if (tags == null) {
+            return List.of();
         }
-        if (eventType == null) {
+        java.util.Map<String, String> unique = new java.util.LinkedHashMap<>();
+        for (String tag : tags) {
+            if (tag == null || tag.isBlank()) {
+                continue;
+            }
+            String name = tag.trim().replaceAll("\\s+", " ");
+            unique.putIfAbsent(name.toLowerCase(java.util.Locale.ROOT), name);
+        }
+        return List.copyOf(unique.values());
+    }
+
+    /** README C6: links the transaction to its tags, creating the family's new ones on the fly. */
+    private List<String> saveTags(Long familyId, Long transactionId, List<String> tags) {
+        List<String> names = normalizeTags(tags);
+        if (names.isEmpty()) {
+            return names;
+        }
+        List<com.family.expensemanager.expense.domain.entity.TransactionTag> links = new java.util.ArrayList<>();
+        for (String name : names) {
+            com.family.expensemanager.expense.domain.entity.Tag tag = tagDao.selectByFamilyAndName(familyId, name)
+                    .orElseGet(() -> {
+                        com.family.expensemanager.expense.domain.entity.Tag created =
+                                new com.family.expensemanager.expense.domain.entity.Tag();
+                        created.setFamilyId(familyId);
+                        created.setName(name);
+                        created.setCreatedAt(LocalDateTime.now());
+                        tagDao.insert(created);
+                        return created;
+                    });
+            com.family.expensemanager.expense.domain.entity.TransactionTag link =
+                    new com.family.expensemanager.expense.domain.entity.TransactionTag();
+            link.setTransactionId(transactionId);
+            link.setTagId(tag.getId());
+            links.add(link);
+        }
+        tagDao.insertLinks(links);
+        return names;
+    }
+
+    /**
+     * README C5: no parts, or 2..10 parts of the transaction's type, in distinct categories, adding up exactly to
+     * its amount. The first part's category becomes the transaction's main category.
+     */
+    private List<TransactionSplitPart> validSplits(Long familyId, TransactionRequest request) {
+        if (request.splits() == null || request.splits().isEmpty()) {
+            return List.of();
+        }
+        List<TransactionSplitPart> parts = request.splits();
+        if (parts.size() < 2) {
+            throw logged(log, new BadRequestException("Tách giao dịch cần ít nhất 2 phần"));
+        }
+        if (parts.stream().map(TransactionSplitPart::categoryId).distinct().count() != parts.size()) {
+            throw logged(log, new BadRequestException("Mỗi phần tách phải thuộc một danh mục khác nhau"));
+        }
+        BigDecimal total = parts.stream().map(TransactionSplitPart::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (total.compareTo(request.amount()) != 0) {
+            throw logged(log, new BadRequestException("Tổng các phần tách (" + money(total)
+                    + ") phải bằng số tiền giao dịch (" + money(request.amount()) + ")"));
+        }
+        for (TransactionSplitPart part : parts) {
+            categoryService.requireOwnedByFamily(part.categoryId(), familyId, request.type());
+        }
+        return parts;
+    }
+
+    private void saveSplits(Long transactionId, List<TransactionSplitPart> parts) {
+        if (parts.isEmpty()) {
             return;
         }
-        // The budget message is about the category/family TOTAL, which stays public; only the triggering
-        // transaction's own id/amount are withheld when it is private.
-        boolean hidden = Boolean.TRUE.equals(transaction.getIsPrivate());
-        eventPublisher.publishEvent(new ExpenseEvent(
-                eventType, familyId, userId, hidden ? null : transaction.getId(), categoryId,
-                hidden ? null : transaction.getAmount(), periodMonth, limit, totalAfter, categoryName, userEmail,
-                userDisplayName, Instant.now()));
+        transactionSplitDao.insertAll(parts.stream().map(p -> {
+            com.family.expensemanager.expense.domain.entity.TransactionSplit split =
+                    new com.family.expensemanager.expense.domain.entity.TransactionSplit();
+            split.setTransactionId(transactionId);
+            split.setCategoryId(p.categoryId());
+            split.setAmount(p.amount());
+            return split;
+        }).toList());
+    }
+
+    /** Attaches split parts and tags to listed transactions (two queries for the whole page). */
+    private List<TransactionResponse> withDetails(List<TransactionResponse> rows) {
+        List<Long> ids = rows.stream().filter(r -> r.walletId() != null).map(TransactionResponse::id).toList();
+        if (ids.isEmpty()) {
+            return rows;
+        }
+        java.util.Map<Long, List<TransactionSplitPart>> splits = new java.util.HashMap<>();
+        for (com.family.expensemanager.expense.domain.entity.TransactionSplit s
+                : transactionSplitDao.selectByTransactionIds(ids)) {
+            splits.computeIfAbsent(s.getTransactionId(), k -> new java.util.ArrayList<>())
+                    .add(new TransactionSplitPart(s.getCategoryId(), s.getAmount()));
+        }
+        java.util.Map<Long, List<String>> tags = new java.util.HashMap<>();
+        for (java.util.Map<String, Object> row : tagDao.selectNamesByTransactionIds(ids)) {
+            tags.computeIfAbsent(((Number) row.get("transactionId")).longValue(), k -> new java.util.ArrayList<>())
+                    .add((String) row.get("name"));
+        }
+        return rows.stream()
+                .map(r -> r.walletId() == null ? r : r.withDetails(splits.get(r.id()), tags.get(r.id())))
+                .toList();
+    }
+
+    /**
+     * README A1 on an edit: works out how much LESS money each affected wallet holds after the change (an expense
+     * raised, an income lowered, the entry moved to another wallet...) and refuses it when that pushes a wallet
+     * below its floor. Edits that only put money back always pass.
+     */
+    private void requireAllowedEdit(Transaction existing, Wallet newWallet, TransactionRequest request) {
+        BigDecimal oldEffect = signedEffect(existing.getType(), existing.getAmount());
+        BigDecimal newEffect = signedEffect(request.type(), request.amount());
+        if (existing.getWalletId().equals(newWallet.getId())) {
+            walletService.requireAllowedOutflow(newWallet, oldEffect.subtract(newEffect));
+            return;
+        }
+        // Moved: the new wallet takes the new entry; the old wallet loses the old one (an income leaving it).
+        walletService.requireAllowedOutflow(newWallet, newEffect.negate());
+        if (oldEffect.signum() > 0) {
+            walletService.requireAllowedOutflow(
+                    walletService.requireOwnedByFamily(existing.getWalletId(), existing.getFamilyId()), oldEffect);
+        }
+    }
+
+    /** What an entry does to its wallet's balance: + for income, - for expense (a refund's negative amount adds). */
+    private static BigDecimal signedEffect(String type, BigDecimal amount) {
+        return TYPE_EXPENSE.equals(type) ? amount.negate() : amount;
+    }
+
+    /**
+     * README A2: tells the family what changed ("50.000 → 5.000.000"). A private entry's notice carries no details,
+     * like its deletion notice.
+     */
+    private void publishUpdated(Long familyId, Long callerUserId, String callerName, Transaction after,
+                                TransactionSnapshot before) {
+        String actor = callerName != null ? callerName : "Một thành viên";
+        String message;
+        if (Boolean.TRUE.equals(after.getIsPrivate())) {
+            message = actor + " đã sửa 1 giao dịch riêng tư (***)";
+        } else {
+            List<String> changes = new java.util.ArrayList<>();
+            if (before.amount().compareTo(after.getAmount()) != 0) {
+                changes.add("số tiền " + money(before.amount()) + " → " + money(after.getAmount()));
+            }
+            if (!before.type().equals(after.getType())) {
+                changes.add("loại " + typeLabel(before.type()) + " → " + typeLabel(after.getType()));
+            }
+            if (!before.walletId().equals(after.getWalletId())) {
+                changes.add("ví " + walletName(familyId, before.walletId()) + " → " + walletName(familyId, after.getWalletId()));
+            }
+            if (!before.categoryId().equals(after.getCategoryId())) {
+                changes.add("danh mục " + categoryName(familyId, before.categoryId()) + " → "
+                        + categoryName(familyId, after.getCategoryId()));
+            }
+            if (!before.occurredAt().toLocalDate().equals(after.getOccurredAt().toLocalDate())) {
+                changes.add("ngày " + before.occurredAt().toLocalDate() + " → " + after.getOccurredAt().toLocalDate());
+            }
+            if (!Objects.equals(blankToNull(before.note()), blankToNull(after.getNote()))) {
+                changes.add("ghi chú \"" + Objects.toString(blankToNull(after.getNote()), "") + "\"");
+            }
+            if (changes.isEmpty()) {
+                return;
+            }
+            message = actor + " đã sửa giao dịch " + money(after.getAmount()) + " (ngày "
+                    + after.getOccurredAt().toLocalDate() + "): " + String.join("; ", changes);
+        }
+        eventPublisher.publishEvent(ExpenseEvent.notice(ExpenseEvent.EXPENSE_UPDATED, familyId, callerUserId, callerName,
+                null, null, "Giao dịch đã được sửa", message, "/transactions"));
+    }
+
+    private static String money(BigDecimal amount) {
+        return com.family.expensemanager.common.currency.CurrencyUtil.formatCurrency(amount);
+    }
+
+    private static String typeLabel(String type) {
+        return TYPE_EXPENSE.equals(type) ? "chi" : "thu";
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private String walletName(Long familyId, Long walletId) {
+        try {
+            return "\"" + walletService.requireOwnedByFamily(walletId, familyId).getName() + "\"";
+        } catch (RuntimeException e) {
+            return "#" + walletId;
+        }
+    }
+
+    private String categoryName(Long familyId, Long categoryId) {
+        try {
+            return "\"" + categoryService.requireOwnedByFamily(categoryId, familyId).getName() + "\"";
+        } catch (RuntimeException e) {
+            return "#" + categoryId;
+        }
     }
 
     private String truncateName(String name) {

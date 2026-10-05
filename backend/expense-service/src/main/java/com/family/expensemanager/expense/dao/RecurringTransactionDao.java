@@ -17,6 +17,13 @@ import java.util.Optional;
 @Dao
 public interface RecurringTransactionDao {
 
+    /**
+     * README C2: active EXPENSE rules with a reminder whose next run is within remind_days_before days from
+     * {@code today} (and still ahead), not yet reminded for that run.
+     */
+    @Select
+    List<RecurringTransaction> selectReminderDue(java.time.LocalDate today);
+
     @Insert
     int insert(RecurringTransaction recurringTransaction);
 

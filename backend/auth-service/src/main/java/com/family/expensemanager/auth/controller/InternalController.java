@@ -44,10 +44,13 @@ public class InternalController {
     public ApiResponse<List<FamilyMemberContactResponse>> listMembers(@PathVariable Long familyId) {
         log.info("listMembers - start, familyId={}", familyId);
         List<FamilyMemberContactResponse> members = familyMembershipDao.selectByFamilyId(familyId).stream()
-                .map(m -> userDao.selectById(m.getUserId()).orElse(null))
-                .filter(u -> u != null && Boolean.TRUE.equals(u.getActive()) && !Boolean.TRUE.equals(u.getLocked())
-                        && u.getEmail() != null)
-                .map((User u) -> new FamilyMemberContactResponse(u.getId(), u.getEmail(), u.getDisplayName()))
+                .map(m -> userDao.selectById(m.getUserId())
+                        .filter(u -> Boolean.TRUE.equals(u.getActive()) && !Boolean.TRUE.equals(u.getLocked())
+                                && u.getEmail() != null)
+                        .map((User u) -> new FamilyMemberContactResponse(
+                                u.getId(), u.getEmail(), u.getDisplayName(), m.getRole()))
+                        .orElse(null))
+                .filter(java.util.Objects::nonNull)
                 .toList();
         return ApiResponse.ok(members);
     }

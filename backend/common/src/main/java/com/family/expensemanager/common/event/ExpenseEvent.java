@@ -40,6 +40,11 @@ import java.time.LocalDate;
  * owner who decided), {@code targetUserId} is who must be told (the wallet owner, then the requester) — the
  * consumer looks their email up itself. {@code amount}/{@code note}/{@code fromWalletName}/{@code toWalletName}
  * describe the request. {@code targetUserId} is null for every other event type.
+ * <p>
+ * Generic notices ({@link #notice}): every event type added after the transfer requests carries its own
+ * ready-to-show Vietnamese {@code title}/{@code message} (expense-service has all the context; notification-service
+ * just stores and emails them) plus {@code linkPath} (the frontend page to open, e.g. "/loans"). Who gets the email:
+ * {@code targetUserId} if set, else every member whose role is {@code targetRole} if set, else the whole family.
  *
  * @author boyquynhluu
  */
@@ -63,7 +68,11 @@ public record ExpenseEvent(
         String toWalletName,
         Integer itemCount,
         Boolean privateEntry,
-        Long targetUserId) {
+        Long targetUserId,
+        String title,
+        String message,
+        String linkPath,
+        String targetRole) {
 
     public static final String EXPENSE_CREATED = "EXPENSE_CREATED";
     public static final String BUDGET_EXCEEDED = "BUDGET_EXCEEDED";
@@ -75,10 +84,48 @@ public record ExpenseEvent(
     public static final String TRANSFER_REQUESTED = "TRANSFER_REQUESTED";
     public static final String TRANSFER_REQUEST_APPROVED = "TRANSFER_REQUEST_APPROVED";
     public static final String TRANSFER_REQUEST_REJECTED = "TRANSFER_REQUEST_REJECTED";
+    // Generic notices (title/message set by the producer) — README A2, A4, A5, B3, C1, C2, C7.
+    public static final String EXPENSE_UPDATED = "EXPENSE_UPDATED";
+    public static final String RECURRING_DRAFT_CREATED = "RECURRING_DRAFT_CREATED";
+    public static final String BILL_DUE_SOON = "BILL_DUE_SOON";
+    public static final String APPROVAL_REQUESTED = "APPROVAL_REQUESTED";
+    public static final String APPROVAL_DECIDED = "APPROVAL_DECIDED";
+    public static final String LOAN_DUE_SOON = "LOAN_DUE_SOON";
+    public static final String SAVINGS_MILESTONE = "SAVINGS_MILESTONE";
+    public static final String MONTHLY_SUMMARY = "MONTHLY_SUMMARY";
 
     // Explicit because the extra constructors below would otherwise leave Jackson's record-creator choice ambiguous.
     @JsonCreator
     public ExpenseEvent {
+    }
+
+    /** Pre-notice shape — every publisher of the original event types (no title/message/linkPath/targetRole). */
+    public ExpenseEvent(String eventType, Long familyId, Long userId, Long transactionId, Long categoryId,
+                        BigDecimal amount, String periodMonth, BigDecimal limitAmount, BigDecimal totalSpent,
+                        String categoryName, String userEmail, String userDisplayName, Instant occurredAt,
+                        LocalDate occurredOn, String note, String fromWalletName, String toWalletName,
+                        Integer itemCount, Boolean privateEntry, Long targetUserId) {
+        this(eventType, familyId, userId, transactionId, categoryId, amount, periodMonth, limitAmount, totalSpent,
+                categoryName, userEmail, userDisplayName, occurredAt, occurredOn, note, fromWalletName, toWalletName,
+                itemCount, privateEntry, targetUserId, null, null, null, null);
+    }
+
+    /**
+     * A generic notice: {@code title}/{@code message} are shown as-is. {@code actorUserId} (who caused it, or the
+     * owner of the thing a reminder is about) is what the in-app row is filed under.
+     */
+    public static ExpenseEvent notice(String eventType, Long familyId, Long actorUserId, String actorName,
+                                      Long targetUserId, String targetRole, String title, String message,
+                                      String linkPath) {
+        return new ExpenseEvent(eventType, familyId, actorUserId, null, null, null, null, null, null, null, null,
+                actorName, Instant.now(), null, null, null, null, null, null, targetUserId, title, message, linkPath,
+                targetRole);
+    }
+
+    /** Whether this is a generic notice (see {@link #notice}) rather than one of the original typed events. */
+    // Not "isNotice()": Jackson would serialise that as an extra "notice" property.
+    public boolean carriesNotice() {
+        return title != null && message != null;
     }
 
     /** Pre-targetUserId shape — every publisher except the transfer-request ones. */

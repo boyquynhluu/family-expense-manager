@@ -16,6 +16,18 @@ import java.util.Optional;
 @Dao
 public interface BudgetDao {
 
+    @Select
+    long countByWalletId(Long walletId);
+
+    /** README A6: every budget covering that month — its MONTH budgets and the YEAR budgets of its year. */
+    @Select
+    List<Budget> selectApplicable(Long familyId, String periodMonth, String periodYear);
+
+    /** README A6: the budget with exactly this scope and period, if any (duplicates, rollover source). */
+    @Select
+    Optional<Budget> selectSameScope(Long familyId, Long categoryId, Long walletId, Long userId, String periodType,
+                                     String periodMonth);
+
     @Insert
     int insert(Budget budget);
 

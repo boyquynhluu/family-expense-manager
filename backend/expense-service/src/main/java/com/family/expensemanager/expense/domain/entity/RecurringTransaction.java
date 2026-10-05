@@ -51,6 +51,15 @@ public class RecurringTransaction {
 
     private String frequency;
 
+    // README A4: AUTO records the transaction when due; CONFIRM only creates a draft to confirm.
+    private String mode = "AUTO";
+
+    @Column(name = "remind_days_before")
+    private Integer remindDaysBefore;
+
+    @Column(name = "last_reminded_for")
+    private LocalDate lastRemindedFor;
+
     @Column(name = "day_of_week")
     private Integer dayOfWeek;
 
@@ -233,5 +242,29 @@ public class RecurringTransaction {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getMode() {
+        return mode;
+    }
+
+    public void setMode(String mode) {
+        this.mode = mode;
+    }
+
+    public Integer getRemindDaysBefore() {
+        return remindDaysBefore;
+    }
+
+    public void setRemindDaysBefore(Integer remindDaysBefore) {
+        this.remindDaysBefore = remindDaysBefore;
+    }
+
+    public LocalDate getLastRemindedFor() {
+        return lastRemindedFor;
+    }
+
+    public void setLastRemindedFor(LocalDate lastRemindedFor) {
+        this.lastRemindedFor = lastRemindedFor;
     }
 }

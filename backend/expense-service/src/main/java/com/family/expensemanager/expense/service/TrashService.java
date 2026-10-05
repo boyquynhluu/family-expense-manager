@@ -20,8 +20,11 @@ import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.expense.dao.BudgetDao;
 import com.family.expensemanager.expense.dao.CategoryDao;
+import com.family.expensemanager.expense.dao.LoanDao;
 import com.family.expensemanager.expense.dao.RecurringTransactionDao;
+import com.family.expensemanager.expense.dao.SavingsGoalDao;
 import com.family.expensemanager.expense.dao.TransactionDao;
+import com.family.expensemanager.expense.dao.TransactionSplitDao;
 import com.family.expensemanager.expense.dao.WalletDao;
 import com.family.expensemanager.expense.dao.WalletTransferDao;
 import com.family.expensemanager.expense.domain.entity.Category;
@@ -58,6 +61,9 @@ public class TrashService {
     private final RecurringTransactionDao recurringTransactionDao;
     private final WalletTransferDao walletTransferDao;
     private final BudgetDao budgetDao;
+    private final LoanDao loanDao;
+    private final TransactionSplitDao transactionSplitDao;
+    private final SavingsGoalDao savingsGoalDao;
     private final ReceiptStorageService receiptStorageService;
     private final TrashPurger purger;
 
@@ -209,6 +215,10 @@ public class TrashService {
 
     /** The receipt file goes only after the row's deletion has committed — a leftover file beats a broken row. */
     private void purgeTransactionRow(Transaction transaction, Long actorUserId, String actorName) {
+        if (transactionDao.countAllRefundsOf(transaction.getId()) > 0) {
+            throw logged(log, new ConflictException("Giao dịch vẫn còn khoản hoàn tiền (kể cả trong thùng rác). "
+                    + "Hãy xoá vĩnh viễn các khoản hoàn tiền đó trước."));
+        }
         purger.purgeTransaction(transaction, actorUserId, actorName);
         if (transaction.getReceiptPath() != null) {
             receiptStorageService.delete(transaction.getReceiptPath());
@@ -230,6 +240,11 @@ public class TrashService {
             throw logged(log, new ConflictException(
                     "Ví \"" + wallet.getName() + "\" vẫn còn trong lịch sử chuyển tiền"));
         }
+        if (loanDao.countByWalletId(wallet.getId()) > 0 || savingsGoalDao.countByWalletId(wallet.getId()) > 0
+                || budgetDao.countByWalletId(wallet.getId()) > 0) {
+            throw logged(log, new ConflictException("Ví \"" + wallet.getName()
+                    + "\" vẫn được dùng bởi khoản vay, mục tiêu tiết kiệm hoặc ngân sách theo ví"));
+        }
         purger.purgeWallet(wallet);
     }
 
@@ -246,6 +261,10 @@ public class TrashService {
         if (recurringTransactionDao.countByCategoryId(category.getId()) > 0) {
             throw logged(log, new ConflictException(
                     "Danh mục \"" + category.getName() + "\" vẫn đang được dùng trong giao dịch định kỳ"));
+        }
+        if (transactionSplitDao.countByCategoryId(category.getId()) > 0 || !categoryDao.selectChildIds(category.getId()).isEmpty()) {
+            throw logged(log, new ConflictException("Danh mục \"" + category.getName()
+                    + "\" vẫn có danh mục con hoặc phần tách của giao dịch"));
         }
         purger.purgeCategory(category);
     }

@@ -5,6 +5,13 @@ SELECT
     name,
     currency,
     initial_balance,
+    wallet_type,
+    credit_limit,
+    statement_day,
+    payment_due_day,
+    interest_rate,
+    maturity_date,
+    last_payment_reminder_on,
     deleted_at
 FROM
     WALLETS

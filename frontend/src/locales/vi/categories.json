@@ -24,5 +24,8 @@
   "seedDefaultsHint": "Gia đình bạn chưa có danh mục. Tạo nhanh bộ danh mục thu chi phổ biến (và ví \"Tiền mặt\" nếu chưa có) để bắt đầu ghi giao dịch.",
   "ownerOnlyManage": "Chỉ chủ hộ mới được thêm/sửa/xoá danh mục.",
   "nameInvalidChars": "Tên danh mục chỉ được chứa chữ, số, khoảng trắng và các ký tự - _ . , & ( ) / ' +",
-  "iconInvalidChars": "Biểu tượng chỉ được là chữ, số hoặc emoji"
+  "iconInvalidChars": "Biểu tượng chỉ được là chữ, số hoặc emoji",
+  "parentLabel": "Danh mục cha",
+  "noParent": "(Danh mục gốc)",
+  "childOf": "thuộc {{name}}"
 }

@@ -1,7 +1,10 @@
 package com.family.expensemanager.expense.dao;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -12,9 +15,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.family.expensemanager.common.doma.AppDomaConfig;
 import com.family.expensemanager.expense.domain.entity.Category;
+import com.family.expensemanager.expense.domain.entity.PeriodLock;
+import com.family.expensemanager.expense.domain.entity.PeriodLockLog;
 import com.family.expensemanager.expense.domain.entity.Transaction;
 import com.family.expensemanager.expense.domain.entity.TransactionAuditLog;
 import com.family.expensemanager.expense.domain.entity.Wallet;
+import com.family.expensemanager.expense.domain.entity.WalletAdjustment;
 import com.family.expensemanager.expense.domain.entity.WalletTransfer;
 import com.zaxxer.hikari.HikariDataSource;
 
@@ -304,5 +310,101 @@ class ExpenseDaoIT {
         transfer.setCreatedAt(LocalDateTime.now().withNano(0));
         transferDao.insert(transfer);
         return transfer;
+    }
+
+    @Test
+    void walletAdjustments_sumSigned_pageByWallet_feedTheMonthlyReport_andGoWithAPurgedWallet() {
+        WalletDao walletDao = new WalletDaoImpl(domaConfig);
+        WalletAdjustmentDao adjustmentDao = new WalletAdjustmentDaoImpl(domaConfig);
+        ReportDao reportDao = new ReportDaoImpl(domaConfig);
+        Long familyId = 400L;
+        Wallet cash = insertWallet(walletDao, familyId, "Ví điều chỉnh IT");
+        Wallet bank = insertWallet(walletDao, familyId, "Ngân hàng điều chỉnh IT");
+
+        WalletAdjustment august = insertAdjustment(adjustmentDao, familyId, cash, "-150.00", LocalDateTime.of(2026, 8, 20, 9, 0));
+        WalletAdjustment september = insertAdjustment(adjustmentDao, familyId, cash, "50.00", LocalDateTime.of(2026, 9, 3, 9, 0));
+        insertAdjustment(adjustmentDao, familyId, bank, "1000.00", LocalDateTime.of(2026, 9, 4, 9, 0));
+
+        assertThat(adjustmentDao.sumAmountByWalletId(cash.getId())).isEqualByComparingTo("-100.00");
+        assertThat(adjustmentDao.countByWalletId(cash.getId())).isEqualTo(2);
+        assertThat(adjustmentDao.countByFamilyId(familyId, null)).isEqualTo(3);
+        assertThat(adjustmentDao.countByFamilyId(familyId, cash.getId())).isEqualTo(2);
+        assertThat(adjustmentDao.selectByFamilyIdPaged(familyId, cash.getId(), 10, 0))
+                .extracting(WalletAdjustment::getId)
+                .containsExactly(september.getId(), august.getId());
+
+        List<Map<String, Object>> beforeSeptember =
+                reportDao.sumAdjustmentsByWallet(familyId, null, LocalDate.of(2026, 9, 1));
+        assertThat(beforeSeptember).hasSize(1);
+        assertThat(((Number) beforeSeptember.get(0).get("walletId")).longValue()).isEqualTo(cash.getId());
+        assertThat(new BigDecimal(beforeSeptember.get(0).get("total").toString())).isEqualByComparingTo("-150.00");
+        assertThat(reportDao.sumAdjustmentsByWallet(familyId, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 10, 1)))
+                .hasSize(2);
+
+        // ON DELETE CASCADE: purging the wallet takes its adjustments along.
+        walletDao.delete(cash);
+        assertThat(adjustmentDao.selectById(august.getId())).isEmpty();
+        assertThat(adjustmentDao.countByFamilyId(familyId, null)).isEqualTo(1);
+    }
+
+    @Test
+    void periodLocks_checkSeveralMonthsAtOnce_andKeepTheirLog() {
+        PeriodLockDao lockDao = new PeriodLockDaoImpl(domaConfig);
+        PeriodLockLogDao logDao = new PeriodLockLogDaoImpl(domaConfig);
+        Long familyId = 500L;
+
+        PeriodLock august = new PeriodLock();
+        august.setFamilyId(familyId);
+        august.setPeriodMonth("2026-08");
+        august.setLockedByUserId(1L);
+        august.setLockedByName("Chủ hộ");
+        august.setLockedAt(LocalDateTime.now().withNano(0));
+        lockDao.insert(august);
+
+        assertThat(lockDao.countByFamilyAndMonths(familyId, List.of("2026-08", "2026-09"))).isEqualTo(1);
+        assertThat(lockDao.countByFamilyAndMonths(familyId, List.of("2026-09"))).isZero();
+        assertThat(lockDao.countByFamilyAndMonths(501L, List.of("2026-08"))).isZero();
+        assertThat(lockDao.selectByFamilyAndMonth(familyId, "2026-08")).isPresent();
+        assertThat(lockDao.selectByFamilyId(familyId)).extracting(PeriodLock::getPeriodMonth).containsExactly("2026-08");
+        assertThat(lockDao.countByFamilyId(familyId)).isEqualTo(1);
+
+        lockDao.delete(august);
+        assertThat(lockDao.selectByFamilyAndMonth(familyId, "2026-08")).isEmpty();
+
+        PeriodLockLog locked = periodLockLog(familyId, "LOCKED", LocalDateTime.of(2026, 10, 1, 8, 0));
+        PeriodLockLog unlocked = periodLockLog(familyId, "UNLOCKED", LocalDateTime.of(2026, 10, 2, 8, 0));
+        logDao.insert(locked);
+        logDao.insert(unlocked);
+        assertThat(logDao.countByFamilyId(familyId)).isEqualTo(2);
+        assertThat(logDao.selectByFamilyIdPaged(familyId, 10, 0))
+                .extracting(PeriodLockLog::getAction)
+                .containsExactly("UNLOCKED", "LOCKED");
+    }
+
+    private WalletAdjustment insertAdjustment(
+            WalletAdjustmentDao adjustmentDao, Long familyId, Wallet wallet, String amount, LocalDateTime occurredAt) {
+        WalletAdjustment adjustment = new WalletAdjustment();
+        adjustment.setFamilyId(familyId);
+        adjustment.setWalletId(wallet.getId());
+        adjustment.setAmount(new BigDecimal(amount));
+        adjustment.setBalanceBefore(BigDecimal.ZERO);
+        adjustment.setBalanceAfter(new BigDecimal(amount));
+        adjustment.setOccurredAt(occurredAt);
+        adjustment.setCreatedByUserId(1L);
+        adjustment.setCreatedByName("An");
+        adjustment.setCreatedAt(LocalDateTime.now().withNano(0));
+        adjustmentDao.insert(adjustment);
+        return adjustment;
+    }
+
+    private static PeriodLockLog periodLockLog(Long familyId, String action, LocalDateTime at) {
+        PeriodLockLog log = new PeriodLockLog();
+        log.setFamilyId(familyId);
+        log.setPeriodMonth("2026-08");
+        log.setAction(action);
+        log.setActorUserId(1L);
+        log.setActorName("Chủ hộ");
+        log.setCreatedAt(at);
+        return log;
     }
 }

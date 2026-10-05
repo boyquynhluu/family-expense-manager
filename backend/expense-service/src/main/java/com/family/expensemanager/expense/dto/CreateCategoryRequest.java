@@ -20,7 +20,13 @@ public record CreateCategoryRequest(
         @Size(max = 50) @CleanText(junk = false)
         @Pattern(regexp = NameRules.ICON_REGEX, message = CreateCategoryRequest.ICON_MESSAGE)
         String icon,
-        @Pattern(regexp = "#[0-9a-fA-F]{6}") String color) {
+        @Pattern(regexp = "#[0-9a-fA-F]{6}") String color,
+        Long parentId) {
+
+    /** A top-level category (before README C6). */
+    public CreateCategoryRequest(String name, String type, String icon, String color) {
+        this(name, type, icon, color, null);
+    }
 
     public static final String NAME_MESSAGE =
             "Tên danh mục chỉ được chứa chữ, số, khoảng trắng và các ký tự " + NameRules.ALLOWED_SEPARATORS;

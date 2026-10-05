@@ -23,6 +23,13 @@ x-logging: &logging
 # Each JVM sizes its heap from the container limit (75%), instead of from the whole VPS's RAM.
 x-java-opts: &java-opts "-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
 
+# Capacity knobs for the 3 DB-backed services, tuned from .env.prod after a load test (README → "Kiểm thử tải").
+# Unset = Spring Boot's own defaults (10 DB connections, 200 Tomcat threads per service). Keep
+# 3 × DB_POOL_SIZE well under MySQL's max_connections (151 by default).
+x-capacity: &capacity
+  SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE: ${DB_POOL_SIZE:-10}
+  SERVER_TOMCAT_THREADS_MAX: ${TOMCAT_MAX_THREADS:-200}
+
 networks:
   fem-network:
     driver: bridge
@@ -191,6 +198,7 @@ services:
     <<: [*restart, *logging]
     mem_limit: 640m
     environment:
+      <<: *capacity
       EUREKA_URL: http://eureka-server:8761/eureka/
       MYSQL_HOST: mysql-db
       MYSQL_PORT: 3306
@@ -232,6 +240,7 @@ services:
     <<: [*restart, *logging]
     mem_limit: 640m
     environment:
+      <<: *capacity
       EUREKA_URL: http://eureka-server:8761/eureka/
       MYSQL_HOST: mysql-db
       MYSQL_PORT: 3306
@@ -266,6 +275,7 @@ services:
     <<: [*restart, *logging]
     mem_limit: 512m
     environment:
+      <<: *capacity
       EUREKA_URL: http://eureka-server:8761/eureka/
       MYSQL_HOST: mysql-db
       MYSQL_PORT: 3306

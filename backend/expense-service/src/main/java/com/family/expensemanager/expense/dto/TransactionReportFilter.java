@@ -14,7 +14,13 @@ import java.util.Locale;
  */
 public record TransactionReportFilter(
         Long walletId, Long categoryId, String type, LocalDate fromDate, LocalDate toDate,
-        String q, BigDecimal minAmount, BigDecimal maxAmount) {
+        String q, BigDecimal minAmount, BigDecimal maxAmount, Long tagId) {
+
+    /** Without a tag filter (before README C6). */
+    public TransactionReportFilter(Long walletId, Long categoryId, String type, LocalDate fromDate, LocalDate toDate,
+                                   String q, BigDecimal minAmount, BigDecimal maxAmount) {
+        this(walletId, categoryId, type, fromDate, toDate, q, minAmount, maxAmount, null);
+    }
 
     private static final char LIKE_ESCAPE = '!';
     /** Same cap as the search box's maxLength on the frontend (LIMITS.search). */
@@ -36,7 +42,7 @@ public record TransactionReportFilter(
      */
     public boolean filtersOnlyByDate() {
         return walletId == null && categoryId == null && type == null
-                && normalizedQuery() == null && minAmount == null && maxAmount == null;
+                && normalizedQuery() == null && minAmount == null && maxAmount == null && tagId == null;
     }
 
     public String noteLikePattern() {

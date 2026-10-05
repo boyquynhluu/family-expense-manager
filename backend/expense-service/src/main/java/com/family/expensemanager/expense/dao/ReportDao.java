@@ -44,4 +44,16 @@ public interface ReportDao {
     /** Rows: walletId, direction (IN/OUT), total — over WALLET_TRANSFERS. A null {@code fromDate} means "since the beginning". */
     @Select(mapKeyNaming = MapKeyNamingType.CAMEL_CASE)
     List<Map<String, Object>> sumTransfersByWalletAndDirection(Long familyId, LocalDate fromDate, LocalDate toExclusive);
+
+    /** README C6. Rows: tagId, name, type, total — a transaction with two tags counts in both. */
+    @Select(mapKeyNaming = MapKeyNamingType.CAMEL_CASE)
+    List<Map<String, Object>> sumByTagAndType(Long familyId, LocalDate fromDate, LocalDate toExclusive);
+
+    /** Rows: walletId, total (signed, as in LoanDao.sumNetFlowForWallet) — loans by start date, repayments by paid_at. */
+    @Select(mapKeyNaming = MapKeyNamingType.CAMEL_CASE)
+    List<Map<String, Object>> sumLoanFlowsByWallet(Long familyId, LocalDate fromDate, LocalDate toExclusive);
+
+    /** Rows: walletId, total (signed) — over WALLET_ADJUSTMENTS. A null {@code fromDate} means "since the beginning". */
+    @Select(mapKeyNaming = MapKeyNamingType.CAMEL_CASE)
+    List<Map<String, Object>> sumAdjustmentsByWallet(Long familyId, LocalDate fromDate, LocalDate toExclusive);
 }

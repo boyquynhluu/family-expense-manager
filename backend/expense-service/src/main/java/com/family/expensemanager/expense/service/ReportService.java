@@ -212,8 +212,33 @@ public class ReportService {
         }
     }
 
+    /** README C6: income/expense per tag between two dates (inclusive), tags without activity left out. */
+    public List<com.family.expensemanager.expense.dto.TagReportItem> byTag(Long familyId, String from, String to) {
+        try {
+            log.info("byTag - start, familyId={}, from={}, to={}", familyId, from, to);
+            LocalDate fromDate = parseDate(from, "Ngày bắt đầu");
+            LocalDate toDate = parseDate(to, "Ngày kết thúc");
+            validateRange(fromDate, toDate);
+            Map<Long, com.family.expensemanager.expense.dto.TagReportItem> items = new java.util.LinkedHashMap<>();
+            for (Map<String, Object> row : reportDao.sumByTagAndType(familyId, fromDate, toDate.plusDays(1))) {
+                Long tagId = longValue(row.get("tagId"));
+                var item = items.getOrDefault(tagId, new com.family.expensemanager.expense.dto.TagReportItem(
+                        tagId, str(row.get("name")), BigDecimal.ZERO, BigDecimal.ZERO));
+                BigDecimal total = decimal(row.get("total"));
+                items.put(tagId, TYPE_EXPENSE.equals(str(row.get("type")))
+                        ? new com.family.expensemanager.expense.dto.TagReportItem(tagId, item.name(), item.income(), item.expense().add(total))
+                        : new com.family.expensemanager.expense.dto.TagReportItem(tagId, item.name(), item.income().add(total), item.expense()));
+            }
+            return new ArrayList<>(items.values());
+        } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ServiceException.unexpected("ReportService.byTag", e);
+        }
+    }
+
     /**
-     * Per-wallet opening balance, income/expense, transfers in/out, net (surplus or deficit) and
+     * Per-wallet opening balance, income/expense, transfers in/out, balance adjustments, net (surplus or deficit) and
      * closing balance for one month. Opening balance = initial balance + every movement before the
      * month, i.e. the same formula as {@code WalletService.currentBalanceOf} cut off at the month start.
      */
@@ -236,7 +261,7 @@ public class ReportService {
                 result.add(new WalletMonthlyItem(
                         wallet.getId(), wallet.getName(), wallet.getCurrency(), opening,
                         current.totals.income, current.totals.expense, current.transferIn, current.transferOut,
-                        net, opening.add(net)));
+                        current.adjustment, current.loanFlow, net, opening.add(net)));
             }
             return result;
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
@@ -261,6 +286,14 @@ public class ReportService {
             } else if (DIRECTION_OUT.equals(direction)) {
                 wf.transferOut = wf.transferOut.add(total);
             }
+        }
+        for (Map<String, Object> row : reportDao.sumAdjustmentsByWallet(familyId, fromDate, toExclusive)) {
+            WalletFlows wf = flows.computeIfAbsent(longValue(row.get("walletId")), k -> new WalletFlows());
+            wf.adjustment = wf.adjustment.add(decimal(row.get("total")));
+        }
+        for (Map<String, Object> row : reportDao.sumLoanFlowsByWallet(familyId, fromDate, toExclusive)) {
+            WalletFlows wf = flows.computeIfAbsent(longValue(row.get("walletId")), k -> new WalletFlows());
+            wf.loanFlow = wf.loanFlow.add(decimal(row.get("total")));
         }
         return flows;
     }
@@ -343,9 +376,12 @@ public class ReportService {
         private final Totals totals = new Totals();
         private BigDecimal transferIn = BigDecimal.ZERO;
         private BigDecimal transferOut = BigDecimal.ZERO;
+        private BigDecimal adjustment = BigDecimal.ZERO;
+        private BigDecimal loanFlow = BigDecimal.ZERO;
 
         BigDecimal net() {
-            return totals.income.subtract(totals.expense).add(transferIn).subtract(transferOut);
+            return totals.income.subtract(totals.expense).add(transferIn).subtract(transferOut).add(adjustment)
+                    .add(loanFlow);
         }
     }
 

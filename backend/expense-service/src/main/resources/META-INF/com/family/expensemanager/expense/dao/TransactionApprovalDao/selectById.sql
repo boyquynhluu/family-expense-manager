@@ -1,0 +1,23 @@
+SELECT
+    id,
+    family_id,
+    requester_user_id,
+    requester_name,
+    requester_email,
+    wallet_id,
+    category_id,
+    amount,
+    occurred_at,
+    note,
+    is_private,
+    status,
+    decided_by_user_id,
+    decided_by_name,
+    decided_at,
+    reject_reason,
+    transaction_id,
+    created_at
+FROM
+    TRANSACTION_APPROVALS
+WHERE
+    id = /* id */0

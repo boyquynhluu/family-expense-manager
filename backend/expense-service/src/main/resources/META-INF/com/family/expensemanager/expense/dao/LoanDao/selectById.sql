@@ -1,0 +1,22 @@
+SELECT
+    id,
+    family_id,
+    member_user_id,
+    direction,
+    counterparty_name,
+    counterparty_contact,
+    counterparty_wallet_id,
+    principal,
+    wallet_id,
+    start_date,
+    due_date,
+    note,
+    status,
+    last_reminded_for,
+    created_by_user_id,
+    created_by_name,
+    created_at
+FROM
+    LOANS
+WHERE
+    id = /* id */0

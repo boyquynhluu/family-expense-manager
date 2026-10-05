@@ -3,14 +3,18 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import AmountInput from "../components/AmountInput";
-import { CalendarIcon, EditIcon, TrashIcon, WalletIcon } from "../components/AppIcons";
+import { CalendarIcon, EditIcon, HistoryIcon, LockIcon, TrashIcon, WalletIcon } from "../components/AppIcons";
+import EntityHistoryModal from "../components/EntityHistoryModal";
 import Pagination from "../components/Pagination";
+import PeriodLocks from "../components/PeriodLocks";
 import SeedDefaultsButton from "../components/SeedDefaultsButton";
 import TransferRequests from "../components/TransferRequests";
+import WalletAdjustments from "../components/WalletAdjustments";
 import WalletMonthlyTable from "../components/WalletMonthlyTable";
 import { useAuth } from "../hooks/useAuth";
 import { useClientPage } from "../hooks/useClientPage";
 import { usePagedList } from "../hooks/usePagedList";
+import { usePeriodLocks } from "../hooks/usePeriodLocks";
 import { confirmDialog } from "../utils/confirm";
 import { maxDateTime, minDateTime } from "../utils/dateLimits";
 import { formatCurrency } from "../utils/format";
@@ -34,6 +38,12 @@ function nowForDateTimeInput() {
 function currentYearMonth() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+const WALLET_TYPES = ["CASH", "BANK", "CREDIT_CARD", "SAVINGS"];
+
+function emptyTypeFields() {
+  return { walletType: "CASH", creditLimit: "", statementDay: "", paymentDueDay: "", interestRate: "", maturityDate: "" };
 }
 
 function emptyTransferForm() {
@@ -66,11 +76,15 @@ export default function Wallets() {
   const [initialBalance, setInitialBalance] = useState("0");
   // "" = shared by the whole family ("ví chung"); otherwise the owning member's user id.
   const [ownerUserId, setOwnerUserId] = useState("");
+  // README C3: wallet type and the fields that belong to it.
+  const [typeFields, setTypeFields] = useState(emptyTypeFields);
+  const [historyEntity, setHistoryEntity] = useState(null);
   const [members, setMembers] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
   const [yearMonth, setYearMonth] = useState(currentYearMonth);
   const [reloadKey, setReloadKey] = useState(0);
+  const { locks, isLocked, reload: reloadLocks } = usePeriodLocks();
 
   function load() {
     client.get("/expenses/wallets").then((res) => setWallets(res.data.data));
@@ -110,6 +124,14 @@ export default function Wallets() {
     setCurrency(wallet.currency);
     setInitialBalance(String(wallet.initialBalance));
     setOwnerUserId(wallet.ownerUserId == null ? "" : String(wallet.ownerUserId));
+    setTypeFields({
+      walletType: wallet.walletType ?? "CASH",
+      creditLimit: wallet.creditLimit == null ? "" : String(wallet.creditLimit),
+      statementDay: wallet.statementDay ?? "",
+      paymentDueDay: wallet.paymentDueDay ?? "",
+      interestRate: wallet.interestRate ?? "",
+      maturityDate: wallet.maturityDate ?? "",
+    });
   }
 
   function cancelEdit() {
@@ -118,6 +140,11 @@ export default function Wallets() {
     setCurrency("VND");
     setInitialBalance("0");
     setOwnerUserId("");
+    setTypeFields(emptyTypeFields());
+  }
+
+  function updateTypeField(field, value) {
+    setTypeFields((f) => ({ ...f, [field]: value }));
   }
 
   async function handleSubmit(e) {
@@ -131,6 +158,12 @@ export default function Wallets() {
       currency,
       initialBalance: Number(initialBalance),
       ownerUserId: ownerUserId ? Number(ownerUserId) : null,
+      walletType: typeFields.walletType,
+      creditLimit: typeFields.creditLimit ? Number(typeFields.creditLimit) : null,
+      statementDay: typeFields.statementDay ? Number(typeFields.statementDay) : null,
+      paymentDueDay: typeFields.paymentDueDay ? Number(typeFields.paymentDueDay) : null,
+      interestRate: typeFields.interestRate !== "" ? Number(typeFields.interestRate) : null,
+      maturityDate: typeFields.maturityDate || null,
     };
     try {
       if (editingId) {
@@ -292,6 +325,51 @@ export default function Wallets() {
               <AmountInput placeholder="0" value={initialBalance} onChange={setInitialBalance} required />
             </Field>
             <Field>
+              {t("wallets:typeLabel")}
+              <Select value={typeFields.walletType} onChange={(e) => updateTypeField("walletType", e.target.value)}>
+                {WALLET_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {t(`wallets:type.${type}`)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            {typeFields.walletType === "CREDIT_CARD" && (
+              <>
+                <Field>
+                  <span>
+                    {t("wallets:creditLimitLabel")}
+                    <span className="required-mark" aria-hidden="true"> *</span>
+                  </span>
+                  <AmountInput value={typeFields.creditLimit} onChange={(v) => updateTypeField("creditLimit", v)} required positive />
+                </Field>
+                <Field>
+                  {t("wallets:statementDayLabel")}
+                  <Input type="number" min={1} max={31} value={typeFields.statementDay}
+                    onChange={(e) => updateTypeField("statementDay", e.target.value)} />
+                </Field>
+                <Field>
+                  {t("wallets:paymentDueDayLabel")}
+                  <Input type="number" min={1} max={31} value={typeFields.paymentDueDay}
+                    onChange={(e) => updateTypeField("paymentDueDay", e.target.value)} />
+                </Field>
+              </>
+            )}
+            {typeFields.walletType === "SAVINGS" && (
+              <>
+                <Field>
+                  {t("wallets:interestRateLabel")}
+                  <Input type="number" min={0} max={100} step="0.01" value={typeFields.interestRate}
+                    onChange={(e) => updateTypeField("interestRate", e.target.value)} />
+                </Field>
+                <Field>
+                  {t("wallets:maturityDateLabel")}
+                  <Input type="date" value={typeFields.maturityDate}
+                    onChange={(e) => updateTypeField("maturityDate", e.target.value)} />
+                </Field>
+              </>
+            )}
+            <Field>
               {t("wallets:ownerLabel")}
               <Select value={ownerUserId} onChange={(e) => setOwnerUserId(e.target.value)}>
                 <option value="">{t("wallets:sharedWallet")}</option>
@@ -331,6 +409,7 @@ export default function Wallets() {
               <tr>
                 <Th>{t("wallets:colName")}</Th>
                 <Th>{t("wallets:colOwner")}</Th>
+                <Th>{t("wallets:colType")}</Th>
                 <Th>{t("wallets:colCurrency")}</Th>
                 <Th align="right">{t("wallets:colInitialBalance")}</Th>
                 <Th align="right">{t("wallets:colCurrentBalance")}</Th>
@@ -352,12 +431,34 @@ export default function Wallets() {
                       ownerName(w.ownerUserId)
                     )}
                   </Td>
+                  <Td data-label={t("wallets:colType")}>
+                    <span className="badge badge-neutral">{t(`wallets:type.${w.walletType ?? "CASH"}`)}</span>
+                    {w.walletType === "CREDIT_CARD" && w.creditLimit != null && (
+                      <div className="text-xs text-slate-500">
+                        {t("wallets:creditLimitShort", { amount: formatCurrency(w.creditLimit, w.currency) })}
+                        {w.paymentDueDay ? ` · ${t("wallets:dueDayShort", { day: w.paymentDueDay })}` : ""}
+                      </div>
+                    )}
+                    {w.walletType === "SAVINGS" && (w.interestRate != null || w.maturityDate) && (
+                      <div className="text-xs text-slate-500">
+                        {w.interestRate != null ? `${w.interestRate}%/${t("wallets:perYear")}` : ""}
+                        {w.maturityDate ? ` · ${t("wallets:maturityShort", { date: w.maturityDate })}` : ""}
+                      </div>
+                    )}
+                  </Td>
                   <Td data-label={t("wallets:colCurrency")}>{w.currency}</Td>
                   <Td data-label={t("wallets:colInitialBalance")} align="right">{formatCurrency(w.initialBalance, w.currency)}</Td>
                   <Td data-label={t("wallets:colCurrentBalance")} align="right">
                     <strong>{formatCurrency(w.currentBalance, w.currency)}</strong>
                   </Td>
                   <Td actions>
+                    <IconButton
+                      onClick={() => setHistoryEntity({ type: "WALLET", id: w.id, title: w.name })}
+                      aria-label={t("common:historyAria")}
+                      title={t("common:historyAria")}
+                    >
+                      <HistoryIcon />
+                    </IconButton>
                     {isOwner && (
                       <>
                         <IconButton
@@ -385,7 +486,14 @@ export default function Wallets() {
 
       <div className="section-card">
         <div className="page-header">
-          <h2>{t("wallets:monthlyTitle")}</h2>
+          <h2>
+            {t("wallets:monthlyTitle")}
+            {isLocked(yearMonth) && (
+              <span className="badge badge-neutral ml-2 inline-flex items-center gap-1 align-middle [&_svg]:size-3">
+                <LockIcon /> {t("wallets:lockedBadge")}
+              </span>
+            )}
+          </h2>
           <label className="month-picker">
             <CalendarIcon />
             <input type="month" value={yearMonth} onChange={(e) => setYearMonth(e.target.value)} />
@@ -394,6 +502,17 @@ export default function Wallets() {
         <p className="page-header-subtitle">{t("wallets:monthlyHint")}</p>
         <WalletMonthlyTable yearMonth={yearMonth} reloadKey={reloadKey} />
       </div>
+
+      <PeriodLocks isOwner={isOwner} locks={locks} onChanged={reloadLocks} />
+
+      <WalletAdjustments
+        wallets={wallets}
+        userId={userId}
+        isOwner={isOwner}
+        walletOptionLabel={walletOptionLabel}
+        isLocked={isLocked}
+        onChanged={load}
+      />
 
       <div className="section-card" ref={transferFormRef}>
         <h2>{editingTransferId ? t("wallets:transferEditTitle") : t("wallets:transferTitle")}</h2>
@@ -533,7 +652,18 @@ export default function Wallets() {
                     </Td>
                     <Td data-label={t("wallets:colNote")}>{tr.note || "-"}</Td>
                     <Td actions>
-                      {canDeleteTransfer(tr) && (
+                      <IconButton
+                        onClick={() => setHistoryEntity({ type: "TRANSFER", id: tr.id, title: formatCurrency(tr.amount, currency) })}
+                        aria-label={t("common:historyAria")}
+                        title={t("common:historyAria")}
+                      >
+                        <HistoryIcon />
+                      </IconButton>
+                      {isLocked(tr.occurredAt) ? (
+                        <span title={t("wallets:lockedRowHint")} aria-label={t("wallets:lockedRowHint")}>
+                          <LockIcon />
+                        </span>
+                      ) : canDeleteTransfer(tr) && (
                         <>
                           <IconButton
                             onClick={() => startTransferEdit(tr)}
@@ -558,6 +688,8 @@ export default function Wallets() {
         )}
         <Pagination pageData={transfersPage} onPageChange={setTransfersPage} />
       </div>
+
+      <EntityHistoryModal entity={historyEntity} onClose={() => setHistoryEntity(null)} />
     </div>
   );
 }

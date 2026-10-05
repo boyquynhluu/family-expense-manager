@@ -3,7 +3,7 @@ SELECT
     type,
     SUM(amount) AS total
 FROM
-    TRANSACTIONS
+    TRANSACTION_CATEGORY_LINES
 WHERE
     family_id = /* familyId */0
     AND occurred_at >= /* fromDate */'2025-01-01'
