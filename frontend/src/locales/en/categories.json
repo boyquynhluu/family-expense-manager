@@ -24,5 +24,8 @@
   "seedDefaultsHint": "Your family has no categories yet. Quickly create a set of common income/expense categories (and a \"Cash\" wallet if none exists) to start recording transactions.",
   "ownerOnlyManage": "Only the household owner can add, edit or delete categories.",
   "nameInvalidChars": "A category name may only contain letters, digits, spaces and - _ . , & ( ) / ' +",
-  "iconInvalidChars": "The icon may only be letters, digits or emoji"
+  "iconInvalidChars": "The icon may only be letters, digits or emoji",
+  "parentLabel": "Parent category",
+  "noParent": "(Top level)",
+  "childOf": "under {{name}}"
 }

@@ -1,7 +1,7 @@
 SELECT
     COALESCE(SUM(amount), 0)
 FROM
-    TRANSACTIONS
+    TRANSACTION_CATEGORY_LINES
 WHERE
     family_id = /* familyId */0
     AND category_id = /* categoryId */0

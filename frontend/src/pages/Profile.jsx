@@ -1,3 +1,4 @@
+import FamilyControls from "../components/FamilyControls";
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
@@ -288,6 +289,18 @@ export default function Profile() {
   function formatDateTime(value) {
     if (!value) return t("notAvailable");
     return formatServerDateTime(value);
+  }
+
+  // README A5: MEMBER / CHILD / VIEWER (the OWNER role moves with "transfer ownership").
+  async function handleChangeRole(member, role) {
+    if (!(await confirmDialog(t("changeRoleConfirm", { name: member.displayName, role: t(`role.${role}`) }), { tone: "primary", icon: "question" }))) return;
+    try {
+      await client.put(`/auth/family/members/${member.id}/role`, { role });
+      toast.success(t("changeRoleDone"));
+      loadMembers();
+    } catch (err) {
+      toast.error(err.response?.data?.message || t("changeRoleFailed"));
+    }
   }
 
   async function handleRemoveMember(member) {
@@ -699,7 +712,19 @@ export default function Profile() {
                 <tr key={m.id}>
                   <Td data-label={t("displayNameLabel")}>{m.displayName}</Td>
                   <Td data-label={t("emailLabel")}>{m.email}</Td>
-                  <Td data-label={t("roleLabel")}>{m.role}</Td>
+                  <Td data-label={t("roleLabel")}>
+                    {profile.role === "OWNER" && m.role !== "OWNER" ? (
+                      <Select value={m.role} onChange={(e) => handleChangeRole(m, e.target.value)}>
+                        {["MEMBER", "CHILD", "VIEWER"].map((r) => (
+                          <option key={r} value={r}>
+                            {t(`role.${r}`)}
+                          </option>
+                        ))}
+                      </Select>
+                    ) : (
+                      t(`role.${m.role}`, m.role)
+                    )}
+                  </Td>
                   <Td data-label={t("relationshipColumnHeader")}>
                     {m.relationship ? relationshipLabelFor(m.relationship) : t("notAvailable")}
                   </Td>
@@ -764,6 +789,8 @@ export default function Profile() {
       </div>
 
       {profile.role === "OWNER" && <PendingInvitesSection reloadSignal={invitesReloadSignal} />}
+
+      {profile.role === "OWNER" && <FamilyControls members={members} />}
 
       <div className="section-card">
         {/* Title on the left, "log out other devices" on the right edge, above the table. */}

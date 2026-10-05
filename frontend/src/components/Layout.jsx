@@ -5,6 +5,9 @@ import { useAuth } from "../hooks/useAuth";
 import { useTrashCount } from "../hooks/useTrashCount";
 import { useUnreadNotifications } from "../hooks/useUnreadNotifications";
 import {
+  BookIcon,
+  HandCoinsIcon,
+  TargetIcon,
     BellIcon,
     CloseIcon,
     GridIcon,
@@ -26,7 +29,7 @@ import { Button, IconButton } from "./ui/Button";
 
 export default function Layout() {
   const { t } = useTranslation("layout");
-  const { logout, displayName, isSystemAdmin } = useAuth();
+  const { logout, displayName, isSystemAdmin, role } = useAuth();
   const unreadCount = useUnreadNotifications();
   const trashCount = useTrashCount();
   const location = useLocation();
@@ -39,10 +42,13 @@ export default function Layout() {
     { to: "/transactions", label: t("nav.transactions"), icon: ReceiptIcon },
     { to: "/recurring-transactions", label: t("nav.recurringTransactions"), icon: RepeatIcon },
     { to: "/budgets", label: t("nav.budgets"), icon: PieChartIcon },
+    { to: "/loans", label: t("nav.loans"), icon: HandCoinsIcon },
+    { to: "/goals", label: t("nav.goals"), icon: TargetIcon },
     { to: "/reports", label: t("nav.reports"), icon: TrendUpIcon },
     { to: "/notifications", label: t("nav.notifications"), icon: BellIcon },
     { to: "/trash", label: t("nav.trash"), icon: TrashIcon },
     { to: "/profile", label: t("nav.profile"), icon: UserIcon },
+    { to: "/guide", label: t("nav.guide"), icon: BookIcon },
   ];
   const visibleLinks = isSystemAdmin
     ? [...links, { to: "/admin", label: t("nav.admin"), icon: ShieldIcon }]
@@ -116,6 +122,7 @@ export default function Layout() {
         </Button>
       </nav>
       <main className="content">
+        {role === "VIEWER" && <div className="viewer-banner">{t("viewerBanner")}</div>}
         <Outlet />
       </main>
     </div>

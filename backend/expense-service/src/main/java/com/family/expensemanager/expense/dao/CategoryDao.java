@@ -17,6 +17,14 @@ import java.util.Optional;
 @Dao
 public interface CategoryDao {
 
+    /** README C6: ids of the direct sub-categories of {@code parentId} (deleted ones too — their history counts). */
+    @Select
+    List<Long> selectChildIds(Long parentId);
+
+    /** README C6: sub-categories still in use (not deleted) — a parent with any can't be deleted. */
+    @Select
+    long countActiveChildren(Long parentId);
+
     @Insert
     int insert(Category category);
 

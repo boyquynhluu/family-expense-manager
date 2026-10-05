@@ -3,6 +3,7 @@ package com.family.expensemanager.expense.dto;
 import com.family.expensemanager.expense.domain.entity.Wallet;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -12,7 +13,15 @@ import java.time.LocalDateTime;
  */
 public record WalletResponse(
         Long id, Long familyId, String name, String currency, BigDecimal initialBalance, BigDecimal currentBalance,
-        LocalDateTime deletedAt, Long ownerUserId) {
+        LocalDateTime deletedAt, Long ownerUserId, String walletType, BigDecimal creditLimit, Integer statementDay,
+        Integer paymentDueDay, BigDecimal interestRate, LocalDate maturityDate) {
+
+    /** Before wallet types (C3): a CASH wallet. */
+    public WalletResponse(Long id, Long familyId, String name, String currency, BigDecimal initialBalance,
+                          BigDecimal currentBalance, LocalDateTime deletedAt, Long ownerUserId) {
+        this(id, familyId, name, currency, initialBalance, currentBalance, deletedAt, ownerUserId, "CASH", null, null,
+                null, null, null);
+    }
 
     /** A shared wallet (no owner). */
     public WalletResponse(Long id, Long familyId, String name, String currency, BigDecimal initialBalance,
@@ -28,6 +37,8 @@ public record WalletResponse(
     public static WalletResponse from(Wallet wallet, BigDecimal currentBalance) {
         return new WalletResponse(
                 wallet.getId(), wallet.getFamilyId(), wallet.getName(), wallet.getCurrency(),
-                wallet.getInitialBalance(), currentBalance, wallet.getDeletedAt(), wallet.getOwnerUserId());
+                wallet.getInitialBalance(), currentBalance, wallet.getDeletedAt(), wallet.getOwnerUserId(),
+                wallet.getWalletType(), wallet.getCreditLimit(), wallet.getStatementDay(), wallet.getPaymentDueDay(),
+                wallet.getInterestRate(), wallet.getMaturityDate());
     }
 }

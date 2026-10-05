@@ -7,7 +7,9 @@ import com.family.expensemanager.common.report.CsvReportGenerator;
 import com.family.expensemanager.common.report.ExcelReportGenerator;
 import com.family.expensemanager.common.report.ReportColumn;
 import com.family.expensemanager.common.report.ReportFormat;
+import com.family.expensemanager.expense.dao.TagDao;
 import com.family.expensemanager.expense.dao.TransactionDao;
+import com.family.expensemanager.expense.dao.TransactionSplitDao;
 import com.family.expensemanager.expense.domain.entity.Transaction;
 import com.family.expensemanager.expense.dto.TransactionReportFilter;
 import com.family.expensemanager.expense.dto.TransactionReportRow;
@@ -48,6 +50,8 @@ public class TransactionReportService {
     private static final int EXCEL_DATA_START_ROW = 3;
 
     private final TransactionDao transactionDao;
+    private final TransactionSplitDao transactionSplitDao;
+    private final TagDao tagDao;
     private final WalletService walletService;
     private final CategoryService categoryService;
     private final CsvReportGenerator csvReportGenerator;
@@ -84,8 +88,23 @@ public class TransactionReportService {
         Map<Long, String> categoryNames = categoryService.listByFamily(familyId).stream()
                 .collect(Collectors.toMap(c -> c.id(), c -> c.name()));
 
+        // README C5/C6: a category filter covers its sub-categories and split parts; a tag filter its tagged rows.
+        java.util.Set<Long> categoryIds = null;
+        java.util.Set<Long> splitTransactionIds = java.util.Set.of();
+        if (filter.categoryId() != null) {
+            categoryIds = new java.util.HashSet<>(categoryService.childIdsOf(filter.categoryId(), familyId));
+            categoryIds.add(filter.categoryId());
+            splitTransactionIds = new java.util.HashSet<>(
+                    transactionSplitDao.selectTransactionIdsByCategoryIds(List.copyOf(categoryIds)));
+        }
+        java.util.Set<Long> taggedIds = filter.tagId() == null ? null
+                : new java.util.HashSet<>(tagDao.selectTransactionIdsByTagId(filter.tagId()));
+        java.util.Set<Long> categories = categoryIds;
+        java.util.Set<Long> splitIds = splitTransactionIds;
         return transactionDao.selectByFamilyId(familyId).stream()
                 .filter(t -> t.isVisibleTo(viewerUserId))
+                .filter(t -> categories == null || categories.contains(t.getCategoryId()) || splitIds.contains(t.getId()))
+                .filter(t -> taggedIds == null || taggedIds.contains(t.getId()))
                 .filter(t -> matches(t, filter))
                 .sorted(Comparator.comparing(Transaction::getOccurredAt))
                 .map(t -> new TransactionReportRow(
@@ -111,9 +130,6 @@ public class TransactionReportService {
 
     private boolean matches(Transaction t, TransactionReportFilter filter) {
         if (filter.walletId() != null && !filter.walletId().equals(t.getWalletId())) {
-            return false;
-        }
-        if (filter.categoryId() != null && !filter.categoryId().equals(t.getCategoryId())) {
             return false;
         }
         if (filter.type() != null && !filter.type().equalsIgnoreCase(t.getType())) {

@@ -78,6 +78,35 @@ class ReportServiceTest {
     }
 
     @Test
+    void walletMonthly_countsBalanceAdjustments_inTheOpeningBalanceAndTheMonthsNet() {
+        Wallet wallet = new Wallet();
+        wallet.setId(10L);
+        wallet.setName("Tiền mặt");
+        wallet.setCurrency("VND");
+        wallet.setInitialBalance(BigDecimal.valueOf(1000));
+        LocalDate start = LocalDate.of(2026, 9, 1);
+        LocalDate end = LocalDate.of(2026, 10, 1);
+        when(walletDao.selectByFamilyId(FAMILY)).thenReturn(List.of(wallet));
+        // Before September: no income/expense, only an adjustment of -150 → opening 850.
+        when(reportDao.sumByWalletAndType(FAMILY, null, start)).thenReturn(List.of());
+        when(reportDao.sumAdjustmentsByWallet(FAMILY, null, start)).thenReturn(List.of(
+                row("walletId", 10L, "total", BigDecimal.valueOf(-150))));
+        // September: +200 income and a +50 adjustment → net 250, closing 1100; the adjustment is not income.
+        when(reportDao.sumByWalletAndType(FAMILY, start, end)).thenReturn(List.of(
+                row("walletId", 10L, "type", "INCOME", "total", BigDecimal.valueOf(200))));
+        when(reportDao.sumAdjustmentsByWallet(FAMILY, start, end)).thenReturn(List.of(
+                row("walletId", 10L, "total", BigDecimal.valueOf(50))));
+
+        var item = reportService.walletMonthly(FAMILY, "2026-09").get(0);
+
+        assertThat(item.openingBalance()).isEqualByComparingTo(BigDecimal.valueOf(850));
+        assertThat(item.income()).isEqualByComparingTo(BigDecimal.valueOf(200));
+        assertThat(item.adjustment()).isEqualByComparingTo(BigDecimal.valueOf(50));
+        assertThat(item.net()).isEqualByComparingTo(BigDecimal.valueOf(250));
+        assertThat(item.closingBalance()).isEqualByComparingTo(BigDecimal.valueOf(1100));
+    }
+
+    @Test
     void walletMonthly_rejectsInvalidMonth() {
         assertThatThrownBy(() -> reportService.walletMonthly(FAMILY, "2026-13"))
                 .isInstanceOf(BadRequestException.class);

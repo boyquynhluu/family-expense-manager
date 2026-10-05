@@ -61,6 +61,9 @@ public class ExpenseEventListener {
     private static final String WALLET_TRANSFER_RECEIVED_TEMPLATE_PATH = "mail-templates/wallet-transfer-received-email.html";
     private static final String TRANSFER_REQUEST_TEMPLATE_PATH = "mail-templates/transfer-request-email.html";
     private static final String TRANSFER_REQUEST_REJECTED_TEMPLATE_PATH = "mail-templates/transfer-request-rejected-email.html";
+    private static final String NOTICE_TEMPLATE_PATH = "mail-templates/generic-notice-email.html";
+    private static final int MAX_MESSAGE_LENGTH = 1000;
+    private static final int MAX_TITLE_LENGTH = 255;
     private static final String OVERALL_BUDGET_LABEL = "Tổng chi tiêu";
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter TIME_FORMAT =
@@ -77,6 +80,7 @@ public class ExpenseEventListener {
     private final String walletTransferReceivedTemplate;
     private final String transferRequestTemplate;
     private final String transferRequestRejectedTemplate;
+    private final String noticeTemplate;
     private final FamilyMemberDirectory memberDirectory;
 
     public ExpenseEventListener(NotificationDao notificationDao,
@@ -98,6 +102,7 @@ public class ExpenseEventListener {
         this.walletTransferReceivedTemplate = loadTemplate(WALLET_TRANSFER_RECEIVED_TEMPLATE_PATH);
         this.transferRequestTemplate = loadTemplate(TRANSFER_REQUEST_TEMPLATE_PATH);
         this.transferRequestRejectedTemplate = loadTemplate(TRANSFER_REQUEST_REJECTED_TEMPLATE_PATH);
+        this.noticeTemplate = loadTemplate(NOTICE_TEMPLATE_PATH);
     }
 
     // Non-blocking retry: a processing failure (DB hiccup, uncaught bug...) is retried 3 times with
@@ -106,6 +111,10 @@ public class ExpenseEventListener {
     @RetryableTopic(attempts = "4", backoff = @Backoff(delay = 2000, multiplier = 2.0, maxDelay = 10000))
     @KafkaListener(topics = "${kafka.topic.expense-events}")
     public void onExpenseEvent(ExpenseEvent event) throws MessagingException {
+        if (event.carriesNotice()) {
+            handleNotice(event);
+            return;
+        }
         if (ExpenseEvent.BUDGET_WARNING.equals(event.eventType())) {
             recordWarningNotification(event);
             return;
@@ -187,6 +196,53 @@ public class ExpenseEventListener {
         }
     }
 
+    /**
+     * Generic notice (ExpenseEvent.notice): store the producer's own title/message as the family-wide in-app row,
+     * then — for a type that supports email — email {@code targetUserId}, or every member with {@code targetRole},
+     * or the whole family; each recipient's own opt-out is honoured and a failing address is only logged (a rethrow
+     * would make Kafka redeliver and insert the in-app row twice).
+     */
+    private void handleNotice(ExpenseEvent event) {
+        save(event, truncate(event.title(), MAX_TITLE_LENGTH), truncate(event.message(), MAX_MESSAGE_LENGTH));
+        NotificationType type = NotificationType.fromName(event.eventType());
+        if (type == null || !type.isEmailSupported()) {
+            return;
+        }
+        String link = frontendUrl + (event.linkPath() != null ? event.linkPath() : "/notifications");
+        String messageHtml = escape(event.message()).replace("\n", "<br>");
+        for (FamilyMemberDirectory.Member member : memberDirectory.listMembers(event.familyId())) {
+            if (member.email() == null) {
+                continue;
+            }
+            if (event.targetUserId() != null && !event.targetUserId().equals(member.userId())) {
+                continue;
+            }
+            if (event.targetUserId() == null && event.targetRole() != null && !event.targetRole().equals(member.role())) {
+                continue;
+            }
+            if (!preferenceService.isEmailEnabled(member.userId(), type)) {
+                log.info("Bỏ qua email {} vì người dùng đã tắt, familyId={}, userId={}", type, event.familyId(),
+                        member.userId());
+                continue;
+            }
+            String recipientName = member.displayName() != null ? member.displayName() : member.email();
+            String html = noticeTemplate
+                    .replace("{{recipientName}}", escape(recipientName))
+                    .replace("{{title}}", escape(event.title()))
+                    .replace("{{message}}", messageHtml)
+                    .replace("{{link}}", escape(link));
+            try {
+                sendHtml(member.email(), event.title(), html);
+            } catch (MessagingException | MailException e) {
+                log.error("Không gửi được email {} familyId={}, userId={}", type, event.familyId(), member.userId(), e);
+            }
+        }
+    }
+
+    private static String truncate(String value, int max) {
+        return value != null && value.length() > max ? value.substring(0, max - 1) + "…" : value;
+    }
+
     private void recordNotification(ExpenseEvent event) {
         Notification notification = new Notification();
         notification.setFamilyId(event.familyId());
@@ -239,7 +295,8 @@ public class ExpenseEventListener {
     private void save(ExpenseEvent event, String title, String message) {
         Notification notification = new Notification();
         notification.setFamilyId(event.familyId());
-        notification.setUserId(event.userId());
+        // 0 = "Hệ thống" (a scheduled notice such as the monthly summary has no acting member).
+        notification.setUserId(event.userId() != null ? event.userId() : 0L);
         notification.setType(event.eventType());
         notification.setTitle(title);
         notification.setMessage(message);

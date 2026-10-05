@@ -35,7 +35,15 @@
     "EXPENSE_DELETED": "Giao dịch bị xoá",
     "TRANSFER_REQUESTED": "Yêu cầu chuyển tiền",
     "TRANSFER_REQUEST_APPROVED": "Yêu cầu chuyển tiền được duyệt",
-    "TRANSFER_REQUEST_REJECTED": "Yêu cầu chuyển tiền bị từ chối"
+    "TRANSFER_REQUEST_REJECTED": "Yêu cầu chuyển tiền bị từ chối",
+    "EXPENSE_UPDATED": "Giao dịch bị sửa",
+    "RECURRING_DRAFT_CREATED": "Khoản định kỳ chờ xác nhận",
+    "BILL_DUE_SOON": "Hoá đơn / thẻ sắp đến hạn",
+    "APPROVAL_REQUESTED": "Khoản chi chờ duyệt",
+    "APPROVAL_DECIDED": "Kết quả duyệt khoản chi",
+    "LOAN_DUE_SOON": "Khoản vay sắp đến hạn",
+    "SAVINGS_MILESTONE": "Mốc tiết kiệm",
+    "MONTHLY_SUMMARY": "Tổng kết tháng"
   },
   "savePreferencesConfirm": "Lưu tuỳ chọn thông báo?"
 }

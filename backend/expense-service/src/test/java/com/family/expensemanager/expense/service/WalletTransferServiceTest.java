@@ -1,6 +1,7 @@
 package com.family.expensemanager.expense.service;
 
 import com.family.expensemanager.common.exception.BadRequestException;
+import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.expense.dao.WalletTransferDao;
 import com.family.expensemanager.expense.domain.entity.Wallet;
@@ -28,6 +29,7 @@ import java.util.function.Supplier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -50,6 +52,10 @@ class WalletTransferServiceTest {
     private ApplicationEventPublisher eventPublisher;
     @Mock
     private IdempotencyGuard idempotencyGuard;
+    @Mock
+    private PeriodLockService periodLockService;
+    @Mock
+    private EntityAuditService entityAuditService;
 
     @InjectMocks
     private WalletTransferService service;
@@ -61,6 +67,7 @@ class WalletTransferServiceTest {
     @SuppressWarnings("unchecked")
     void setUpDefaultBalance() {
         lenient().when(walletService.currentBalanceOf(any())).thenReturn(new BigDecimal("999999999"));
+        lenient().when(walletService.balanceFloorOf(any())).thenReturn(BigDecimal.ZERO);
         // None of these tests exercise idempotency (they all pass a null key) — just run the action,
         // like the real IdempotencyGuard does for a null/blank key.
         lenient().when(idempotencyGuard.runOnce(any(), any(), any(), any(), any()))
@@ -459,5 +466,27 @@ class WalletTransferServiceTest {
         assertThatThrownBy(() -> service.update(7L, 42L, "OWNER", 5L, request(1L, 2L, "10000")))
                 .isInstanceOf(BadRequestException.class);
         verify(walletTransferDao, never()).update(any());
+    }
+
+    @Test
+    void delete_isRefused_whenTheTransfersMonthIsClosed() {
+        WalletTransfer transfer = transfer(5L, 7L, 42L);
+        when(walletTransferDao.selectById(5L)).thenReturn(Optional.of(transfer));
+        doThrow(new ConflictException("Tháng đã chốt sổ"))
+                .when(periodLockService).requireUnlocked(7L, transfer.getOccurredAt());
+
+        assertThatThrownBy(() -> service.delete(7L, 42L, "MEMBER", 5L)).isInstanceOf(ConflictException.class);
+        verify(walletTransferDao, never()).delete(any());
+    }
+
+    @Test
+    void create_isRefused_inAClosedMonth_beforeAnyWalletIsTouched() {
+        doThrow(new ConflictException("Tháng đã chốt sổ")).when(periodLockService).requireUnlocked(7L, OCCURRED_AT);
+
+        assertThatThrownBy(() -> service.create(7L, 42L, "a@b.com", "An", "MEMBER",
+                new CreateWalletTransferRequest(1L, 2L, new BigDecimal("50000"), OCCURRED_AT, null), null))
+                .isInstanceOf(ConflictException.class);
+        verify(walletTransferDao, never()).insert(any());
+        verify(walletService, never()).requireOwnedByFamily(any(), any());
     }
 }

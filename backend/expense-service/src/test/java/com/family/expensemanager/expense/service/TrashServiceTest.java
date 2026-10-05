@@ -54,6 +54,9 @@ class TrashServiceTest {
     @Mock private BudgetDao budgetDao;
     @Mock private ReceiptStorageService receiptStorageService;
     @Mock private TrashPurger purger;
+    @Mock private com.family.expensemanager.expense.dao.LoanDao loanDao;
+    @Mock private com.family.expensemanager.expense.dao.SavingsGoalDao savingsGoalDao;
+    @Mock private com.family.expensemanager.expense.dao.TransactionSplitDao transactionSplitDao;
 
     @InjectMocks private TrashService trashService;
 

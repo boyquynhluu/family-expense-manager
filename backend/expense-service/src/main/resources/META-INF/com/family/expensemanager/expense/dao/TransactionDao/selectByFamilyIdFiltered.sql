@@ -2,6 +2,7 @@ SELECT
     id,
     wallet_id,
     category_id,
+    refund_of_id,
     family_id,
     user_id,
     created_by_name,
@@ -26,7 +27,14 @@ WHERE
     AND wallet_id = /* walletId */0
 /*%end*/
 /*%if categoryId != null */
-    AND category_id = /* categoryId */0
+    AND (category_id = /* categoryId */0
+         OR category_id IN (SELECT c.id FROM CATEGORIES c WHERE c.parent_id = /* categoryId */0)
+         OR id IN (SELECT s.transaction_id FROM TRANSACTION_SPLITS s
+                   WHERE s.category_id = /* categoryId */0
+                      OR s.category_id IN (SELECT c2.id FROM CATEGORIES c2 WHERE c2.parent_id = /* categoryId */0)))
+/*%end*/
+/*%if tagId != null */
+    AND id IN (SELECT tt.transaction_id FROM TRANSACTION_TAGS tt WHERE tt.tag_id = /* tagId */0)
 /*%end*/
 /*%if type != null */
     AND type = /* type */'EXPENSE'

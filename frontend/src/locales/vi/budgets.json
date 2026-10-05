@@ -1,6 +1,6 @@
 {
   "title": "Ngân sách",
-  "subtitle": "Đặt hạn mức chi tiêu theo danh mục hoặc tổng chi tiêu của cả gia đình cho từng tháng",
+  "subtitle": "Đặt hạn mức chi tiêu theo tháng hoặc theo năm, cho cả gia đình, một danh mục, một ví hoặc một thành viên",
   "editTitle": "Cập nhật ngân sách",
   "newTitle": "Đặt ngân sách mới",
   "categoryLabel": "Danh mục",
@@ -30,5 +30,24 @@
   "ownerOnlyManage": "Chỉ chủ hộ mới được thêm/sửa/xoá/sao chép ngân sách.",
   "addConfirm": "Thêm ngân sách {{amount}} cho tháng {{month}}?",
   "updateConfirm": "Cập nhật ngân sách thành {{amount}} cho tháng {{month}}?",
-  "copyConfirm": "Sao chép ngân sách từ tháng {{from}} sang tháng {{to}}? Ngân sách đã có ở tháng {{to}} được giữ nguyên."
+  "copyConfirm": "Sao chép ngân sách từ tháng {{from}} sang tháng {{to}}? Ngân sách đã có ở tháng {{to}} được giữ nguyên.",
+  "walletLabel": "Ví",
+  "allWallets": "Mọi ví",
+  "memberLabel": "Thành viên",
+  "allMembers": "Cả gia đình",
+  "periodTypeLabel": "Kỳ",
+  "periodMonth": "Theo tháng",
+  "periodYear": "Theo năm",
+  "yearLabel": "Năm",
+  "rolloverLabel": "Chuyển phần dư sang kỳ sau",
+  "rolloverBadge": "Chuyển dư",
+  "scopeHint": "Ngân sách của danh mục cha tính cả danh mục con. Bật \"Chuyển phần dư\" để phần chưa chi của kỳ trước (cùng phạm vi) được cộng vào kỳ này.",
+  "statusTitle": "Tình hình ngân sách",
+  "carriedOver": "(gồm {{amount}} chuyển từ kỳ trước)",
+  "colPeriod": "Kỳ",
+  "colScope": "Phạm vi",
+  "wholeFamily": "Cả gia đình, mọi ví",
+  "scopeWallet": "Ví {{name}}",
+  "scopeMember": "{{name}}",
+  "yearShort": "Năm {{year}}"
 }

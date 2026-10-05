@@ -25,6 +25,7 @@ import com.family.expensemanager.common.exception.ServiceException;
 import com.family.expensemanager.expense.dao.BudgetDao;
 import com.family.expensemanager.expense.domain.entity.Budget;
 import com.family.expensemanager.expense.dto.BudgetResponse;
+import com.family.expensemanager.expense.dto.BudgetStatusResponse;
 import com.family.expensemanager.expense.dto.CopyBudgetsRequest;
 import com.family.expensemanager.expense.dto.CopyBudgetsResponse;
 import com.family.expensemanager.expense.dto.CreateBudgetRequest;
@@ -47,6 +48,9 @@ public class BudgetService {
 
     private final BudgetDao budgetDao;
     private final CategoryService categoryService;
+    private final WalletService walletService;
+    private final BudgetMonitor budgetMonitor;
+    private final EntityAuditService entityAuditService;
 
     @PreAuthorize("hasRole('OWNER')")
     public BudgetResponse create(Long familyId, CreateBudgetRequest request) {
@@ -56,11 +60,12 @@ public class BudgetService {
 
             Budget budget = new Budget();
             budget.setFamilyId(familyId);
-            budget.setCategoryId(request.categoryId());
-            budget.setPeriodMonth(request.periodMonth());
-            budget.setLimitAmount(request.limitAmount());
+            apply(budget, request);
             budgetDao.insert(budget);
-            return BudgetResponse.from(budget);
+            BudgetResponse response = BudgetResponse.from(budget);
+            entityAuditService.record(familyId, EntityAuditService.BUDGET, budget.getId(), EntityAuditService.ACTION_CREATED,
+                    null, response);
+            return response;
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
                 | OptimisticLockException e) {
             throw e;
@@ -97,11 +102,13 @@ public class BudgetService {
             log.info("update - start, budgetId={}, familyId={}", budgetId, familyId);
             Budget budget = requireOwnedByFamily(budgetId, familyId);
             validateTarget(familyId, request, budgetId);
-            budget.setCategoryId(request.categoryId());
-            budget.setPeriodMonth(request.periodMonth());
-            budget.setLimitAmount(request.limitAmount());
+            BudgetResponse before = BudgetResponse.from(budget);
+            apply(budget, request);
             budgetDao.update(budget);
-            return BudgetResponse.from(budget);
+            BudgetResponse after = BudgetResponse.from(budget);
+            entityAuditService.record(familyId, EntityAuditService.BUDGET, budgetId, EntityAuditService.ACTION_UPDATED,
+                    before, after);
+            return after;
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
                 | OptimisticLockException e) {
             throw e;
@@ -118,19 +125,26 @@ public class BudgetService {
             if (request.fromMonth().equals(request.toMonth())) {
                 throw logged(log, new BadRequestException("Tháng nguồn và tháng đích phải khác nhau"));
             }
-            List<Budget> source = budgetDao.selectByFamilyAndPeriod(familyId, request.fromMonth());
-            Set<Long> existingCategoryIds = new HashSet<>();
+            // Monthly budgets only (a yearly one has no "month" to copy to); a duplicate = same full scope (A6).
+            List<Budget> source = budgetDao.selectByFamilyAndPeriod(familyId, request.fromMonth()).stream()
+                    .filter(b -> !BudgetMonitor.PERIOD_YEAR.equals(b.getPeriodType()))
+                    .toList();
+            Set<List<Object>> existingScopes = new HashSet<>();
             for (Budget existing : budgetDao.selectByFamilyAndPeriod(familyId, request.toMonth())) {
-                existingCategoryIds.add(existing.getCategoryId());
+                existingScopes.add(scopeKey(existing));
             }
             int copied = 0;
             for (Budget original : source) {
-                if (!existingCategoryIds.add(original.getCategoryId())) {
+                if (!existingScopes.add(scopeKey(original))) {
                     continue;
                 }
                 Budget budget = new Budget();
                 budget.setFamilyId(familyId);
                 budget.setCategoryId(original.getCategoryId());
+                budget.setWalletId(original.getWalletId());
+                budget.setUserId(original.getUserId());
+                budget.setPeriodType(BudgetMonitor.PERIOD_MONTH);
+                budget.setRollover(original.getRollover());
                 budget.setPeriodMonth(request.toMonth());
                 budget.setLimitAmount(original.getLimitAmount());
                 budgetDao.insert(budget);
@@ -151,6 +165,8 @@ public class BudgetService {
             log.info("delete - start, budgetId={}, familyId={}", budgetId, familyId);
             Budget budget = requireOwnedByFamily(budgetId, familyId);
             budgetDao.delete(budget);
+            entityAuditService.record(familyId, EntityAuditService.BUDGET, budgetId, EntityAuditService.ACTION_DELETED,
+                    BudgetResponse.from(budget), null);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException
                 | OptimisticLockException e) {
             throw e;
@@ -159,24 +175,62 @@ public class BudgetService {
         }
     }
 
+    /** README A6: every budget covering that month (monthly ones plus the year's yearly ones), with spend and rollover. */
+    public List<BudgetStatusResponse> status(Long familyId, String yearMonth) {
+        try {
+            log.info("status - start, familyId={}, yearMonth={}", familyId, yearMonth);
+            return budgetMonitor.status(familyId, java.time.YearMonth.parse(yearMonth));
+        } catch (java.time.format.DateTimeParseException e) {
+            throw logged(log, new BadRequestException("Tháng không hợp lệ (định dạng yyyy-MM)"));
+        }
+    }
+
+    private void apply(Budget budget, CreateBudgetRequest request) {
+        budget.setCategoryId(request.categoryId());
+        budget.setWalletId(request.walletId());
+        budget.setUserId(request.userId());
+        budget.setPeriodType(periodTypeOf(request));
+        budget.setPeriodMonth(request.periodMonth());
+        budget.setLimitAmount(request.limitAmount());
+        budget.setRollover(Boolean.TRUE.equals(request.rollover()));
+    }
+
+    private static String periodTypeOf(CreateBudgetRequest request) {
+        return request.periodType() == null ? BudgetMonitor.PERIOD_MONTH : request.periodType();
+    }
+
+    private static List<Object> scopeKey(Budget b) {
+        return java.util.Arrays.asList(b.getCategoryId(), b.getWalletId(), b.getUserId());
+    }
+
     private void validateTarget(Long familyId, CreateBudgetRequest request, Long selfId) {
+        String periodType = periodTypeOf(request);
+        boolean yearly = BudgetMonitor.PERIOD_YEAR.equals(periodType);
+        if (yearly != (request.periodMonth().length() == 4)) {
+            throw logged(log, new BadRequestException(yearly
+                    ? "Ngân sách theo năm cần kỳ dạng yyyy" : "Ngân sách theo tháng cần kỳ dạng yyyy-MM"));
+        }
+        // A yearly budget covers twelve months, so its cap scales with it.
+        long max = yearly ? MAX_AMOUNT_BUDGET * 12 : MAX_AMOUNT_BUDGET;
         if(request.limitAmount().compareTo(BigDecimal.valueOf(MIN_AMOUNT_BUDGET)) < 0) {
             throw logged(log, new BadRequestException("Hạn mức không được dưới 10.000 đ"));
         }
-        if(request.limitAmount().compareTo(BigDecimal.valueOf(MAX_AMOUNT_BUDGET)) > 0) {
-            throw logged(log, new BadRequestException("Hạn mức không được vượt quá 5.000.000 đ"));
+        if(request.limitAmount().compareTo(BigDecimal.valueOf(max)) > 0) {
+            throw logged(log, new BadRequestException("Hạn mức không được vượt quá "
+                    + com.family.expensemanager.common.currency.CurrencyUtil.formatCurrency(BigDecimal.valueOf(max))));
         }
-        Optional<Budget> duplicate;
-        if (request.categoryId() == null) {
-            duplicate = budgetDao.selectOverallByPeriod(familyId, request.periodMonth());
-        } else {
+        if (request.categoryId() != null) {
             categoryService.requireOwnedByFamily(request.categoryId(), familyId, "EXPENSE");
-            duplicate = budgetDao.selectByCategoryAndPeriod(request.categoryId(), request.periodMonth());
         }
+        if (request.walletId() != null) {
+            walletService.requireOwnedByFamily(request.walletId(), familyId);
+        }
+        Optional<Budget> duplicate = budgetDao.selectSameScope(familyId, request.categoryId(), request.walletId(),
+                request.userId(), periodType, request.periodMonth());
         if (duplicate.isPresent() && !Objects.equals(duplicate.get().getId(), selfId)) {
             throw logged(log, new BadRequestException(request.categoryId() == null
-                    ? "Đã có ngân sách tổng chi tiêu cho tháng này"
-                    : "Đã có ngân sách cho danh mục này trong tháng này"));
+                    ? "Đã có ngân sách tổng chi tiêu với phạm vi này cho kỳ này"
+                    : "Đã có ngân sách cho danh mục này với phạm vi này trong kỳ này"));
         }
     }
 

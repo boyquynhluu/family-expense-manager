@@ -4,7 +4,7 @@ Hệ thống quản lý chi tiêu gia đình, dùng thực tế hàng ngày, xâ
 
 **Stack:** Spring Boot 3.3.5 + Doma 2 (không dùng JPA/Hibernate) · React (Vite) · MySQL + Flyway · Docker Compose · Kafka · Redis · Eureka · Spring Cloud Gateway **Server MVC** (servlet-based, không dùng WebFlux) · springdoc-openapi (Swagger UI).
 
-> Tài liệu mô tả **kiến trúc, cách chạy và toàn bộ tính năng đã làm** theo từng mục (mỗi mục có sơ đồ luồng, xem [Tính năng theo từng mục](#tính-năng-theo-từng-mục)). Schema bảng do Flyway quản lý (`db/migration/V*__*.sql`, xem [Database Migrations](#database-migrations-flyway)). Production chạy tại **https://quanlychitieu.online** (xem [Triển khai và CI/CD](#triển-khai-và-cicd)). Mọi việc chưa làm nằm ở [Việc cần làm (TODO)](#việc-cần-làm-todo).
+> Tài liệu mô tả **kiến trúc, cách chạy và toàn bộ tính năng đã làm** theo từng mục (mỗi mục có sơ đồ luồng, xem [Tính năng theo từng mục](#tính-năng-theo-từng-mục)). Schema bảng do Flyway quản lý (`db/migration/V*__*.sql`, xem [Database Migrations](#database-migrations-flyway)). Production chạy tại **https://quanlychitieu.online** (xem [Triển khai và CI/CD](#triển-khai-và-cicd)). Mọi việc chưa làm nằm ở [Việc cần làm (TODO)](#việc-cần-làm-todo). Hướng dẫn cho người dùng cuối: menu **Hướng dẫn** trong ứng dụng (`/guide`), nội dung ở **[frontend/src/content/huong-dan-su-dung.md](frontend/src/content/huong-dan-su-dung.md)**.
 
 ## Kiến trúc
 
@@ -100,7 +100,7 @@ Mỗi service backend đi theo layout chuẩn của Doma:
 
 Mọi token gửi qua email (xác thực, đặt lại mật khẩu, đổi email, lời mời) chỉ được lưu dạng **SHA-256** (migration V13), DB bị lộ cũng không dùng được link.
 
-**FEM_EXPENSE** — `WALLETS(id, family_id, owner_user_id (NULL = ví chung), name, currency, initial_balance, deleted_at)` · `CATEGORIES(id, family_id, name, type, icon, color, deleted_at)` · `TRANSACTIONS(id, wallet_id, category_id, family_id, user_id, created_by_name, type, amount, occurred_at, note, is_private, receipt_path, receipt_content_type, deleted_at, deleted_by_user_id, deleted_by_name, version)` · `TRANSACTION_AUDIT_LOGS(id, family_id, transaction_id, action, actor_user_id, actor_name, before_json, after_json, created_at)` · `WALLET_TRANSFERS(id, family_id, from_wallet_id, to_wallet_id, amount, note, occurred_at, created_by_user_id)` · `TRANSFER_REQUESTS(id, family_id, requester_user_id, approver_user_id, from_wallet_id, to_wallet_id, amount, note, status, decided_by_user_id, decided_at, transfer_id, created_at)` · `BUDGETS(id, family_id, category_id (NULL = ngân sách tổng), period_month, limit_amount, version)` · `RECURRING_TRANSACTIONS(id, family_id, wallet_id, category_id, type, amount, note, frequency, day_of_month, day_of_week, month_of_year, start_date, end_date, next_run_date, last_run_date, active, created_by_user_id)` · `IDEMPOTENCY_KEYS(id, family_id, scope, idempotency_key, response_json, created_at)`
+**FEM_EXPENSE** — `WALLETS(id, family_id, owner_user_id (NULL = ví chung), name, currency, initial_balance, deleted_at)` · `CATEGORIES(id, family_id, name, type, icon, color, deleted_at)` · `TRANSACTIONS(id, wallet_id, category_id, family_id, user_id, created_by_name, type, amount, occurred_at, note, is_private, receipt_path, receipt_content_type, deleted_at, deleted_by_user_id, deleted_by_name, version)` · `TRANSACTION_AUDIT_LOGS(id, family_id, transaction_id, action, actor_user_id, actor_name, before_json, after_json, created_at)` · `WALLET_TRANSFERS(id, family_id, from_wallet_id, to_wallet_id, amount, note, occurred_at, created_by_user_id)` · `TRANSFER_REQUESTS(id, family_id, requester_user_id, approver_user_id, from_wallet_id, to_wallet_id, amount, note, status, decided_by_user_id, decided_at, transfer_id, created_at)` · `BUDGETS(id, family_id, category_id (NULL = ngân sách tổng), period_month, limit_amount, version)` · `RECURRING_TRANSACTIONS(id, family_id, wallet_id, category_id, type, amount, note, frequency, day_of_month, day_of_week, month_of_year, start_date, end_date, next_run_date, last_run_date, active, created_by_user_id)` · `IDEMPOTENCY_KEYS(id, family_id, scope, idempotency_key, response_json, created_at)` · `WALLET_ADJUSTMENTS(id, family_id, wallet_id, amount (có dấu), balance_before, balance_after, note, occurred_at, created_by_user_id, created_by_name, created_at)` · `PERIOD_LOCKS(family_id, period_month, locked_by_user_id, locked_by_name, locked_at)` · `PERIOD_LOCK_LOGS(id, family_id, period_month, action, actor_user_id, actor_name, created_at)` · `ENTITY_AUDIT_LOGS` (A3) · `RECURRING_DRAFTS` (A4) · `MEMBER_SPENDING_LIMITS`, `FAMILY_SETTINGS`, `TRANSACTION_APPROVALS` (A5) · `LOANS`, `LOAN_PAYMENTS` (B3) · `SAVINGS_GOALS` (C1) · `TRANSACTION_SPLITS` và view `TRANSACTION_CATEGORY_LINES` (C5) · `TAGS`, `TRANSACTION_TAGS` (C6) · `MONTHLY_SUMMARY_RUNS` (C7). Cột mới: `WALLETS.wallet_type, credit_limit, statement_day, payment_due_day, interest_rate, maturity_date` (C3), `RECURRING_TRANSACTIONS.mode, remind_days_before` (A4, C2), `BUDGETS.wallet_id, user_id, period_type, rollover` (A6), `TRANSACTIONS.refund_of_id` (C4), `CATEGORIES.parent_id` (C6). Chi tiết từng bảng ở các mục 32–44.
 
 Cột `version` (V10) là **optimistic locking**: hai người cùng sửa một giao dịch hoặc ngân sách thì người lưu sau nhận 409 thay vì âm thầm ghi đè. `IDEMPOTENCY_KEYS` (V11): client gửi lại `POST /transactions` hoặc `POST /transfers` với cùng header `Idempotency-Key` (ví dụ sau khi timeout) thì nhận lại đúng response cũ, không tạo dòng thứ hai (`IdempotencyGuard`).
 
@@ -129,6 +129,7 @@ erDiagram
     CATEGORIES ||--o{ BUDGETS : "category_id (NULL = ngân sách tổng)"
     WALLETS ||--o{ WALLET_TRANSFERS : from_wallet_id
     WALLETS ||--o{ WALLET_TRANSFERS : to_wallet_id
+    WALLETS ||--o{ WALLET_ADJUSTMENTS : "wallet_id (ON DELETE CASCADE)"
 
     %% ===== FEM_EXPENSE — cố ý KHÔNG có khoá ngoại (lịch sử, không được chặn xoá vĩnh viễn) =====
     TRANSACTIONS ||..o{ TRANSACTION_AUDIT_LOGS : transaction_id
@@ -148,6 +149,9 @@ erDiagram
     USERS ||..o{ WALLET_TRANSFERS : created_by_user_id
     USERS ||..o{ WALLETS : "owner_user_id (ví riêng)"
     USERS ||..o{ TRANSFER_REQUESTS : "requester_user_id, approver_user_id"
+    USERS ||..o{ WALLET_ADJUSTMENTS : created_by_user_id
+    FAMILIES ||..o{ PERIOD_LOCKS : family_id
+    FAMILIES ||..o{ PERIOD_LOCK_LOGS : family_id
     USERS ||..o{ NOTIFICATIONS : user_id
     USERS ||..o{ NOTIFICATION_PREFERENCES : user_id
 ```
@@ -163,6 +167,7 @@ Topic `expense-events`, key = `familyId`, phân biệt bằng field `eventType`:
 - `RECURRING_EXECUTED`, `RECURRING_FAILED` — scheduler giao dịch định kỳ ghi thành công hoặc gặp lỗi. Chỉ trong app.
 - `EXPENSE_DELETED` — giao dịch bị xoá (xoá mềm, vào Thùng rác). `userId`/`userDisplayName` là **người xoá**. Xoá một giao dịch: event mô tả giao dịch đó (`transactionId`, `amount`, `occurredOn`, `note`) với `itemCount = 1`; **xoá hàng loạt chỉ publish một event** với `itemCount` = số giao dịch đã xoá, để không làm ngập thông báo của cả gia đình. Chỉ trong app, người dùng tắt được trong tuỳ chọn thông báo. Ai xoá cũng được lưu ngay trên dòng giao dịch (`deleted_by_user_id`, `deleted_by_name`, migration V12) và toàn bộ lịch sử tạo/sửa/xoá/khôi phục nằm ở bảng `TRANSACTION_AUDIT_LOGS` (V13, xem `GET /api/expenses/transactions/{id}/history`).
 - `TRANSFER_REQUESTED`, `TRANSFER_REQUEST_APPROVED`, `TRANSFER_REQUEST_REJECTED` — yêu cầu chuyển tiền (mục 28). Tạo yêu cầu: thông báo trong app và email cho chủ ví nguồn. Duyệt: chỉ trong app (bản thân khoản chuyển đã phát `WALLET_TRANSFERRED` kèm email). Từ chối: trong app và email cho người gửi yêu cầu.
+- **Notice dùng chung** (mục 45): `EXPENSE_UPDATED` (A2), `RECURRING_DRAFT_CREATED`, `BILL_DUE_SOON` (A4, C2), `APPROVAL_REQUESTED`, `APPROVAL_DECIDED` (A5), `LOAN_DUE_SOON` (B3), `SAVINGS_MILESTONE` (C1), `MONTHLY_SUMMARY` (C7). Producer gửi sẵn `title`, `message`, `linkPath`; consumer chỉ lưu và gửi email.
 - `WALLET_TRANSFERRED` — publish sau khi ghi `WALLET_TRANSFERS` (mục 14). Một dòng thông báo trong app dùng chung cho cả gia đình (ví không có chủ sở hữu riêng, nên không có "người nhận" theo user). Về email, `notification-service` gửi hai kiểu khác nhau: người tạo giao dịch nhận email "đã trừ" (địa chỉ có sẵn trong event, do expense-service đọc từ JWT lúc publish), còn **mỗi thành viên khác trong gia đình** nhận email "đã cộng, ai chuyển" — địa chỉ của họ được tra cứu qua endpoint nội bộ `GET /internal/families/{familyId}/members` của auth-service (xem "Bảo mật" bên dưới), vì notification-service không có sẵn USERS. Lỗi gửi email (kể cả `BUDGET_EXCEEDED`) chỉ được log, không throw lại — tránh Kafka redeliver event và ghi trùng dòng thông báo trong app.
 
 Các topic khác (khai báo dưới `kafka.topic.*` trong `application.yml`): `user-verification` và `password-reset` (email xác thực, đặt lại mật khẩu, cả xác nhận đổi email), `family-invite` (email mời thành viên), `family-member-events` (`MEMBER_JOINED`, `MEMBER_LEFT`, `MEMBER_REMOVED`, do auth-service phát), `user-registered` (có tài khoản mới, kèm danh sách email admin nhận, xem mục 25).
@@ -213,7 +218,7 @@ Phân chia trách nhiệm:
 
 Flyway tự dùng `spring.datasource.*` đã cấu hình sẵn trong mỗi `application.yml`, không cần khai báo thêm `spring.flyway.url/user/password`. Migration chạy trước khi Doma/DAO nào được gọi, nên chỉ cần `docker compose up` (hoặc chạy MySQL local) rồi start service — bảng sẽ tự có. Toàn bộ migration được chạy thật trên MySQL trong integration test (mục 11) ở mỗi lần CI.
 
-Hiện có: auth-service V1–V15, expense-service V1–V16, notification-service V1–V2. **Không sửa migration đã chạy trên production**, luôn thêm file version mới. Trên production, `deploy.sh` backup DB trước khi khởi động service (tức trước khi migration mới chạy).
+Hiện có: auth-service V1–V15, expense-service V1–V28, notification-service V1–V2. **Không sửa migration đã chạy trên production**, luôn thêm file version mới. Trên production, `deploy.sh` backup DB trước khi khởi động service (tức trước khi migration mới chạy).
 
 > ⚠️ Nếu xoá volume `mysql-data` (`docker compose down -v`) thì script `infra/mysql/init/` sẽ chạy lại từ đầu — bình thường. Nhưng nếu volume **đã tồn tại** (đã init trước đó) và bạn thêm/sửa script trong `infra/mysql/init/` sau này, nó **sẽ không tự chạy lại** (MySQL chỉ chạy init script khi data directory rỗng) — phải `docker compose down -v` rồi `up` lại, hoặc chạy SQL thủ công vào container đang chạy.
 
@@ -241,7 +246,7 @@ Khác biệt quan trọng so với bản reactive cần lưu ý nếu sửa gate
 
 ## Bảo mật
 
-JWT được xác thực **độc lập ở từng service** (qua `common`), không chỉ tin tưởng header do gateway set — gateway cũng xác thực để fail nhanh nhưng vẫn forward nguyên `Authorization` header xuống service. Access token 15 phút, refresh token 7 ngày. Ngoài ra: đăng xuất từ xa tức thì (mục 8), 2FA (mục 9), khoá đăng nhập tạm và khoá tài khoản (mục 22, 23), IP máy khách đáng tin cậy (mục 24), phân quyền OWNER/MEMBER kiểm tra ở backend (mục 17), token gửi qua email chỉ lưu dạng băm SHA-256.
+JWT được xác thực **độc lập ở từng service** (qua `common`), không chỉ tin tưởng header do gateway set — gateway cũng xác thực để fail nhanh nhưng vẫn forward nguyên `Authorization` header xuống service. Access token 15 phút, refresh token 7 ngày. Ngoài ra: đăng xuất từ xa tức thì (mục 8), 2FA (mục 9), khoá đăng nhập tạm và khoá tài khoản (mục 22, 23), IP máy khách đáng tin cậy (mục 24), phân quyền OWNER/MEMBER/CHILD/VIEWER kiểm tra ở backend (mục 17, 37), token gửi qua email chỉ lưu dạng băm SHA-256.
 
 **Giới hạn tần suất**, hai lớp, vượt ngưỡng đều trả 429 với cùng body `{"message": "..."}`:
 - **nginx (production, mọi request, theo IP):** `/api/*` 20 req/s, cho phép dồn 40 request một lúc; file tĩnh của frontend 50 req/s, dồn 100; tối đa 30 kết nối đồng thời mỗi IP. Request vượt mức bị chặn ngay ở nginx, không chạm tới Java (`infra/nginx/templates/default.conf.template`).
@@ -259,7 +264,8 @@ Mỗi mục gồm: mục tiêu, **sơ đồ luồng di chuyển** (Mermaid, GitH
 
 - **Nền tảng (N1–N4):** luồng cốt lõi từ ngày đầu — đăng ký/đăng nhập, quên mật khẩu, Google, ghi chi tiêu.
 - **Mục 1–13:** danh sách task ban đầu, đã hoàn thành (nội dung được cập nhật theo hiện trạng).
-- **Mục 14–29:** các nghiệp vụ bổ sung sau khi rà soát còn thiếu.
+- **Mục 14–31:** các nghiệp vụ bổ sung sau khi rà soát còn thiếu.
+- **Mục 32–44:** backlog A, B, C (review ngày 01/10/2026), trừ A7 và C8 đang pending.
 
 ### Bản đồ tổng quan: mục nào nằm ở đâu
 
@@ -268,8 +274,8 @@ flowchart LR
     U["Trình duyệt<br/>React, i18n vi/en"]
     GW["api-gateway :8080<br/>JWT, rate limit, IP tin cậy"]
     AU["auth-service :8081<br/>N1-N3, mục 6, 8, 9, 16, 22, 23, 25"]
-    EX["expense-service :8082<br/>mục 1, 3, 4, 5, 7, 10, 14, 15, 18, 20, 21, 26-29"]
-    NO["notification-service :8083<br/>mục 2, 19, 25, 28"]
+    EX["expense-service :8082<br/>mục 1, 3, 4, 5, 7, 10, 14, 15, 18, 20, 21, 26-44"]
+    NO["notification-service :8083<br/>mục 2, 19, 25, 28, 45"]
     DB[("MySQL<br/>Flyway migrations")]
     RD[("Redis<br/>cache, phiên thu hồi, challenge 2FA, khoá đăng nhập")]
     KF{{"Kafka<br/>expense-events, family-member-events, ..."}}
@@ -325,6 +331,22 @@ flowchart LR
 | 27 | Giao dịch riêng tư | expense | Transactions, Trash |
 | 28 | Yêu cầu chuyển tiền | expense, notification | Wallets |
 | 29 | Giới hạn số tiền, chống ghi trùng và ghi đè | expense | Transactions, Wallets, Budgets |
+| 30 | Điều chỉnh số dư (đối soát) | expense | Wallets |
+| 31 | Chốt sổ theo tháng | expense | Wallets, Transactions |
+| 32 | Loại ví (C3) | expense | Wallets |
+| 33 | Chặn ví âm theo loại ví (A1) | expense | mọi trang ghi tiền |
+| 34 | Thông báo khi sửa giao dịch (A2) | expense, notification | Notifications |
+| 35 | Lịch sử thay đổi ví, ngân sách, chuyển tiền (A3) | expense | Wallets, Budgets |
+| 36 | Giao dịch định kỳ chờ xác nhận và nhắc hoá đơn (A4, C2) | expense, notification | RecurringTransactions |
+| 37 | Vai trò VIEWER, CHILD, hạn mức chi, duyệt khoản chi (A5) | auth, expense, notification | Profile, Transactions |
+| 38 | Ngân sách theo ví/thành viên, theo năm, chuyển dư (A6) | expense | Budgets |
+| 39 | Vay / cho vay / nợ (B3) | expense, notification | Loans |
+| 40 | Mục tiêu tiết kiệm (C1) | expense, notification | Goals |
+| 41 | Hoàn tiền / trả hàng (C4) | expense | Transactions |
+| 42 | Tách giao dịch nhiều danh mục (C5) | expense | Transactions |
+| 43 | Danh mục con và tag (C6) | expense | Categories, Transactions, Reports |
+| 44 | Email tổng kết tháng (C7) | expense, notification | Profile |
+| 45 | Thông báo dạng notice dùng chung | notification | Notifications |
 
 ---
 
@@ -596,7 +618,7 @@ flowchart TD
     D --> F["Dashboard và báo cáo cộng tổng an toàn<br/>vì cùng một đơn vị tiền"]
 ```
 
-Số dư hiện tại của ví = số dư đầu + thu − chi + chuyển vào − chuyển ra (xem mục 14). Ví có thể là ví chung hoặc ví riêng của một thành viên, xem mục 26.
+Số dư hiện tại của ví = số dư đầu + thu − chi + chuyển vào − chuyển ra + điều chỉnh số dư (xem mục 14, 30). Ví có thể là ví chung hoặc ví riêng của một thành viên, xem mục 26.
 
 ### Mục 8 — Quản lý phiên đăng nhập, đăng xuất từ xa
 
@@ -1165,6 +1187,150 @@ sequenceDiagram
 - **Chống ghi trùng** (`IdempotencyGuard`, bảng `IDEMPOTENCY_KEYS`): `POST /transactions` và `POST /transfers` nhận header `Idempotency-Key`; gửi lại cùng key thì nhận lại đúng response cũ thay vì tạo dòng thứ hai.
 - **Chống ghi đè** (optimistic locking, cột `version` trên `TRANSACTIONS` và `BUDGETS`): hai người cùng sửa một dòng thì người lưu sau nhận 409 và phải tải lại.
 
+### Mục 30 — Điều chỉnh số dư (đối soát)
+
+Khi số dư trong ứng dụng lệch với thực tế (quên ghi một khoản, phí ngân hàng...), người dùng nhập **số dư thực tế** của ví; phần chênh lệch được ghi vào bảng riêng `WALLET_ADJUSTMENTS`. Giống chuyển tiền, điều chỉnh **chỉ thay đổi số dư ví**: không phải thu hay chi, không ảnh hưởng ngân sách, báo cáo thu chi hay báo cáo danh mục.
+
+```mermaid
+sequenceDiagram
+    actor U as Người dùng
+    participant FE as Wallets.jsx (WalletAdjustments)
+    participant S as WalletAdjustmentService
+    participant DB as MySQL
+
+    U->>FE: Chọn ví, nhập số dư thực tế (có thể âm), lý do
+    FE->>FE: Hiện số dư trong app và chênh lệch sẽ ghi
+    FE->>S: POST /api/expenses/wallet-adjustments {walletId, actualBalance, note}
+    S->>S: Quyền: OWNER mọi ví; thành viên chỉ ví riêng của mình (ví chung chỉ OWNER)
+    S->>DB: Khoá dòng ví (SELECT ... FOR UPDATE), tính số dư hiện tại
+    S->>S: Chênh lệch = thực tế − hiện tại; bằng 0 thì 400
+    S->>DB: Ghi WALLET_ADJUSTMENTS (amount có dấu, số dư trước/sau, người, thời điểm)
+    S-->>FE: OK, FE tải lại số dư và lịch sử điều chỉnh
+```
+
+- Số dư hiện tại của ví = số dư đầu + thu − chi + chuyển vào − chuyển ra **+ tổng điều chỉnh** (`WalletService.currentBalanceOf`). Bảng số dư theo tháng (`GET /reports/wallet-month`) có thêm cột **Điều chỉnh**, tính vào số dư đầu tháng và dư/âm.
+- Endpoint: `POST /api/expenses/wallet-adjustments`, `GET /api/expenses/wallet-adjustments?walletId=&page=&size=` (mọi thành viên xem được), `DELETE /{id}` (người tạo hoặc OWNER; xoá cứng, số dư trở lại như trước).
+- Ví đã có điều chỉnh thì không đưa vào thùng rác được. Nếu ví bị xoá vĩnh viễn, điều chỉnh của nó bị xoá theo (`ON DELETE CASCADE`).
+- Ô nhập số dư dùng `AmountInput` với tuỳ chọn `allowNegative`.
+
+### Mục 31 — Chốt sổ theo tháng
+
+OWNER chốt một tháng **đã qua** (không chốt được tháng hiện tại hay tương lai). Sau khi chốt, không ai (kể cả OWNER) thêm, sửa, xoá hay khôi phục được dữ liệu có ngày thuộc tháng đó cho đến khi OWNER mở lại sổ. Nhờ vậy số dư, dư/âm và ngân sách của tháng đã quyết toán không bị đổi ngầm.
+
+```mermaid
+flowchart TD
+    A["OWNER chọn tháng đã qua → POST /period-locks"] --> B[("PERIOD_LOCKS<br/>+ 1 dòng LOCKED ở PERIOD_LOCK_LOGS")]
+    W["Thao tác ghi bất kỳ"] --> C{"PeriodLockService.requireUnlocked<br/>(mọi ngày mà thao tác chạm tới)"}
+    C -- "Tháng còn mở" --> OK["Cho phép"]
+    C -- "Có tháng đã chốt" --> X["409 Tháng yyyy-MM đã chốt sổ"]
+    U["OWNER mở lại sổ → DELETE /period-locks/yyyy-MM"] --> L[("Xoá khỏi PERIOD_LOCKS<br/>+ 1 dòng UNLOCKED")]
+```
+
+| Thao tác | Ngày được kiểm tra |
+|---|---|
+| Tạo giao dịch (nhập tay, import CSV/Excel, giao dịch định kỳ) | Ngày giao dịch |
+| Sửa giao dịch, sửa chuyển tiền | **Cả ngày cũ lẫn ngày mới**: không chuyển được dữ liệu vào hay ra khỏi tháng đã chốt |
+| Xoá, khôi phục giao dịch; xoá chuyển tiền; xoá điều chỉnh số dư | Ngày của dòng đó |
+| Tạo chuyển tiền, duyệt yêu cầu chuyển tiền, tạo điều chỉnh số dư | Ngày của khoản đó |
+| Xoá hàng loạt | Từng dòng; dòng thuộc tháng đã chốt được đếm vào `locked` trong kết quả, các dòng khác vẫn xoá |
+| Đổi **số dư ban đầu** của ví | Bị chặn khi gia đình đã có bất kỳ tháng nào chốt sổ (số dư ban đầu ảnh hưởng mọi tháng); muốn sửa số dư thì dùng điều chỉnh số dư (mục 30) |
+
+- **Không chặn:** đính kèm/xoá ảnh hoá đơn (không đổi số liệu); xoá vĩnh viễn trong thùng rác (dòng đã nằm trong thùng rác thì không còn được tính); ngân sách của tháng đã chốt.
+- **Giao dịch định kỳ:** nếu một kỳ rơi vào tháng đã chốt (server tắt nhiều ngày rồi chạy bù), lệnh tạo bị từ chối, quy tắc báo `RECURRING_FAILED` mỗi ngày như mọi lỗi định kỳ khác. Xử lý bằng cách mở lại sổ hoặc sửa quy tắc (sửa quy tắc sẽ tính lại ngày chạy từ hôm nay).
+- **Endpoint:** `GET /api/expenses/period-locks` (mọi thành viên), `POST /period-locks {periodMonth}` và `DELETE /period-locks/{yyyy-MM}` (chỉ OWNER), `GET /period-locks/history` (phân trang).
+- **Frontend:** trang Ví có mục "Chốt sổ theo tháng" (danh sách tháng đã chốt, nút chốt/mở sổ cho OWNER, lịch sử chốt/mở) và nhãn "Đã chốt sổ" cạnh bảng số dư theo tháng. Trang Giao dịch và lịch sử chuyển tiền/điều chỉnh hiện biểu tượng khoá và ẩn nút sửa/xoá cho dòng thuộc tháng đã chốt (hook `usePeriodLocks`).
+
+### Mục 32 — Loại ví (C3)
+
+`WALLETS.wallet_type`: **CASH** (mặc định, ví cũ đều là CASH), **BANK**, **CREDIT_CARD**, **SAVINGS**. Mỗi loại chỉ giữ trường của nó (`WalletService.applyType`):
+
+| Loại | Trường riêng |
+|---|---|
+| CREDIT_CARD | `credit_limit` (bắt buộc), `statement_day`, `payment_due_day` (ngày trong tháng) |
+| SAVINGS | `interest_rate` (%/năm), `maturity_date` (chỉ để hiển thị) |
+
+Loại ví quyết định mức âm cho phép (mục 33) và việc nhắc hạn thẻ (mục 36). Bảng số dư theo tháng có thêm cột **Vay / nợ** (mục 39).
+
+### Mục 33 — Chặn ví âm (A1)
+
+`WalletService.requireAllowedOutflow(ví, số tiền ra)`: khoá dòng ví (`SELECT ... FOR UPDATE`) rồi kiểm tra số dư sau khi trừ không thấp hơn **sàn**: 0 với CASH/BANK/SAVINGS, `-credit_limit` với thẻ tín dụng. Vượt sàn thì 400 kèm số tiền còn dùng được.
+
+Áp dụng khi tiền **ra** khỏi ví: tạo khoản chi (nhập tay, import, định kỳ, duyệt), sửa giao dịch làm tiền ra nhiều hơn (kể cả chuyển sang ví khác), khôi phục khoản chi từ thùng rác, chuyển tiền (thay cho kiểm tra cũ "≤ số dư"), cho vay, trả nợ, xoá khoản đi vay, xoá lần thu nợ. **Không áp dụng** khi xoá một khoản thu (sửa sai phải luôn làm được) và với điều chỉnh số dư (đó là số dư thật). Ví đang âm từ trước vẫn nhận tiền vào bình thường; muốn sửa thì dùng điều chỉnh số dư (mục 30).
+
+### Mục 34 — Thông báo khi sửa giao dịch (A2)
+
+`TransactionService.update` phát notice `EXPENSE_UPDATED` (chỉ trong app) liệt kê từng thay đổi: số tiền cũ → mới, loại, ví, danh mục, ngày, ghi chú. Không có gì thay đổi thì không phát. Giao dịch riêng tư chỉ báo "đã sửa 1 giao dịch riêng tư (***)".
+
+### Mục 35 — Lịch sử thay đổi ví, ngân sách, chuyển tiền (A3)
+
+Bảng `ENTITY_AUDIT_LOGS(entity_type WALLET|BUDGET|TRANSFER, entity_id, action, actor, before_json, after_json)`, ghi bởi `EntityAuditService` khi tạo/sửa/xoá/khôi phục. Người thực hiện lấy từ JWT của request (scheduler thì ghi "Hệ thống"). Không có khoá ngoại tới đối tượng, nên lịch sử còn lại cả khi đối tượng đã bị xoá cứng. Endpoint `GET /api/expenses/audit-logs/{WALLET|BUDGET|TRANSFER}/{id}`; trang Ví và Ngân sách có nút xem lịch sử (`EntityHistoryModal`, hiện các trường đã đổi).
+
+### Mục 36 — Định kỳ chờ xác nhận, nhắc hoá đơn và hạn thẻ (A4, C2)
+
+```mermaid
+flowchart TD
+    S["Scheduler 01:00"] --> M{"Quy tắc mode?"}
+    M -- "AUTO" --> A["Ghi giao dịch như trước (mục 3)"]
+    M -- "CONFIRM" --> D["Tạo RECURRING_DRAFTS (PENDING) + notice RECURRING_DRAFT_CREATED<br/>quy tắc chuyển sang kỳ sau"]
+    D --> U{"Người tạo quy tắc hoặc OWNER"}
+    U -- "Xác nhận + số tiền thật" --> T["Ghi giao dịch vào ngày đến hạn<br/>(đủ mọi kiểm tra) → CONFIRMED"]
+    U -- "Bỏ qua" --> K["SKIPPED"]
+    R["ReminderScheduler 08:00 (ReminderService)"] --> B["Quy tắc chi có remind_days_before:<br/>còn ≤ N ngày tới next_run_date → BILL_DUE_SOON"]
+    R --> C["Thẻ tín dụng có payment_due_day và đang dư nợ:<br/>còn ≤ 3 ngày → BILL_DUE_SOON cho chủ thẻ"]
+```
+
+- Mỗi kỳ chỉ nhắc một lần (`RECURRING_TRANSACTIONS.last_reminded_for`, `WALLETS.last_payment_reminder_on`). Sửa quy tắc thì cho phép nhắc lại.
+- Endpoint: `GET /api/expenses/recurring-drafts`, `GET /count`, `POST /{id}/confirm {amount, note}`, `POST /{id}/skip`.
+
+### Mục 37 — Vai trò VIEWER, CHILD, hạn mức chi và duyệt khoản chi (A5)
+
+| Vai trò | Quyền |
+|---|---|
+| OWNER | Như trước, cộng đổi vai trò thành viên, đặt hạn mức và ngưỡng duyệt |
+| MEMBER | Như trước |
+| CHILD | Như MEMBER, nhưng thường có hạn mức chi ngày/tháng |
+| VIEWER | Chỉ xem: mọi request ghi tới expense-service đều bị chặn 403 (`ViewerReadOnlyInterceptor`); frontend hiện banner "chỉ xem" |
+
+- **Đổi vai trò:** `PUT /api/auth/family/members/{userId}/role {MEMBER|CHILD|VIEWER}` (chỉ OWNER; vai trò OWNER vẫn chỉ đổi qua "chuyển quyền chủ hộ"). Token đang sống của người đó bị chặn để vai trò mới có hiệu lực ngay.
+- **Hạn mức chi** (`MEMBER_SPENDING_LIMITS`, `PUT /api/expenses/spending-limits/{userId}`): tổng chi của chính người đó trong ngày/tháng cộng khoản mới không được vượt; kiểm tra khi họ tự ghi hoặc sửa khoản chi. Không áp dụng cho OWNER, cho khoản OWNER duyệt hay cho scheduler.
+- **Duyệt khoản chi** (`FAMILY_SETTINGS.approval_threshold`): khoản chi của người không phải OWNER vượt ngưỡng thì `POST /transactions` trả **202** và tạo `TRANSACTION_APPROVALS` (PENDING), **chưa** phải giao dịch nên không ảnh hưởng số dư, ngân sách hay báo cáo. OWNER nhận notice `APPROVAL_REQUESTED` (email theo vai trò OWNER), rồi `POST /api/expenses/approvals/{id}/approve` (ghi thành giao dịch của người gửi, đủ mọi kiểm tra) hoặc `/reject`; người gửi nhận `APPROVAL_DECIDED`. Import CSV/Excel và giao dịch định kỳ không đi qua bước duyệt.
+- Danh bạ nội bộ `/internal/families/{id}/members` trả thêm `role` để notification-service gửi email theo vai trò.
+
+### Mục 38 — Ngân sách nâng cao (A6)
+
+`BUDGETS` thêm `wallet_id`, `user_id` (NULL = mọi ví / cả gia đình), `period_type` (MONTH với kỳ `yyyy-MM`, YEAR với kỳ `yyyy`) và `rollover`. Trùng lặp tính theo đủ phạm vi (danh mục, ví, thành viên, loại kỳ, kỳ). Ngân sách năm có hạn mức tối đa gấp 12 lần ngân sách tháng.
+
+`BudgetMonitor` gom toàn bộ logic: chi tiêu của một ngân sách đọc từ view `TRANSACTION_CATEGORY_LINES` (giao dịch tách tính theo từng phần), danh mục cha gồm cả danh mục con; **chuyển dư** = phần chưa chi của ngân sách cùng phạm vi ở kỳ trước (không âm, chỉ lùi một kỳ). Cảnh báo 80%/100% (mục 2) giờ chạy cho mọi ngân sách khớp với khoản chi. `GET /api/expenses/budgets/status?yearMonth=` trả số đã chi, phần chuyển sang, hạn mức thực và % của mọi ngân sách phủ tháng đó; trang Ngân sách dùng endpoint này.
+
+### Mục 39 — Vay / cho vay / nợ (B3)
+
+`LOANS` (BORROWED: tiền vào ví; LENT: tiền ra khỏi ví) và `LOAN_PAYMENTS` (mỗi lần trả qua một ví). Đối tác có thể là **người ngoài** (`counterparty_name`) hoặc **một ví khác trong gia đình** (`counterparty_wallet_id`, V28): khi đó tiền chuyển thật giữa hai ví (ví cho vay giảm, ví đi vay tăng, mỗi lần trả ngược lại), tổng tiền gia đình không đổi; ví đối ứng không được là ví của chính khoản vay hay ví riêng của người đứng tên, và người ghi phải được dùng ví bị trừ tiền. Mỗi khoản có **thành viên đứng tên** (`member_user_id`, V27): người trong gia đình đi vay hoặc cho vay, khác với `counterparty_name` (đối tác bên ngoài) và người nhập. Mặc định là người nhập; chỉ OWNER được ghi đứng tên người khác; danh sách lọc được theo `memberUserId`; email nhắc hạn gửi cho thành viên đứng tên. Không tính là thu/chi: chỉ làm đổi số dư ví (`LoanDao.sumNetFlowForWallet` được cộng vào `currentBalanceOf`) và có cột riêng trong bảng số dư theo tháng. Còn nợ = gốc − tổng đã trả; trả hết thì CLOSED, xoá lần trả thì mở lại. Chỉ sửa được người vay, liên hệ, hạn trả, ghi chú; chỉ xoá được khoản chưa có lần trả. Áp dụng chặn ví âm (mục 33) và chốt sổ (mục 31). Nhắc trước hạn 3 ngày (`LOAN_DUE_SOON`). Endpoint `/api/expenses/loans` (CRUD, `GET /{id}` kèm các lần trả, `POST/DELETE /{id}/payments`); trang **Vay / nợ**.
+
+### Mục 40 — Mục tiêu tiết kiệm (C1)
+
+`SAVINGS_GOALS(name, target_amount, deadline, wallet_id, milestone_reached, archived)`. Tiến độ = số dư hiện tại của ví gắn kèm / mục tiêu. `ReminderService` mỗi sáng phát `SAVINGS_MILESTONE` khi đạt mốc 50/80/100% mới (mỗi mốc một lần; mốc đã đạt sẵn lúc tạo không báo). Ví đang gắn mục tiêu không xoá được. Endpoint `/api/expenses/savings-goals`; trang **Mục tiêu tiết kiệm**.
+
+### Mục 41 — Hoàn tiền / trả hàng (C4)
+
+`POST /api/expenses/transactions/{id}/refunds {amount, occurredAt, note}` ghi một dòng **EXPENSE số tiền âm** cùng ví, cùng danh mục, có `refund_of_id` trỏ về khoản gốc (ràng buộc CHECK chỉ cho số âm khi có `refund_of_id`). Nhờ vậy mọi `SUM(amount)` của chi tự trừ đi: chi theo danh mục, ngân sách, hạn mức, số dư ví; thu nhập không bị phồng. Giới hạn: tổng hoàn ≤ khoản gốc, ngày hoàn ≥ ngày chi. Khoản hoàn không sửa được (xoá rồi tạo lại); khoản gốc còn khoản hoàn thì không xoá được; khôi phục khoản hoàn cần khoản gốc đang hoạt động.
+
+### Mục 42 — Tách giao dịch (C5)
+
+`TransactionRequest.splits = [{categoryId, amount}]` (2–10 phần, khác danh mục, cùng loại, tổng đúng bằng số tiền). Lưu ở `TRANSACTION_SPLITS`; `TRANSACTIONS.category_id` là danh mục của phần đầu. View `TRANSACTION_CATEGORY_LINES` trả một dòng cho mỗi phần (hoặc một dòng cho giao dịch không tách); mọi tổng theo danh mục (summary, báo cáo danh mục, ví × danh mục, ngân sách) đọc từ view này. Lọc theo danh mục gồm cả giao dịch có phần thuộc danh mục đó.
+
+### Mục 43 — Danh mục con và tag (C6)
+
+- **Danh mục con:** `CATEGORIES.parent_id`, một cấp; cha phải là danh mục gốc cùng loại; danh mục đang có con không xoá được và không thể trở thành con. Ngân sách và bộ lọc theo danh mục cha gồm cả con.
+- **Tag:** `TransactionRequest.tags` (tối đa 10, tự tạo tag mới, không phân biệt hoa thường). `GET /api/expenses/tags`, lọc danh sách/export bằng `tagId`, báo cáo `GET /api/expenses/reports/by-tag?from&to` (tab "Theo tag").
+
+### Mục 44 — Email tổng kết tháng (C7)
+
+`ReminderScheduler` chạy 07:00 ngày 1 (`monthly-summary.cron`): với mỗi gia đình có ví, gửi notice `MONTHLY_SUMMARY` (trong app và email cho mọi thành viên chưa tắt): thu, chi, chênh lệch so với tháng trước, 3 danh mục chi nhiều nhất, số ngân sách tháng trong và vượt hạn mức. `MONTHLY_SUMMARY_RUNS` giữ mỗi tháng một lần. OWNER gửi ngay một tháng đã qua bằng `POST /api/expenses/monthly-summary/send?yearMonth=` (trang Hồ sơ → Kiểm soát chi tiêu).
+
+### Mục 45 — Notice dùng chung
+
+`ExpenseEvent.notice(type, familyId, actor, targetUserId, targetRole, title, message, linkPath)`: expense-service soạn sẵn nội dung tiếng Việt, `ExpenseEventListener.handleNotice` lưu một dòng thông báo cho cả gia đình (người thực hiện là `0` = "Hệ thống" nếu không có), và nếu loại đó có email thì gửi theo mẫu `generic-notice-email.html` tới `targetUserId`, hoặc mọi thành viên có `targetRole`, hoặc cả gia đình, theo tuỳ chọn tắt email của từng người. Các loại mới đều tắt/bật được trong trang Thông báo.
+
 ---
 
 ## Việc cần làm (TODO)
@@ -1172,8 +1338,8 @@ sequenceDiagram
 Mọi việc chưa làm của project, gom về một chỗ (cập nhật 05/10/2026). Thứ tự đề xuất:
 
 1. **Vận hành (V1, V2):** site đã chạy thật, nên các việc ảnh hưởng người dùng và dữ liệu được làm trước.
-2. **Toàn vẹn số liệu:** B1 → B2 → B3 → A1/A2.
-3. **Phần còn lại** của A, C và T, tuỳ nhu cầu.
+2. **Nghiệp vụ:** A, B, C đã xong (mục 30–44); còn A7 và C8 đang pending.
+3. **Phần còn lại** của T, tuỳ nhu cầu.
 
 ### V. Vận hành và hạ tầng
 
@@ -1199,32 +1365,10 @@ Mọi việc chưa làm của project, gom về một chỗ (cập nhật 05/10/
 - [ ] **T8 — Đăng nhập Facebook và GitHub.** Nút đã có trên trang Login nhưng đang vô hiệu ("sắp có"); Facebook đã có `AppOAuth2UserService` nhưng registration đang tắt trong `application.yml`, GitHub chưa có gì ở backend.
 - [ ] **T9 — Dọn phần demo cũ.** Service `cloudflared` trong hai file compose dev và script `infra/get-tunnel-url.sh`/`.bat` là di sản của giai đoạn demo (backend chạy local, lộ ra qua Cloudflare Quick Tunnel, frontend trên GitHub Pages). Production không dùng nữa; xoá nếu không còn cần chia sẻ bản dev ra ngoài.
 
-### A. Hoàn thiện nghiệp vụ đã có
+### Pending (chưa làm theo quyết định)
 
-- [ ] **A1 — Chính sách ví âm.** Chuyển tiền và duyệt yêu cầu chuyển tiền đã kiểm tra số dư ví nguồn (`WalletTransferService`), nhưng ghi khoản chi (`TransactionService`) thì không, nên ví có thể âm. Cần một quy tắc theo loại ví (xem C3): tiền mặt và tài khoản ngân hàng không được âm, thẻ tín dụng được âm trong hạn mức.
-- [ ] **A2 — Thông báo khi sửa giao dịch.** Hiện chỉ phát `EXPENSE_CREATED` và `EXPENSE_DELETED`; khoản 50k bị sửa thành 5 triệu thì cả nhà không biết. Cần thêm `EXPENSE_UPDATED` (nêu giá trị cũ → mới; giao dịch riêng tư thì che `***` như khi xoá).
-- [ ] **A3 — Audit log cho ví, ngân sách, chuyển tiền.** Hiện chỉ giao dịch có lịch sử sửa (`TRANSACTION_AUDIT_LOGS`, xem `GET /api/expenses/transactions/{id}/history`).
-- [ ] **A4 — Giao dịch định kỳ "nhắc và chờ xác nhận".** Hiện scheduler luôn tự ghi đúng số tiền cố định. Hoá đơn có số tiền thay đổi (điện, nước) cần chế độ tạo bản nháp và thông báo để người dùng nhập số thật rồi xác nhận.
-- [ ] **A5 — Phân quyền chi tiết hơn OWNER/MEMBER (mục 17).** Thêm vai trò chỉ xem (VIEWER) và vai trò trẻ em (giới hạn chi theo ngày/tháng); duyệt khoản chi vượt ngưỡng (thành viên chi trên X thì giao dịch ở trạng thái chờ đến khi chủ hộ duyệt).
-- [ ] **A6 — Ngân sách nâng cao (mục 18).** Ngân sách theo ví hoặc theo thành viên; chuyển phần còn dư sang tháng sau (rollover); ngân sách theo năm.
-- [ ] **A7 — Đa tiền tệ (chỉ khi thật sự cần).** Hiện mỗi gia đình chỉ dùng **một** tiền tệ (mục 7, `WalletService.requireConsistentCurrency`), nên mọi phép cộng tổng đều đúng. Nếu muốn có ví USD cạnh ví VND thì cần bảng tỷ giá theo ngày, cho chuyển tiền giữa hai ví khác tiền tệ (ghi cả hai số tiền), và quy đổi về tiền tệ gốc trong mọi SQL tổng hợp (summary, report, budget).
-
-### B. Toàn vẹn số liệu (ưu tiên cao)
-
-- [ ] **B1 — Điều chỉnh số dư (đối soát).** Khi số dư trong app lệch với thực tế, hiện chỉ sửa được bằng một khoản thu/chi giả, làm sai báo cáo thu chi. Cần loại giao dịch `ADJUSTMENT`: có tác động lên số dư ví, nhưng không tính vào thu/chi, ngân sách hay báo cáo danh mục.
-- [ ] **B2 — Chốt sổ theo tháng.** Hiện có thể sửa hoặc xoá giao dịch của tháng đã quyết toán, làm số dư đầu kỳ, mức dư/âm và ngân sách các tháng sau đổi theo mà không ai biết. Cần cho OWNER chốt tháng (bảng `PERIOD_LOCKS(family_id, period_month, locked_by, locked_at)`). Sau khi chốt, mọi thao tác tạo/sửa/xoá/khôi phục giao dịch, chuyển tiền và import có ngày thuộc tháng đó đều trả 409; chỉ OWNER mới được mở lại (ghi audit).
-- [ ] **B3 — Vay / cho vay / nợ.** Đối tác (tên, liên hệ), số tiền gốc, ngày vay, hạn trả, trả dần nhiều lần (mỗi lần trả là một dòng gắn với ví), số còn nợ; thông báo nhắc trước hạn. Tiền vay hoặc cho vay **không** được tính là thu/chi.
-
-### C. Nghiệp vụ mới
-
-- [ ] **C1 — Mục tiêu tiết kiệm.** Tên mục tiêu (mua xe, học phí), số tiền mục tiêu, hạn, ví gắn kèm và % tiến độ; thông báo khi đạt mốc 50/80/100%.
-- [ ] **C2 — Nhắc hoá đơn sắp đến hạn.** Thông báo trước N ngày; có thể làm dựa trên giao dịch định kỳ (mục 3) cùng với A4.
-- [ ] **C3 — Loại ví.** Tiền mặt, ngân hàng, thẻ tín dụng (hạn mức, ngày sao kê, hạn thanh toán), tiết kiệm có kỳ hạn (lãi suất, ngày đáo hạn). Đây là nền cho A1 và C2.
-- [ ] **C4 — Hoàn tiền / trả hàng** gắn với giao dịch gốc: giảm chi tiêu của chính danh mục đó, thay vì ghi một khoản thu làm phồng cả thu lẫn chi.
-- [ ] **C5 — Tách giao dịch** thành nhiều danh mục, ví dụ một hoá đơn siêu thị gồm ăn uống và đồ gia dụng (bảng `TRANSACTION_SPLITS`; tổng các phần phải bằng số tiền giao dịch).
-- [ ] **C6 — Danh mục con và tag.** `CATEGORIES.parent_id` (2 cấp, báo cáo cộng dồn lên danh mục cha); tag tự do để gom chi tiêu theo sự kiện, ví dụ "Du lịch Đà Lạt".
-- [ ] **C7 — Email tổng kết tháng** gửi cho các thành viên (thu, chi, top danh mục, so sánh với tháng trước, tình trạng ngân sách). Dùng scheduler cùng SMTP sẵn có của notification-service; cho tắt/bật trong tuỳ chọn thông báo (mục 19).
-- [ ] **C8 — Xác minh số điện thoại bằng OTP.** Hiện số điện thoại dùng để đăng nhập (USERS.phone, migration V14/V15) chưa được xác minh, nên một người có thể nhập số của người khác. Khi có ngân sách gửi tin thì thêm bước OTP qua Zalo ZNS (khoảng 300đ/tin, cần OA đã xác thực) hoặc SMS Brandname, và cột `phone_verified_at`.
+- [ ] **A7 — Đa tiền tệ** (pending: chỉ làm khi thật sự cần). Hiện mỗi gia đình chỉ dùng **một** tiền tệ (mục 7, `WalletService.requireConsistentCurrency`), nên mọi phép cộng tổng đều đúng. Nếu cần ví USD cạnh ví VND thì phải có bảng tỷ giá theo ngày, chuyển tiền giữa hai ví khác tiền tệ (ghi cả hai số tiền), và quy đổi về tiền tệ gốc trong mọi SQL tổng hợp (summary, report, budget, view `TRANSACTION_CATEGORY_LINES`).
+- [ ] **C8 — Xác minh số điện thoại bằng OTP** (pending: cần kinh phí). Số điện thoại dùng để đăng nhập (USERS.phone, V14/V15) chưa được xác minh. Khi có ngân sách gửi tin thì thêm OTP qua Zalo ZNS (khoảng 300đ/tin, cần OA đã xác thực) hoặc SMS Brandname, và cột `phone_verified_at`.
 
 ---
 

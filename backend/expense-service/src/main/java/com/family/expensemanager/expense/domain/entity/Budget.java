@@ -27,11 +27,23 @@ public class Budget {
     @Column(name = "category_id")
     private Long categoryId;
 
+    @Column(name = "wallet_id")
+    private Long walletId;
+
+    @Column(name = "user_id")
+    private Long userId;
+
+    @Column(name = "period_type")
+    // README A6: MONTH (periodMonth = yyyy-MM) or YEAR (periodMonth = yyyy).
+    private String periodType = "MONTH";
+
     @Column(name = "period_month")
     private String periodMonth;
 
     @Column(name = "limit_amount")
     private BigDecimal limitAmount;
+
+    private Boolean rollover = false;
 
     /** Optimistic locking — see V10 migration. Doma checks/increments this on every UPDATE automatically. */
     @Version
@@ -83,5 +95,37 @@ public class Budget {
 
     public void setVersion(Integer version) {
         this.version = version;
+    }
+
+    public Long getWalletId() {
+        return walletId;
+    }
+
+    public void setWalletId(Long walletId) {
+        this.walletId = walletId;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
+
+    public String getPeriodType() {
+        return periodType;
+    }
+
+    public void setPeriodType(String periodType) {
+        this.periodType = periodType;
+    }
+
+    public Boolean getRollover() {
+        return rollover;
+    }
+
+    public void setRollover(Boolean rollover) {
+        this.rollover = rollover;
     }
 }

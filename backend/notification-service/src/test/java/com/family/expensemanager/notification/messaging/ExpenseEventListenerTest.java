@@ -427,4 +427,38 @@ class ExpenseEventListenerTest {
         return new ExpenseEvent(type, 1L, actorId, null, null, new BigDecimal("500000"), null, null, null, null,
                 null, actorName, Instant.now(), null, "tiền chợ", "Ví Chồng", "Ví Vợ", null, null, targetId);
     }
+
+    // ===== Generic notices (README A2, A4, A5, B3, C1, C2, C7) =====
+
+    @Test
+    void notice_isStoredAsGiven_andEmailedOnlyToTheTargetRole() throws Exception {
+        when(preferenceService.isEmailEnabled(any(), eq(NotificationType.APPROVAL_REQUESTED))).thenReturn(true);
+        when(memberDirectory.listMembers(1L)).thenReturn(List.of(
+                new FamilyMemberDirectory.Member(1L, "owner@b.com", "Mẹ", "OWNER"),
+                new FamilyMemberDirectory.Member(7L, "child@b.com", "Bé Na", "CHILD")));
+        when(mailSender.createMimeMessage()).thenReturn(new MimeMessage((jakarta.mail.Session) null));
+
+        listener.onExpenseEvent(ExpenseEvent.notice(ExpenseEvent.APPROVAL_REQUESTED, 1L, 7L, "Bé Na", null, "OWNER",
+                "Khoản chi chờ duyệt", "Bé Na muốn chi 2.000.000", "/transactions"));
+
+        ArgumentCaptor<Notification> saved = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(saved.capture());
+        assertThat(saved.getValue().getTitle()).isEqualTo("Khoản chi chờ duyệt");
+        assertThat(saved.getValue().getMessage()).isEqualTo("Bé Na muốn chi 2.000.000");
+        assertThat(saved.getValue().getType()).isEqualTo("APPROVAL_REQUESTED");
+        ArgumentCaptor<MimeMessage> mail = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(mailSender).send(mail.capture());
+        assertThat(mail.getValue().getAllRecipients()[0].toString()).isEqualTo("owner@b.com");
+    }
+
+    @Test
+    void inAppOnlyNotice_sendsNoEmail_andASystemNoticeIsFiledUnderUserZero() throws Exception {
+        listener.onExpenseEvent(ExpenseEvent.notice(ExpenseEvent.EXPENSE_UPDATED, 1L, null, null, null, null,
+                "Giao dịch đã được sửa", "An đã sửa giao dịch", "/transactions"));
+
+        ArgumentCaptor<Notification> saved = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(saved.capture());
+        assertThat(saved.getValue().getUserId()).isZero();
+        verify(mailSender, never()).createMimeMessage();
+    }
 }

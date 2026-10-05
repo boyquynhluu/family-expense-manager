@@ -4,6 +4,7 @@ import com.family.expensemanager.expense.domain.entity.Transaction;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * @author boyquynhluu
@@ -22,7 +23,27 @@ public record TransactionResponse(
         Boolean hasReceipt,
         LocalDateTime deletedAt,
         String deletedByName,
-        Boolean isPrivate) {
+        Boolean isPrivate,
+        Long refundOfId,
+        List<TransactionSplitPart> splits,
+        List<String> tags) {
+
+    /** Before README C4/C5/C6 (no refund link, splits or tags). */
+    public TransactionResponse(Long id, Long walletId, Long categoryId, Long familyId, Long userId,
+                               String createdByName, String type, BigDecimal amount, LocalDateTime occurredAt,
+                               String note, Boolean hasReceipt, LocalDateTime deletedAt, String deletedByName,
+                               Boolean isPrivate) {
+        this(id, walletId, categoryId, familyId, userId, createdByName, type, amount, occurredAt, note, hasReceipt,
+                deletedAt, deletedByName, isPrivate, null, null, null);
+    }
+
+    /** The same response with its split parts and tags attached (README C5/C6). */
+    public TransactionResponse withDetails(List<TransactionSplitPart> splitParts, List<String> tagNames) {
+        return new TransactionResponse(id, walletId, categoryId, familyId, userId, createdByName, type, amount,
+                occurredAt, note, hasReceipt, deletedAt, deletedByName, isPrivate, refundOfId,
+                splitParts == null || splitParts.isEmpty() ? null : splitParts,
+                tagNames == null || tagNames.isEmpty() ? null : tagNames);
+    }
 
     /** A non-private transaction. */
     public TransactionResponse(Long id, Long walletId, Long categoryId, Long familyId, Long userId,
@@ -59,6 +80,9 @@ public record TransactionResponse(
                 transaction.getReceiptPath() != null,
                 transaction.getDeletedAt(),
                 transaction.getDeletedByName(),
-                Boolean.TRUE.equals(transaction.getIsPrivate()));
+                Boolean.TRUE.equals(transaction.getIsPrivate()),
+                transaction.getRefundOfId(),
+                null,
+                null);
     }
 }

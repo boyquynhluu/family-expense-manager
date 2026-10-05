@@ -11,7 +11,8 @@
     "range": "Khoảng ngày tuỳ chọn",
     "year": "Theo năm",
     "member": "Theo thành viên",
-    "compare": "So sánh tháng"
+    "compare": "So sánh tháng",
+    "tag": "Theo tag"
   },
   "fromLabel": "Từ ngày",
   "toLabel": "Đến ngày",
@@ -42,5 +43,7 @@
   "formerMember": "Thành viên cũ",
   "category": "Danh mục",
   "delta": "Chênh lệch",
-  "vsMonth": "So với {{month}}"
+  "vsMonth": "So với {{month}}",
+  "tag": "Tag",
+  "tagHint": "Giao dịch gắn nhiều tag được tính vào từng tag."
 }

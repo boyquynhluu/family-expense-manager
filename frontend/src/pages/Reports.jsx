@@ -12,7 +12,7 @@ import { Field } from "../components/ui/Field";
 const INCOME_COLOR = "#16a34a";
 const EXPENSE_COLOR = "#dc2626";
 const CATEGORY_COLORS = ["#4f46e5", "#0ea5e9", "#f59e0b", "#16a34a", "#db2777", "#7c3aed", "#dc2626", "#0891b2"];
-const TABS = ["range", "year", "member", "compare"];
+const TABS = ["range", "year", "member", "tag", "compare"];
 
 function pad(n) {
   return String(n).padStart(2, "0");
@@ -381,6 +381,53 @@ function MemberTab({ from, to, onChange }) {
   );
 }
 
+// README C6: income/expense per tag (a transaction with two tags counts in both).
+function TagTab({ from, to, onChange }) {
+  const { t } = useTranslation("reports");
+  const report = useReport(rangeUrl("/expenses/reports/by-tag", from, to));
+  const rows = report.data;
+
+  return (
+    <>
+      <RangeFilter from={from} to={to} onChange={onChange} />
+      <ErrorText report={report} />
+      {report.loading && <p className="empty-state">{t("loading")}</p>}
+      {rows && (
+        <div className="section-card">
+          <p className="report-period">{t("periodLabel", { from, to })}</p>
+          <p className="page-header-subtitle">{t("tagHint")}</p>
+          {rows.length === 0 ? (
+            <p className="empty-state">{t("noData")}</p>
+          ) : (
+            <Table>
+              <THead>
+                <tr>
+                  <Th>{t("tag")}</Th>
+                  <Th align="right">{t("income")}</Th>
+                  <Th align="right">{t("expense")}</Th>
+                </tr>
+              </THead>
+              <TBody>
+                {rows.map((row) => (
+                  <tr key={row.tagId}>
+                    <Td data-label={t("tag")}>#{row.name}</Td>
+                    <Td data-label={t("income")} align="right" className="amount-income">
+                      {formatCurrency(row.income)}
+                    </Td>
+                    <Td data-label={t("expense")} align="right" className="amount-expense">
+                      {formatCurrency(row.expense)}
+                    </Td>
+                  </tr>
+                ))}
+              </TBody>
+            </Table>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 // For expenses a rise is bad (red) and a fall is good (green); income is the reverse.
 function deltaClass(delta, isExpense) {
   if (delta === 0) return "";
@@ -539,6 +586,7 @@ export default function Reports() {
       )}
       {tab === "year" && <YearTab />}
       {tab === "member" && <MemberTab from={from} to={to} onChange={(f, tt) => setRange([f, tt])} />}
+      {tab === "tag" && <TagTab from={from} to={to} onChange={(f, tt) => setRange([f, tt])} />}
       {tab === "compare" && <CompareTab categoryName={categoryName} />}
     </div>
   );

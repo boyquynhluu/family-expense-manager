@@ -23,5 +23,16 @@
   "seedDefaultsFailed": "Không thể tạo dữ liệu mẫu",
   "seedDefaultsOwnerOnly": "Hãy nhờ chủ hộ tạo ví và danh mục.",
   "typeToConfirm": "Gõ \"{{word}}\" để xác nhận",
-  "seedDefaultsConfirm": "Tạo ví \"Tiền mặt\" và bộ danh mục thu chi mặc định cho gia đình?"
+  "seedDefaultsConfirm": "Tạo ví \"Tiền mặt\" và bộ danh mục thu chi mặc định cho gia đình?",
+  "historyTitle": "Lịch sử thay đổi",
+  "historyEmpty": "Chưa có lịch sử",
+  "historyLoadFailed": "Không tải được lịch sử",
+  "historySystem": "Hệ thống",
+  "historyAria": "Xem lịch sử",
+  "historyAction": {
+    "CREATED": "Tạo",
+    "UPDATED": "Sửa",
+    "DELETED": "Xoá",
+    "RESTORED": "Khôi phục"
+  }
 }

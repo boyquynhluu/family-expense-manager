@@ -17,7 +17,7 @@ function signed(value, currency) {
   return `${value > 0 ? "+" : ""}${formatCurrency(value, currency)}`;
 }
 
-// Per-wallet opening balance → income/expense/transfers → surplus/deficit → closing balance
+// Per-wallet opening balance → income/expense/transfers/adjustments → surplus/deficit → closing balance
 // for one month (GET /expenses/reports/wallet-month). `reloadKey` lets the parent force a
 // refetch after it changes wallets/transfers.
 export default function WalletMonthlyTable({ yearMonth, reloadKey = 0 }) {
@@ -52,6 +52,8 @@ export default function WalletMonthlyTable({ yearMonth, reloadKey = 0 }) {
     openingBalance: sum("openingBalance"),
     income: sum("income"),
     expense: sum("expense"),
+    adjustment: sum("adjustment"),
+    loanFlow: sum("loanFlow"),
     net: sum("net"),
     closingBalance: sum("closingBalance"),
   };
@@ -66,6 +68,8 @@ export default function WalletMonthlyTable({ yearMonth, reloadKey = 0 }) {
             <Th align="right">{t("colIncome")}</Th>
             <Th align="right">{t("colExpense")}</Th>
             <Th align="right">{t("colTransfers")}</Th>
+            <Th align="right">{t("colAdjustment")}</Th>
+            <Th align="right">{t("colLoans")}</Th>
             <Th align="right">{t("colNet")}</Th>
             <Th align="right">{t("colClosing")}</Th>
           </tr>
@@ -76,6 +80,8 @@ export default function WalletMonthlyTable({ yearMonth, reloadKey = 0 }) {
             const closing = Number(r.closingBalance);
             const transferIn = Number(r.transferIn);
             const transferOut = Number(r.transferOut);
+            const adjustment = Number(r.adjustment);
+            const loanFlow = Number(r.loanFlow ?? 0);
             return (
               <tr key={r.walletId}>
                 <Td data-label={t("colName")}>
@@ -96,6 +102,12 @@ export default function WalletMonthlyTable({ yearMonth, reloadKey = 0 }) {
                   {transferIn === 0 && transferOut === 0
                     ? "-"
                     : `+${formatCurrency(transferIn, r.currency)} / -${formatCurrency(transferOut, r.currency)}`}
+                </Td>
+                <Td data-label={t("colAdjustment")} align="right" className={signedClass(adjustment)}>
+                  {adjustment === 0 ? "-" : signed(adjustment, r.currency)}
+                </Td>
+                <Td data-label={t("colLoans")} align="right" className={signedClass(loanFlow)}>
+                  {loanFlow === 0 ? "-" : signed(loanFlow, r.currency)}
                 </Td>
                 <Td data-label={t("colNet")} align="right" className={signedClass(net)}>
                   {signed(net, r.currency)}
@@ -121,6 +133,12 @@ export default function WalletMonthlyTable({ yearMonth, reloadKey = 0 }) {
                 {formatCurrency(totals.expense, currency)}
               </Td>
               <Td data-label={t("colTransfers")} align="right">-</Td>
+              <Td data-label={t("colAdjustment")} align="right" className={signedClass(totals.adjustment)}>
+                {totals.adjustment === 0 ? "-" : signed(totals.adjustment, currency)}
+              </Td>
+              <Td data-label={t("colLoans")} align="right" className={signedClass(totals.loanFlow)}>
+                {totals.loanFlow === 0 ? "-" : signed(totals.loanFlow, currency)}
+              </Td>
               <Td data-label={t("colNet")} align="right" className={signedClass(totals.net)}>
                 {signed(totals.net, currency)}
               </Td>

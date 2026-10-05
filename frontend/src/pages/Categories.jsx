@@ -31,6 +31,8 @@ export default function Categories() {
   const [type, setType] = useState("EXPENSE");
   const [icon, setIcon] = useState("");
   const [color, setColor] = useState("#4f46e5");
+  // README C6: "" = top-level; otherwise the parent category id (one level only, same type).
+  const [parentId, setParentId] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
 
@@ -46,6 +48,7 @@ export default function Categories() {
     setType(category.type);
     setIcon(category.icon ?? "");
     setColor(category.color ?? "#4f46e5");
+    setParentId(category.parentId == null ? "" : String(category.parentId));
   }
 
   function cancelEdit() {
@@ -54,12 +57,13 @@ export default function Categories() {
     setType("EXPENSE");
     setIcon("");
     setColor("#4f46e5");
+    setParentId("");
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
-    const payload = { name, type, icon: icon || null, color: color || null };
+    const payload = { name, type, icon: icon || null, color: color || null, parentId: parentId ? Number(parentId) : null };
     try {
       if (editingId) {
         if (!(await confirmDialog(t(`categories:submitUpdateConfirm`, {cateName: name})))) return;
@@ -86,6 +90,15 @@ export default function Categories() {
     } catch (err) {
       setError(err.response?.data?.message || t("categories:deleteFailed"));
     }
+  }
+
+  // Each parent followed by its children (README C6).
+  const orderedCategories = categories
+    .filter((c) => c.parentId == null || !categories.some((p) => p.id === c.parentId))
+    .flatMap((p) => [p, ...categories.filter((c) => c.parentId === p.id)]);
+
+  function parentName(id) {
+    return categories.find((c) => c.id === id)?.name ?? `#${id}`;
   }
 
   return (
@@ -119,6 +132,19 @@ export default function Categories() {
               <Select value={type} onChange={(e) => setType(e.target.value)}>
                 <option value="EXPENSE">{t("categories:typeExpense")}</option>
                 <option value="INCOME">{t("categories:typeIncome")}</option>
+              </Select>
+            </Field>
+            <Field>
+              {t("categories:parentLabel")}
+              <Select value={parentId} onChange={(e) => setParentId(e.target.value)}>
+                <option value="">{t("categories:noParent")}</option>
+                {categories
+                  .filter((c) => c.parentId == null && c.type === type && c.id !== editingId)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
               </Select>
             </Field>
             <Field>
@@ -160,13 +186,18 @@ export default function Categories() {
           </div>
         ) : (
           <div className="category-chip-grid">
-            {categories.map((c) => (
-              <div className="category-chip" key={c.id}>
+            {orderedCategories.map((c) => (
+              <div className="category-chip" key={c.id} style={c.parentId ? { marginLeft: 24 } : undefined}>
                 <span className="category-chip-icon" style={{ backgroundColor: c.color || "#9ca3af" }}>
                   {c.icon || c.name.charAt(0).toUpperCase()}
                 </span>
                 <div className="category-chip-body">
-                  <span className="category-chip-name">{c.name}</span>
+                  <span className="category-chip-name">
+                    {c.name}
+                    {c.parentId != null && (
+                      <span className="text-xs text-slate-500"> · {t("categories:childOf", { name: parentName(c.parentId) })}</span>
+                    )}
+                  </span>
                   <span className={`badge ${c.type === "EXPENSE" ? "badge-expense" : "badge-income"}`}>
                     {c.type === "EXPENSE" ? t("categories:typeExpense") : t("categories:typeIncome")}
                   </span>

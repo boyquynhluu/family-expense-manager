@@ -13,7 +13,11 @@
     "notifications": "Thông báo",
     "trash": "Thùng rác",
     "profile": "Hồ sơ",
-    "admin": "Quản trị hệ thống"
+    "admin": "Quản trị hệ thống",
+    "loans": "Vay / nợ",
+    "goals": "Mục tiêu tiết kiệm",
+    "guide": "Hướng dẫn"
   },
-  "logout": "Đăng xuất"
+  "logout": "Đăng xuất",
+  "viewerBanner": "Bạn đang ở vai trò chỉ xem: xem được mọi dữ liệu của gia đình nhưng không thêm, sửa hay xoá được."
 }

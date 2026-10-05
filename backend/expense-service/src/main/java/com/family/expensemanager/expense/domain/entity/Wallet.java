@@ -8,6 +8,7 @@ import org.seasar.doma.Id;
 import org.seasar.doma.Table;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -34,6 +35,28 @@ public class Wallet {
 
     @Column(name = "initial_balance")
     private BigDecimal initialBalance;
+
+    @Column(name = "wallet_type")
+    // C3: CASH | BANK | CREDIT_CARD | SAVINGS. Defaulted here too, since an insert sends every column.
+    private String walletType = "CASH";
+
+    @Column(name = "credit_limit")
+    private BigDecimal creditLimit;
+
+    @Column(name = "statement_day")
+    private Integer statementDay;
+
+    @Column(name = "payment_due_day")
+    private Integer paymentDueDay;
+
+    @Column(name = "interest_rate")
+    private BigDecimal interestRate;
+
+    @Column(name = "maturity_date")
+    private LocalDate maturityDate;
+
+    @Column(name = "last_payment_reminder_on")
+    private LocalDate lastPaymentReminderOn;
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
@@ -92,5 +115,61 @@ public class Wallet {
 
     public void setDeletedAt(LocalDateTime deletedAt) {
         this.deletedAt = deletedAt;
+    }
+
+    public String getWalletType() {
+        return walletType;
+    }
+
+    public void setWalletType(String walletType) {
+        this.walletType = walletType;
+    }
+
+    public BigDecimal getCreditLimit() {
+        return creditLimit;
+    }
+
+    public void setCreditLimit(BigDecimal creditLimit) {
+        this.creditLimit = creditLimit;
+    }
+
+    public Integer getStatementDay() {
+        return statementDay;
+    }
+
+    public void setStatementDay(Integer statementDay) {
+        this.statementDay = statementDay;
+    }
+
+    public Integer getPaymentDueDay() {
+        return paymentDueDay;
+    }
+
+    public void setPaymentDueDay(Integer paymentDueDay) {
+        this.paymentDueDay = paymentDueDay;
+    }
+
+    public BigDecimal getInterestRate() {
+        return interestRate;
+    }
+
+    public void setInterestRate(BigDecimal interestRate) {
+        this.interestRate = interestRate;
+    }
+
+    public LocalDate getMaturityDate() {
+        return maturityDate;
+    }
+
+    public void setMaturityDate(LocalDate maturityDate) {
+        this.maturityDate = maturityDate;
+    }
+
+    public LocalDate getLastPaymentReminderOn() {
+        return lastPaymentReminderOn;
+    }
+
+    public void setLastPaymentReminderOn(LocalDate lastPaymentReminderOn) {
+        this.lastPaymentReminderOn = lastPaymentReminderOn;
     }
 }

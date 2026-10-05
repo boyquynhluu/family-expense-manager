@@ -2359,4 +2359,33 @@ class AuthServiceTest {
         verify(userDao, never()).update(any());
         verify(eventPublisher, never()).publishEvent(any(PasswordResetEvent.class));
     }
+
+    // ===== README A5: member roles =====
+
+    @Test
+    void changeMemberRole_setsTheRole_mirrorsTheActiveFamily_andBlocksLiveTokens() {
+        User member = activeLocalUser();
+        member.setId(5L);
+        member.setFamilyId(1L);
+        FamilyMembership membership = membership(5L, 1L, "MEMBER");
+        when(familyMembershipDao.selectByUserIdAndFamilyId(5L, 1L)).thenReturn(Optional.of(membership));
+        when(userDao.selectById(5L)).thenReturn(Optional.of(member));
+
+        authService.changeMemberRole(1L, 1L, 5L, "CHILD");
+
+        assertThat(membership.getRole()).isEqualTo("CHILD");
+        assertThat(member.getRole()).isEqualTo("CHILD");
+        verify(familyMembershipDao).update(membership);
+        verify(userDao).update(member);
+        verify(refreshTokenDao).selectActiveByUserId(5L);
+    }
+
+    @Test
+    void changeMemberRole_refusesTheOwner_andTheCallerThemself() {
+        when(familyMembershipDao.selectByUserIdAndFamilyId(5L, 1L)).thenReturn(Optional.of(membership(5L, 1L, "OWNER")));
+
+        assertThatThrownBy(() -> authService.changeMemberRole(1L, 1L, 5L, "VIEWER")).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> authService.changeMemberRole(1L, 1L, 1L, "VIEWER")).isInstanceOf(BadRequestException.class);
+        verify(familyMembershipDao, never()).update(any());
+    }
 }

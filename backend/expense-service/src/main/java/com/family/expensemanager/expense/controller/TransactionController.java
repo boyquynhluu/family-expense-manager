@@ -32,6 +32,7 @@ import com.family.expensemanager.expense.dto.TransactionAuditLogResponse;
 import com.family.expensemanager.expense.dto.TransactionLocation;
 import com.family.expensemanager.expense.dto.TransactionRequest;
 import com.family.expensemanager.expense.dto.TransactionResponse;
+import com.family.expensemanager.expense.service.TransactionApprovalService;
 import com.family.expensemanager.expense.service.TransactionImportService;
 import com.family.expensemanager.expense.service.TransactionReportService;
 import com.family.expensemanager.expense.service.TransactionService;
@@ -52,15 +53,25 @@ public class TransactionController {
     private final TransactionService transactionService;
     private final TransactionReportService transactionReportService;
     private final TransactionImportService transactionImportService;
+    private final TransactionApprovalService transactionApprovalService;
 
+    /**
+     * 200 + the transaction, or — README A5 — 202 + a pending approval when the expense is above the family's
+     * approval threshold and the caller is not the OWNER (nothing is recorded until the OWNER approves it).
+     */
     @PostMapping
-    public ApiResponse<TransactionResponse> create(
+    public org.springframework.http.ResponseEntity<ApiResponse<?>> create(
             @Valid @RequestBody TransactionRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         log.info("create - start");
-        return ApiResponse.ok(transactionService.create(
+        if (transactionApprovalService.requiresApproval(CurrentUser.familyId(), CurrentUser.role(), request)) {
+            return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.ACCEPTED)
+                    .body(ApiResponse.ok(transactionApprovalService.submit(CurrentUser.familyId(), CurrentUser.userId(),
+                            CurrentUser.email(), CurrentUser.displayName(), request)));
+        }
+        return org.springframework.http.ResponseEntity.ok(ApiResponse.ok(transactionService.create(
                 CurrentUser.familyId(), CurrentUser.userId(), CurrentUser.email(), CurrentUser.displayName(),
-                isOwner(), request, idempotencyKey));
+                isOwner(), request, idempotencyKey)));
     }
 
     @GetMapping
@@ -73,11 +84,12 @@ public class TransactionController {
             @RequestParam(required = false) String q,
             @RequestParam(required = false) BigDecimal minAmount,
             @RequestParam(required = false) BigDecimal maxAmount,
+            @RequestParam(required = false) Long tagId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         log.info("list - start, page={}, size={}", page, size);
         TransactionReportFilter filter = new TransactionReportFilter(
-                walletId, categoryId, type, fromDate, toDate, q, minAmount, maxAmount);
+                walletId, categoryId, type, fromDate, toDate, q, minAmount, maxAmount, tagId);
         return ApiResponse.ok(transactionService.listByFamilyPaged(
                 CurrentUser.familyId(), CurrentUser.userId(), filter, page, size));
     }
@@ -94,11 +106,21 @@ public class TransactionController {
             @RequestParam(required = false) String q,
             @RequestParam(required = false) BigDecimal minAmount,
             @RequestParam(required = false) BigDecimal maxAmount,
+            @RequestParam(required = false) Long tagId,
             @RequestParam(defaultValue = "10") int size) {
         log.info("locate - start, id={}, size={}", id, size);
         TransactionReportFilter filter = new TransactionReportFilter(
-                walletId, categoryId, type, fromDate, toDate, q, minAmount, maxAmount);
+                walletId, categoryId, type, fromDate, toDate, q, minAmount, maxAmount, tagId);
         return ApiResponse.ok(transactionService.locate(CurrentUser.familyId(), CurrentUser.userId(), filter, id, size));
+    }
+
+    /** README C4: money that came back for expense {@code id} (a return, a refund...). */
+    @PostMapping("/{id}/refunds")
+    public ApiResponse<TransactionResponse> refund(@PathVariable Long id,
+                                                   @Valid @RequestBody com.family.expensemanager.expense.dto.RefundRequest request) {
+        log.info("refund - start, id={}", id);
+        return ApiResponse.ok(transactionService.refund(CurrentUser.familyId(), id, CurrentUser.userId(),
+                CurrentUser.displayName(), isOwner(), request));
     }
 
     @GetMapping("/{id}")
@@ -195,10 +217,11 @@ public class TransactionController {
             @RequestParam(required = false) String q,
             @RequestParam(required = false) BigDecimal minAmount,
             @RequestParam(required = false) BigDecimal maxAmount,
+            @RequestParam(required = false) Long tagId,
             @RequestParam(defaultValue = "CSV") ReportFormat format) {
         log.info("export - start, format={}", format);
         TransactionReportFilter filter = new TransactionReportFilter(
-                walletId, categoryId, type, fromDate, toDate, q, minAmount, maxAmount);
+                walletId, categoryId, type, fromDate, toDate, q, minAmount, maxAmount, tagId);
         byte[] content = transactionReportService.export(CurrentUser.familyId(), CurrentUser.userId(), filter, format);
 
         boolean excel = format == ReportFormat.EXCEL;

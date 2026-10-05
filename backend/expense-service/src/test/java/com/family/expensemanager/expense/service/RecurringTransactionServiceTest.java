@@ -69,11 +69,14 @@ class RecurringTransactionServiceTest {
         return Clock.fixed(LocalDate.parse(isoDate).atStartOfDay().toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
     }
 
+    @Mock
+    private com.family.expensemanager.expense.dao.RecurringDraftDao recurringDraftDao;
+
     @BeforeEach
     void setUp() {
         service = new RecurringTransactionService(
                 recurringTransactionDao, walletService, categoryService, transactionService, clockOn("2026-01-15"),
-                eventPublisher, transactionTemplate);
+                eventPublisher, transactionTemplate, recurringDraftDao);
     }
 
     @Test
@@ -665,7 +668,7 @@ class RecurringTransactionServiceTest {
         // Re-anchor the clock past the 2027 run so the loop advances into 2028.
         service = new RecurringTransactionService(
                 recurringTransactionDao, walletService, categoryService, transactionService, clockOn("2027-03-01"),
-                eventPublisher, transactionTemplate);
+                eventPublisher, transactionTemplate, recurringDraftDao);
         when(recurringTransactionDao.selectDue(LocalDate.of(2027, 3, 1))).thenReturn(List.of(rule));
         stubTransactionCreate();
 

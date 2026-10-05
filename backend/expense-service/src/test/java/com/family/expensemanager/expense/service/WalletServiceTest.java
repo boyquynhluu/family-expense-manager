@@ -6,6 +6,7 @@ import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.expense.dao.RecurringTransactionDao;
 import com.family.expensemanager.expense.dao.TransactionDao;
+import com.family.expensemanager.expense.dao.WalletAdjustmentDao;
 import com.family.expensemanager.expense.dao.WalletDao;
 import com.family.expensemanager.expense.dao.WalletTransferDao;
 import com.family.expensemanager.expense.domain.entity.Wallet;
@@ -31,6 +32,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 /**
  * @author boyquynhluu
@@ -46,12 +48,27 @@ class WalletServiceTest {
     private RecurringTransactionDao recurringTransactionDao;
     @Mock
     private WalletTransferDao walletTransferDao;
+    @Mock
+    private WalletAdjustmentDao walletAdjustmentDao;
+    @Mock
+    private PeriodLockService periodLockService;
+    @Mock
+    private EntityAuditService entityAuditService;
+    @Mock
+    private com.family.expensemanager.expense.dao.LoanDao loanDao;
+    @Mock
+    private com.family.expensemanager.expense.dao.SavingsGoalDao savingsGoalDao;
 
     private WalletService walletService;
 
     @BeforeEach
     void setUp() {
-        walletService = new WalletService(walletDao, transactionDao, recurringTransactionDao, walletTransferDao);
+        walletService = new WalletService(
+                walletDao, transactionDao, recurringTransactionDao, walletTransferDao, walletAdjustmentDao, periodLockService,
+                entityAuditService, loanDao, savingsGoalDao);
+        // No balance adjustments unless a test says otherwise (a mock would return null and break the sum).
+        lenient().when(walletAdjustmentDao.sumAmountByWalletId(any())).thenReturn(BigDecimal.ZERO);
+        lenient().when(loanDao.sumNetFlowForWallet(any())).thenReturn(BigDecimal.ZERO);
     }
 
     @Test
@@ -333,5 +350,61 @@ class WalletServiceTest {
                 assertThat(annotation.value()).isEqualTo("hasRole('OWNER')");
             });
         }
+    }
+
+    // ===== README B1/B2: balance adjustments and closed months =====
+
+    @Test
+    void listByFamily_addsBalanceAdjustments_toTheCurrentBalance() {
+        Wallet target = wallet(1L, 1L, "VND");
+        target.setInitialBalance(BigDecimal.valueOf(100));
+        when(walletDao.selectByFamilyId(1L)).thenReturn(List.of(target));
+        when(transactionDao.sumAmountByWalletAndType(1L, "INCOME")).thenReturn(BigDecimal.valueOf(50));
+        when(transactionDao.sumAmountByWalletAndType(1L, "EXPENSE")).thenReturn(BigDecimal.valueOf(30));
+        when(walletTransferDao.sumAmountIntoWallet(1L)).thenReturn(BigDecimal.ZERO);
+        when(walletTransferDao.sumAmountFromWallet(1L)).thenReturn(BigDecimal.ZERO);
+        when(walletAdjustmentDao.sumAmountByWalletId(1L)).thenReturn(BigDecimal.valueOf(-20));
+
+        var responses = walletService.listByFamily(1L);
+
+        // 100 + 50 - 30 - 20
+        assertThat(responses.get(0).currentBalance()).isEqualByComparingTo(BigDecimal.valueOf(100));
+    }
+
+    @Test
+    void update_refusesToChangeTheInitialBalance_onceTheFamilyHasClosedAMonth() {
+        Wallet target = wallet(1L, 1L, "VND");
+        when(walletDao.selectById(1L)).thenReturn(Optional.of(target));
+        when(walletDao.selectByFamilyId(1L)).thenReturn(List.of(target));
+        when(periodLockService.hasAnyLock(1L)).thenReturn(true);
+
+        assertThatThrownBy(() -> walletService.update(1L, 1L, new CreateWalletRequest("Wallet 1", "VND", BigDecimal.TEN)))
+                .isInstanceOf(ConflictException.class);
+        verify(walletDao, never()).update(any());
+    }
+
+    @Test
+    void update_stillAllowsRenaming_withClosedMonths_whenTheInitialBalanceIsUnchanged() {
+        Wallet target = wallet(1L, 1L, "VND");
+        when(walletDao.selectById(1L)).thenReturn(Optional.of(target));
+        when(walletDao.selectByFamilyId(1L)).thenReturn(List.of(target));
+        when(transactionDao.sumAmountByWalletAndType(eq(1L), any())).thenReturn(BigDecimal.ZERO);
+        when(walletTransferDao.sumAmountIntoWallet(1L)).thenReturn(BigDecimal.ZERO);
+        when(walletTransferDao.sumAmountFromWallet(1L)).thenReturn(BigDecimal.ZERO);
+
+        var response = walletService.update(1L, 1L, new CreateWalletRequest("Ví mới", "VND", new BigDecimal("0.00")));
+
+        assertThat(response.name()).isEqualTo("Ví mới");
+        verify(periodLockService, never()).hasAnyLock(any());
+    }
+
+    @Test
+    void delete_throwsConflict_whenWalletHasBalanceAdjustments() {
+        Wallet target = wallet(1L, 1L, "VND");
+        when(walletDao.selectById(1L)).thenReturn(Optional.of(target));
+        when(walletAdjustmentDao.countByWalletId(1L)).thenReturn(1L);
+
+        assertThatThrownBy(() -> walletService.delete(1L, 1L)).isInstanceOf(ConflictException.class);
+        verify(walletDao, never()).update(any());
     }
 }

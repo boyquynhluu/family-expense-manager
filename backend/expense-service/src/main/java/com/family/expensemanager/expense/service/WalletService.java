@@ -6,8 +6,11 @@ import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.NotFoundException;
 import com.family.expensemanager.common.exception.ServiceException;
+import com.family.expensemanager.expense.dao.LoanDao;
 import com.family.expensemanager.expense.dao.RecurringTransactionDao;
+import com.family.expensemanager.expense.dao.SavingsGoalDao;
 import com.family.expensemanager.expense.dao.TransactionDao;
+import com.family.expensemanager.expense.dao.WalletAdjustmentDao;
 import com.family.expensemanager.expense.dao.WalletDao;
 import com.family.expensemanager.expense.dao.WalletTransferDao;
 import com.family.expensemanager.expense.domain.entity.Wallet;
@@ -42,12 +45,20 @@ public class WalletService {
 
     private static final String TYPE_INCOME = "INCOME";
     private static final String TYPE_EXPENSE = "EXPENSE";
+    static final String TYPE_CASH = "CASH";
+    static final String TYPE_CREDIT_CARD = "CREDIT_CARD";
+    static final String TYPE_SAVINGS = "SAVINGS";
     private static final int MAX_PAGE_SIZE = 100;
 
     private final WalletDao walletDao;
     private final TransactionDao transactionDao;
     private final RecurringTransactionDao recurringTransactionDao;
     private final WalletTransferDao walletTransferDao;
+    private final WalletAdjustmentDao walletAdjustmentDao;
+    private final PeriodLockService periodLockService;
+    private final EntityAuditService entityAuditService;
+    private final LoanDao loanDao;
+    private final SavingsGoalDao savingsGoalDao;
 
     @PreAuthorize("hasRole('OWNER')")
     public WalletResponse create(Long familyId, CreateWalletRequest request) {
@@ -62,8 +73,12 @@ public class WalletService {
             wallet.setCurrency(currency);
             wallet.setInitialBalance(request.initialBalance());
             wallet.setOwnerUserId(request.ownerUserId());
+            applyType(wallet, request);
             walletDao.insert(wallet);
-            return WalletResponse.from(wallet);
+            WalletResponse response = WalletResponse.from(wallet);
+            entityAuditService.record(familyId, EntityAuditService.WALLET, wallet.getId(),
+                    EntityAuditService.ACTION_CREATED, null, response);
+            return response;
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
             throw e;
         } catch (Exception e) {
@@ -89,14 +104,26 @@ public class WalletService {
         try {
             log.info("update - start, walletId={}, familyId={}", walletId, familyId);
             Wallet wallet = requireOwnedByFamily(walletId, familyId);
+            // Audit snapshots carry the wallet's own fields only (its balance is derived, not edited).
+            WalletResponse before = WalletResponse.from(wallet);
             String currency = normalizeCurrency(request.currency());
             requireConsistentCurrency(familyId, currency, walletId);
             requireUniqueName(familyId, request.name(), walletId);
+            // The initial balance feeds every month's opening balance — changing it would silently rewrite the
+            // balances of months already closed (README B2). A balance correction goes through an adjustment.
+            if (wallet.getInitialBalance().compareTo(request.initialBalance()) != 0
+                    && periodLockService.hasAnyLock(familyId)) {
+                throw logged(log, new ConflictException("Gia đình đã có tháng chốt sổ nên không đổi được số dư ban đầu của ví"
+                        + " — hãy dùng \"Điều chỉnh số dư\" để sửa số dư hiện tại"));
+            }
             wallet.setName(request.name());
             wallet.setCurrency(currency);
             wallet.setInitialBalance(request.initialBalance());
             wallet.setOwnerUserId(request.ownerUserId());
+            applyType(wallet, request);
             walletDao.update(wallet);
+            entityAuditService.record(familyId, EntityAuditService.WALLET, walletId, EntityAuditService.ACTION_UPDATED,
+                    before, WalletResponse.from(wallet));
             return WalletResponse.from(wallet, currentBalanceOf(wallet));
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
             throw e;
@@ -120,8 +147,19 @@ public class WalletService {
             if (walletTransferDao.countByWalletId(walletId) > 0) {
                 throw logged(log, new ConflictException("Không thể xoá ví đã có giao dịch chuyển tiền"));
             }
+            if (walletAdjustmentDao.countByWalletId(walletId) > 0) {
+                throw logged(log, new ConflictException("Không thể xoá ví đã có điều chỉnh số dư"));
+            }
+            if (loanDao.countByWalletId(walletId) > 0) {
+                throw logged(log, new ConflictException("Không thể xoá ví đã có khoản vay hoặc lần trả nợ"));
+            }
+            if (savingsGoalDao.countByWalletId(walletId) > 0) {
+                throw logged(log, new ConflictException("Không thể xoá ví đang gắn với mục tiêu tiết kiệm"));
+            }
             wallet.setDeletedAt(LocalDateTime.now());
             walletDao.update(wallet);
+            entityAuditService.record(familyId, EntityAuditService.WALLET, walletId, EntityAuditService.ACTION_DELETED,
+                    WalletResponse.from(wallet), null);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
             throw e;
         } catch (Exception e) {
@@ -157,11 +195,65 @@ public class WalletService {
             if (walletDao.restore(walletId, familyId) == 0) {
                 throw logged(log, new NotFoundException("Ví đã xoá không tồn tại: " + walletId));
             }
+            entityAuditService.record(familyId, EntityAuditService.WALLET, walletId, EntityAuditService.ACTION_RESTORED,
+                    null, null);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
             throw e;
         } catch (Exception e) {
             throw ServiceException.unexpected("WalletService.restore", e);
         }
+    }
+
+    /**
+     * C3: stores the wallet type and only the fields that belong to it (a CASH wallet carries no credit limit).
+     * A CREDIT_CARD needs a credit limit — it is what bounds how far the card may go negative (A1).
+     */
+    private void applyType(Wallet wallet, CreateWalletRequest request) {
+        String type = request.walletType() == null ? TYPE_CASH : request.walletType();
+        if (TYPE_CREDIT_CARD.equals(type) && request.creditLimit() == null) {
+            throw logged(log, new BadRequestException("Thẻ tín dụng cần có hạn mức tín dụng"));
+        }
+        wallet.setWalletType(type);
+        boolean card = TYPE_CREDIT_CARD.equals(type);
+        boolean savings = TYPE_SAVINGS.equals(type);
+        wallet.setCreditLimit(card ? request.creditLimit() : null);
+        wallet.setStatementDay(card ? request.statementDay() : null);
+        wallet.setPaymentDueDay(card ? request.paymentDueDay() : null);
+        wallet.setInterestRate(savings ? request.interestRate() : null);
+        wallet.setMaturityDate(savings ? request.maturityDate() : null);
+    }
+
+    /**
+     * README A1: the lowest balance a wallet may reach — 0 for cash, bank and savings, minus the credit limit for a
+     * credit card.
+     */
+    BigDecimal balanceFloorOf(Wallet wallet) {
+        if (TYPE_CREDIT_CARD.equals(wallet.getWalletType()) && wallet.getCreditLimit() != null) {
+            return wallet.getCreditLimit().negate();
+        }
+        return BigDecimal.ZERO;
+    }
+
+    /**
+     * README A1: refuses taking {@code outflow} out of the wallet when that would push it below its floor
+     * ({@link #balanceFloorOf}). Locks the wallet row first, so two concurrent expenses can't both pass on the same
+     * balance. A zero or negative outflow (money coming in) always passes.
+     */
+    public void requireAllowedOutflow(Wallet wallet, BigDecimal outflow) {
+        if (outflow == null || outflow.signum() <= 0) {
+            return;
+        }
+        lockForUpdate(wallet.getId());
+        BigDecimal current = currentBalanceOf(wallet);
+        BigDecimal floor = balanceFloorOf(wallet);
+        if (current.subtract(outflow).compareTo(floor) >= 0) {
+            return;
+        }
+        String available = com.family.expensemanager.common.currency.CurrencyUtil.formatCurrency(current.subtract(floor));
+        throw logged(log, new BadRequestException(TYPE_CREDIT_CARD.equals(wallet.getWalletType())
+                ? "Thẻ \"" + wallet.getName() + "\" chỉ còn " + available + " trong hạn mức tín dụng — không đủ cho khoản này"
+                : "Ví \"" + wallet.getName() + "\" chỉ còn " + available + " — không đủ cho khoản này (ví tiền mặt, ngân hàng"
+                        + " và tiết kiệm không được âm; nếu số dư trong ứng dụng sai, hãy điều chỉnh số dư)"));
     }
 
     /** "vnd" and "VND " are the same currency — store and compare the ISO code in upper case. */
@@ -194,14 +286,17 @@ public class WalletService {
         }
     }
 
-    /** Package-visible so {@link WalletTransferService} can reuse the exact same calculation (initial
-     *  balance + income - expense + transfers in - transfers out) instead of a separate, drifting copy. */
+    /** Package-visible so {@link WalletTransferService} can reuse the exact same calculation (initial balance + income
+     *  - expense + transfers in - transfers out + adjustments + loan flows) instead of a separate, drifting copy. */
     BigDecimal currentBalanceOf(Wallet wallet) {
         BigDecimal income = transactionDao.sumAmountByWalletAndType(wallet.getId(), TYPE_INCOME);
         BigDecimal expense = transactionDao.sumAmountByWalletAndType(wallet.getId(), TYPE_EXPENSE);
         BigDecimal transferIn = walletTransferDao.sumAmountIntoWallet(wallet.getId());
         BigDecimal transferOut = walletTransferDao.sumAmountFromWallet(wallet.getId());
-        return wallet.getInitialBalance().add(income).subtract(expense).add(transferIn).subtract(transferOut);
+        BigDecimal adjustments = walletAdjustmentDao.sumAmountByWalletId(wallet.getId());
+        BigDecimal loans = loanDao.sumNetFlowForWallet(wallet.getId());
+        return wallet.getInitialBalance().add(income).subtract(expense).add(transferIn).subtract(transferOut)
+                .add(adjustments).add(loans);
     }
 
     /**

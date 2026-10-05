@@ -17,6 +17,14 @@ import java.util.Optional;
 @Dao
 public interface WalletDao {
 
+    /** README C2: every family's (not deleted) credit card with a payment due day — for the due reminder. */
+    @Select
+    List<Wallet> selectCreditCardsWithDueDay();
+
+    /** README C7: every family that has at least one wallet (i.e. uses the app). */
+    @Select
+    List<Long> selectActiveFamilyIds();
+
     @Insert
     int insert(Wallet wallet);
 

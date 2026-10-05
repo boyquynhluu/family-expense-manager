@@ -27,5 +27,15 @@ public record CreateRecurringTransactionRequest(
         @Min(1) @Max(7) Integer dayOfWeek,
         @Min(1) @Max(12) Integer monthOfYear,
         @NotNull @ReasonableDate(maxYearsAhead = 5) LocalDate startDate,
-        @ReasonableDate(maxYearsAhead = 50) LocalDate endDate) {
+        @ReasonableDate(maxYearsAhead = 50) LocalDate endDate,
+        @Pattern(regexp = "AUTO|CONFIRM") String mode,
+        @Min(1) @Max(30) Integer remindDaysBefore) {
+
+    /** Before README A4/C2: records automatically, no reminder. */
+    public CreateRecurringTransactionRequest(Long walletId, Long categoryId, String type, BigDecimal amount, String note,
+                                             String frequency, Integer dayOfMonth, Integer dayOfWeek,
+                                             Integer monthOfYear, LocalDate startDate, LocalDate endDate) {
+        this(walletId, categoryId, type, amount, note, frequency, dayOfMonth, dayOfWeek, monthOfYear, startDate,
+                endDate, null, null);
+    }
 }

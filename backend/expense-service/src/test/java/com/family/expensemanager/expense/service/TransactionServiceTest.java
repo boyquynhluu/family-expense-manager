@@ -2,9 +2,9 @@ package com.family.expensemanager.expense.service;
 
 import com.family.expensemanager.common.event.ExpenseEvent;
 import com.family.expensemanager.common.exception.ApiException;
+import com.family.expensemanager.common.exception.ConflictException;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
-import com.family.expensemanager.expense.dao.BudgetDao;
 import com.family.expensemanager.expense.dao.TransactionDao;
 import com.family.expensemanager.expense.domain.entity.Budget;
 import com.family.expensemanager.expense.domain.entity.Category;
@@ -64,7 +64,7 @@ class TransactionServiceTest {
     @Mock
     private TransactionDao transactionDao;
     @Mock
-    private BudgetDao budgetDao;
+    private BudgetMonitor budgetMonitor;
     @Mock
     private WalletService walletService;
     @Mock
@@ -79,6 +79,14 @@ class TransactionServiceTest {
     private IdempotencyGuard idempotencyGuard;
     @Mock
     private TransactionAuditService auditService;
+    @Mock
+    private PeriodLockService periodLockService;
+    @Mock
+    private SpendingLimitService spendingLimitService;
+    @Mock
+    private com.family.expensemanager.expense.dao.TransactionSplitDao transactionSplitDao;
+    @Mock
+    private com.family.expensemanager.expense.dao.TagDao tagDao;
 
     private TransactionService transactionService;
 
@@ -86,8 +94,9 @@ class TransactionServiceTest {
     @SuppressWarnings("unchecked")
     void setUp() {
         transactionService = new TransactionService(
-                transactionDao, budgetDao, walletService, categoryService, eventPublisher, cacheManager,
-                receiptStorageService, idempotencyGuard, auditService);
+                transactionDao, budgetMonitor, walletService, categoryService, eventPublisher, cacheManager,
+                receiptStorageService, idempotencyGuard, auditService, periodLockService, spendingLimitService,
+                transactionSplitDao, tagDao);
         // None of these tests exercise idempotency (they all pass a null key) — just run the action,
         // like the real IdempotencyGuard does for a null/blank key.
         lenient().when(idempotencyGuard.runOnce(any(), any(), any(), any(), any()))
@@ -99,9 +108,9 @@ class TransactionServiceTest {
         TransactionReportFilter filter = new TransactionReportFilter(
                 5L, 7L, "EXPENSE", null, null, "an sang", new BigDecimal("10"), new BigDecimal("500"));
         when(transactionDao.countByFamilyIdFiltered(
-                1L, CREATOR_ID, false, 5L, 7L, "EXPENSE", null, null, "%an sang%", new BigDecimal("10"), new BigDecimal("500"))).thenReturn(45L);
+                1L, CREATOR_ID, false, 5L, 7L, "EXPENSE", null, null, "%an sang%", new BigDecimal("10"), new BigDecimal("500"), null)).thenReturn(45L);
         when(transactionDao.selectByFamilyIdFiltered(
-                1L, CREATOR_ID, false, 5L, 7L, "EXPENSE", null, null, "%an sang%", new BigDecimal("10"), new BigDecimal("500"), 20, 40))
+                1L, CREATOR_ID, false, 5L, 7L, "EXPENSE", null, null, "%an sang%", new BigDecimal("10"), new BigDecimal("500"), null, 20, 40))
                 .thenReturn(List.of(transaction(99L)));
 
         var page = transactionService.listByFamilyPaged(1L, CREATOR_ID, filter, 2, 20);
@@ -257,10 +266,10 @@ class TransactionServiceTest {
         secret.setNote("Quà sinh nhật");
         TransactionReportFilter none = new TransactionReportFilter(null, null, null, null, null, null, null, null);
         TransactionReportFilter byNote = new TransactionReportFilter(null, null, null, null, null, "quà", null, null);
-        when(transactionDao.countByFamilyIdFiltered(1L, OTHER_USER_ID, true, null, null, null, null, null, null, null, null))
+        when(transactionDao.countByFamilyIdFiltered(1L, OTHER_USER_ID, true, null, null, null, null, null, null, null, null, null))
                 .thenReturn(1L);
         when(transactionDao.selectByFamilyIdFiltered(
-                1L, OTHER_USER_ID, true, null, null, null, null, null, null, null, null, 10, 0))
+                1L, OTHER_USER_ID, true, null, null, null, null, null, null, null, null, null, 10, 0))
                 .thenReturn(List.of(secret));
 
         var row = transactionService.listByFamilyPaged(1L, OTHER_USER_ID, none, 0, 10).content().get(0);
@@ -276,10 +285,10 @@ class TransactionServiceTest {
                 java.time.LocalDate.of(2026, 9, 1), java.time.LocalDate.of(2026, 9, 30), null, null, null);
         transactionService.listByFamilyPaged(1L, OTHER_USER_ID, septemberOnly, 0, 10);
         verify(transactionDao).countByFamilyIdFiltered(eq(1L), eq(OTHER_USER_ID), eq(true), any(), any(), any(),
-                eq(java.time.LocalDate.of(2026, 9, 1)), eq(java.time.LocalDate.of(2026, 9, 30)), any(), any(), any());
+                eq(java.time.LocalDate.of(2026, 9, 1)), eq(java.time.LocalDate.of(2026, 9, 30)), any(), any(), any(), any());
         // A note search must not let a "***" row through (its match would reveal the note).
         verify(transactionDao).countByFamilyIdFiltered(
-                eq(1L), eq(OTHER_USER_ID), eq(false), any(), any(), any(), any(), any(), eq("%quà%"), any(), any());
+                eq(1L), eq(OTHER_USER_ID), eq(false), any(), any(), any(), any(), any(), eq("%quà%"), any(), any(), any());
     }
 
     @Test
@@ -288,9 +297,9 @@ class TransactionServiceTest {
         when(transactionDao.selectById(1L)).thenReturn(Optional.of(backDated));
         TransactionReportFilter none = new TransactionReportFilter(null, null, null, null, null, null, null, null);
         when(transactionDao.countFilteredMatchingId(
-                1L, CREATOR_ID, null, null, null, null, null, null, null, null, 1L)).thenReturn(1L);
+                1L, CREATOR_ID, null, null, null, null, null, null, null, null, null, 1L)).thenReturn(1L);
         when(transactionDao.countFilteredAhead(
-                1L, CREATOR_ID, true, null, null, null, null, null, null, null, null, backDated.getOccurredAt(), 1L))
+                1L, CREATOR_ID, true, null, null, null, null, null, null, null, null, null, backDated.getOccurredAt(), 1L))
                 .thenReturn(12L); // 12 newer rows → 13th row → page index 2 with 5 per page
 
         var location = transactionService.locate(1L, CREATOR_ID, none, 1L, 5);
@@ -305,13 +314,13 @@ class TransactionServiceTest {
         TransactionReportFilter octoberOnly = new TransactionReportFilter(null, null, null,
                 java.time.LocalDate.of(2026, 10, 1), java.time.LocalDate.of(2026, 10, 31), null, null, null);
         when(transactionDao.countFilteredMatchingId(eq(1L), eq(CREATOR_ID), any(), any(), any(), any(), any(), any(),
-                any(), any(), eq(1L))).thenReturn(0L);
+                any(), any(), any(), eq(1L))).thenReturn(0L);
 
         var location = transactionService.locate(1L, CREATOR_ID, octoberOnly, 1L, 5);
 
         assertThat(location.inList()).isFalse();
         verify(transactionDao, never()).countFilteredAhead(any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any());
+                any(), any(), any(), any());
     }
 
     @Test
@@ -748,136 +757,20 @@ class TransactionServiceTest {
     }
 
     @Test
-    void create_publishesBudgetWarning_whenCategorySpendingCrossesEightyPercent() {
-        List<ExpenseEvent> events = createExpenseAndCollectBudgetEvents(
-                budget(7L, "1000000"), "700000", null, null, "100000");
-
-        assertThat(events).hasSize(1);
-        ExpenseEvent warning = events.get(0);
-        assertThat(warning.eventType()).isEqualTo(ExpenseEvent.BUDGET_WARNING);
-        assertThat(warning.categoryId()).isEqualTo(7L);
-        assertThat(warning.categoryName()).isEqualTo("Ăn uống");
-        assertThat(warning.totalSpent()).isEqualByComparingTo("800000");
-        assertThat(warning.limitAmount()).isEqualByComparingTo("1000000");
-    }
-
-    @Test
-    void create_publishesOnlyBudgetExceeded_whenOneTransactionJumpsFromBelowEightyPercentPastLimit() {
-        List<ExpenseEvent> events = createExpenseAndCollectBudgetEvents(
-                budget(7L, "1000000"), "700000", null, null, "400000");
-
-        assertThat(events).extracting(ExpenseEvent::eventType).containsExactly(ExpenseEvent.BUDGET_EXCEEDED);
-    }
-
-    @Test
-    void create_publishesNothing_whenSpendingWasAlreadyAboveEightyPercent() {
-        List<ExpenseEvent> events = createExpenseAndCollectBudgetEvents(
-                budget(7L, "1000000"), "850000", null, null, "50000");
-
-        assertThat(events).isEmpty();
-    }
-
-    @Test
-    void create_publishesNothing_whenSpendingStaysBelowEightyPercent() {
-        List<ExpenseEvent> events = createExpenseAndCollectBudgetEvents(
-                budget(7L, "1000000"), "100000", null, null, "100000");
-
-        assertThat(events).isEmpty();
-    }
-
-    @Test
-    void create_publishesBudgetWarning_whenSpendingLandsExactlyOnLimit() {
-        List<ExpenseEvent> events = createExpenseAndCollectBudgetEvents(
-                budget(7L, "1000000"), "700000", null, null, "300000");
-
-        assertThat(events).extracting(ExpenseEvent::eventType).containsExactly(ExpenseEvent.BUDGET_WARNING);
-    }
-
-    @Test
-    void create_publishesOverallBudgetWarning_withNullCategory() {
-        List<ExpenseEvent> events = createExpenseAndCollectBudgetEvents(
-                null, "0000", overallBudget("1000000"), "850000", "100000");
-
-        assertThat(events).hasSize(1);
-        ExpenseEvent warning = events.get(0);
-        assertThat(warning.eventType()).isEqualTo(ExpenseEvent.BUDGET_WARNING);
-        assertThat(warning.categoryId()).isNull();
-        assertThat(warning.categoryName()).isEqualTo("Tổng chi tiêu");
-        assertThat(warning.totalSpent()).isEqualByComparingTo("850000");
-    }
-
-    @Test
-    void create_publishesOverallBudgetExceeded_withNullCategory() {
-        List<ExpenseEvent> events = createExpenseAndCollectBudgetEvents(
-                null, "0000", overallBudget("1000000"), "1050000", "100000");
-
-        assertThat(events).hasSize(1);
-        ExpenseEvent exceeded = events.get(0);
-        assertThat(exceeded.eventType()).isEqualTo(ExpenseEvent.BUDGET_EXCEEDED);
-        assertThat(exceeded.categoryId()).isNull();
-        assertThat(exceeded.categoryName()).isEqualTo("Tổng chi tiêu");
-        assertThat(exceeded.totalSpent()).isEqualByComparingTo("1050000");
-    }
-
-    @Test
-    void create_publishesNothing_whenOverallBudgetWasAlreadyExceeded() {
-        List<ExpenseEvent> events = createExpenseAndCollectBudgetEvents(
-                null, "0000", overallBudget("1000000"), "1200000", "100000");
-
-        assertThat(events).isEmpty();
-    }
-
-    @Test
-    void create_publishesBothCategoryAndOverallEvents_whenBothBudgetsCrossed() {
-        List<ExpenseEvent> events = createExpenseAndCollectBudgetEvents(
-                budget(7L, "1000000"), "950000", overallBudget("5000000"), "4050000", "100000");
-
-        assertThat(events).extracting(ExpenseEvent::eventType)
-                .containsExactly(ExpenseEvent.BUDGET_EXCEEDED, ExpenseEvent.BUDGET_WARNING);
-        assertThat(events).extracting(ExpenseEvent::categoryId).containsExactly(7L, null);
-    }
-
-    private List<ExpenseEvent> createExpenseAndCollectBudgetEvents(
-            Budget categoryBudget, String categoryTotalBefore, Budget overallBudget, String familyTotalAfter,
-            String amount) {
-        LocalDateTime occurredAt = LocalDateTime.of(2026, 1, 15, 10, 0);
+    void create_handsAnExpenseToTheBudgetMonitor_withOneLineForItsCategory() {
         Wallet wallet = new Wallet();
         wallet.setId(5L);
         Category category = new Category();
         category.setId(7L);
-        category.setName("Ăn uống");
         when(walletService.requireOwnedByFamily(5L, 1L)).thenReturn(wallet);
         when(categoryService.requireOwnedByFamily(eq(7L), eq(1L), anyString())).thenReturn(category);
-        when(transactionDao.sumAmountByCategoryPeriodAndType(1L, 7L, "2026-01", "EXPENSE"))
-                .thenReturn(new BigDecimal(categoryTotalBefore));
-        when(budgetDao.selectByCategoryAndPeriod(7L, "2026-01")).thenReturn(Optional.ofNullable(categoryBudget));
-        when(budgetDao.selectOverallByPeriod(1L, "2026-01")).thenReturn(Optional.ofNullable(overallBudget));
-        if (overallBudget != null) {
-            when(transactionDao.sumAmountByFamilyPeriodAndType(1L, "2026-01", "EXPENSE"))
-                    .thenReturn(new BigDecimal(familyTotalAfter));
-        }
 
         transactionService.create(1L, CREATOR_ID, "user@b.com", "Chủ hộ",
-                new TransactionRequest(5L, 7L, "EXPENSE", new BigDecimal(amount), occurredAt, null), null);
+                new TransactionRequest(5L, 7L, "EXPENSE", new BigDecimal("100000"), LocalDateTime.of(2026, 1, 15, 10, 0),
+                        null), null);
 
-        ArgumentCaptor<ExpenseEvent> captor = ArgumentCaptor.forClass(ExpenseEvent.class);
-        verify(eventPublisher, atLeastOnce()).publishEvent(captor.capture());
-        return captor.getAllValues().stream()
-                .filter(e -> !ExpenseEvent.EXPENSE_CREATED.equals(e.eventType()))
-                .toList();
-    }
-
-    private static Budget budget(Long categoryId, String limit) {
-        Budget budget = new Budget();
-        budget.setFamilyId(1L);
-        budget.setCategoryId(categoryId);
-        budget.setPeriodMonth("2026-01");
-        budget.setLimitAmount(new BigDecimal(limit));
-        return budget;
-    }
-
-    private static Budget overallBudget(String limit) {
-        return budget(null, limit);
+        verify(budgetMonitor).onExpenseRecorded(eq(1L), eq(CREATOR_ID), eq("user@b.com"), eq("Chủ hộ"),
+                any(Transaction.class), eq(List.of(new BudgetMonitor.Line(7L, new BigDecimal("100000")))));
     }
 
     @Test
@@ -994,16 +887,16 @@ class TransactionServiceTest {
         assertThatThrownBy(() -> transactionService.listByFamilyPaged(1L, CREATOR_ID, filter, 0, 20))
                 .isInstanceOf(BadRequestException.class);
         verify(transactionDao, never()).countByFamilyIdFiltered(
-                any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any());
+                any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
     void listByFamilyPaged_passesNullPattern_whenSearchTextBlank() {
         TransactionReportFilter filter = new TransactionReportFilter(
                 null, null, null, null, null, "   ", null, null);
-        when(transactionDao.countByFamilyIdFiltered(1L, CREATOR_ID, true, null, null, null, null, null, null, null, null))
+        when(transactionDao.countByFamilyIdFiltered(1L, CREATOR_ID, true, null, null, null, null, null, null, null, null, null))
                 .thenReturn(0L);
-        when(transactionDao.selectByFamilyIdFiltered(1L, CREATOR_ID, true, null, null, null, null, null, null, null, null, 10, 0))
+        when(transactionDao.selectByFamilyIdFiltered(1L, CREATOR_ID, true, null, null, null, null, null, null, null, null, null, 10, 0))
                 .thenReturn(List.of());
 
         var page = transactionService.listByFamilyPaged(1L, CREATOR_ID, filter, 0, 10);
@@ -1017,5 +910,87 @@ class TransactionServiceTest {
                 null, null, null, null, null, "  50%_Off! ", null, null);
 
         assertThat(filter.noteLikePattern()).isEqualTo("%50!%!_off!!%");
+    }
+
+    // ===== README B2: closed months (PeriodLockService) =====
+
+    private static ConflictException monthClosed() {
+        return new ConflictException("Tháng 2026-08 đã chốt sổ");
+    }
+
+    @Test
+    void create_isRefused_whenItsMonthIsClosed_beforeAnythingIsWritten() {
+        LocalDateTime inClosedMonth = LocalDateTime.of(2026, 8, 10, 9, 0);
+        doThrow(monthClosed()).when(periodLockService).requireUnlocked(1L, inClosedMonth);
+
+        assertThatThrownBy(() -> transactionService.create(1L, CREATOR_ID, "user@b.com", "An",
+                new TransactionRequest(5L, 7L, "EXPENSE", new BigDecimal("50000"), inClosedMonth, null), null))
+                .isInstanceOf(ConflictException.class);
+        verify(transactionDao, never()).insert(any(Transaction.class));
+    }
+
+    @Test
+    void update_checksBothTheOldAndTheNewDate_soNothingMovesIntoOrOutOfAClosedMonth() {
+        Transaction target = transaction(1L);
+        LocalDateTime oldDate = target.getOccurredAt();
+        stubUpdateDependencies(target);
+        TransactionRequest request = updateRequest();
+
+        transactionService.update(1L, 1L, CREATOR_ID, "An", false, request);
+
+        verify(periodLockService).requireUnlocked(1L, oldDate, request.occurredAt());
+    }
+
+    @Test
+    void update_isRefused_andNothingSaved_whenAMonthInvolvedIsClosed() {
+        Transaction target = transaction(1L);
+        when(transactionDao.selectById(1L)).thenReturn(Optional.of(target));
+        doThrow(monthClosed()).when(periodLockService).requireUnlocked(eq(1L), any(), any());
+
+        assertThatThrownBy(() -> transactionService.update(1L, 1L, CREATOR_ID, "An", false, updateRequest()))
+                .isInstanceOf(ConflictException.class);
+        verify(transactionDao, never()).update(any(Transaction.class));
+    }
+
+    @Test
+    void delete_isRefused_whenTheTransactionsMonthIsClosed() {
+        Transaction target = transaction(1L);
+        when(transactionDao.selectById(1L)).thenReturn(Optional.of(target));
+        doThrow(monthClosed()).when(periodLockService).requireUnlocked(1L, target.getOccurredAt());
+
+        assertThatThrownBy(() -> transactionService.delete(1L, 1L, CREATOR_ID, "An", false))
+                .isInstanceOf(ConflictException.class);
+        assertThat(target.getDeletedAt()).isNull();
+        verify(transactionDao, never()).update(any(Transaction.class));
+    }
+
+    @Test
+    void bulkDelete_countsRowsOfAClosedMonthAsLocked_andDeletesTheRest() {
+        Transaction open = transaction(1L);
+        Transaction closed = transaction(2L);
+        closed.setOccurredAt(LocalDateTime.of(2026, 8, 10, 9, 0));
+        when(transactionDao.selectById(1L)).thenReturn(Optional.of(open));
+        when(transactionDao.selectById(2L)).thenReturn(Optional.of(closed));
+        // lenient: the open row's date reaches the same mock with other arguments (and must pass).
+        lenient().doThrow(monthClosed()).when(periodLockService).requireUnlocked(1L, closed.getOccurredAt());
+
+        var result = transactionService.bulkDelete(1L, List.of(1L, 2L), CREATOR_ID, "An", false);
+
+        assertThat(result.deleted()).isEqualTo(1);
+        assertThat(result.locked()).isEqualTo(1);
+        assertThat(closed.getDeletedAt()).isNull();
+        verify(transactionDao, never()).update(closed);
+    }
+
+    @Test
+    void restore_isRefused_whenTheTransactionsMonthIsClosed() {
+        Transaction deleted = transaction(1L);
+        deleted.setDeletedAt(LocalDateTime.now());
+        when(transactionDao.selectDeletedById(1L)).thenReturn(Optional.of(deleted));
+        doThrow(monthClosed()).when(periodLockService).requireUnlocked(1L, deleted.getOccurredAt());
+
+        assertThatThrownBy(() -> transactionService.restore(1L, 1L, CREATOR_ID, "An", false))
+                .isInstanceOf(ConflictException.class);
+        verify(transactionDao, never()).restore(any(), any());
     }
 }

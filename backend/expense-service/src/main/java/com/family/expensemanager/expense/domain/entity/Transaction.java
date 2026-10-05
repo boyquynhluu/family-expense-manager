@@ -28,6 +28,9 @@ public class Transaction {
     @Column(name = "category_id")
     private Long categoryId;
 
+    @Column(name = "refund_of_id")
+    private Long refundOfId;
+
     @Column(name = "family_id")
     private Long familyId;
 
@@ -209,5 +212,13 @@ public class Transaction {
 
     public void setVersion(Integer version) {
         this.version = version;
+    }
+
+    public Long getRefundOfId() {
+        return refundOfId;
+    }
+
+    public void setRefundOfId(Long refundOfId) {
+        this.refundOfId = refundOfId;
     }
 }

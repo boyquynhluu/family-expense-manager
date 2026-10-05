@@ -39,12 +39,18 @@ class BudgetServiceTest {
     private BudgetDao budgetDao;
     @Mock
     private CategoryService categoryService;
+    @Mock
+    private WalletService walletService;
+    @Mock
+    private BudgetMonitor budgetMonitor;
+    @Mock
+    private EntityAuditService entityAuditService;
 
     private BudgetService budgetService;
 
     @BeforeEach
     void setUp() {
-        budgetService = new BudgetService(budgetDao, categoryService);
+        budgetService = new BudgetService(budgetDao, categoryService, walletService, budgetMonitor, entityAuditService);
     }
 
     @Test
@@ -76,7 +82,7 @@ class BudgetServiceTest {
 
     @Test
     void create_rejectsSecondOverallBudget_forSameMonth() {
-        when(budgetDao.selectOverallByPeriod(1L, "2026-01")).thenReturn(Optional.of(overallBudget(3L)));
+        when(budgetDao.selectSameScope(1L, null, null, null, "MONTH", "2026-01")).thenReturn(Optional.of(overallBudget(3L)));
 
         assertThatThrownBy(() -> budgetService.create(1L, new CreateBudgetRequest(null, "2026-01", BigDecimal.valueOf(100000))))
                 .isInstanceOf(BadRequestException.class);
@@ -85,7 +91,7 @@ class BudgetServiceTest {
 
     @Test
     void create_rejectsDuplicateCategoryBudget_forSameMonth() {
-        when(budgetDao.selectByCategoryAndPeriod(5L, "2026-01")).thenReturn(Optional.of(budget(3L, 1L)));
+        when(budgetDao.selectSameScope(1L, 5L, null, null, "MONTH", "2026-01")).thenReturn(Optional.of(budget(3L, 1L)));
 
         assertThatThrownBy(() -> budgetService.create(1L, new CreateBudgetRequest(5L, "2026-01", BigDecimal.valueOf(100000))))
                 .isInstanceOf(BadRequestException.class);
@@ -96,7 +102,7 @@ class BudgetServiceTest {
     void update_allowsSavingOverallBudget_thatIsItself() {
         Budget existing = overallBudget(3L);
         when(budgetDao.selectById(3L)).thenReturn(Optional.of(existing));
-        when(budgetDao.selectOverallByPeriod(1L, "2026-01")).thenReturn(Optional.of(existing));
+        when(budgetDao.selectSameScope(1L, null, null, null, "MONTH", "2026-01")).thenReturn(Optional.of(existing));
 
         var response = budgetService.update(3L, 1L, new CreateBudgetRequest(null, "2026-01", BigDecimal.valueOf(990000)));
 
@@ -107,7 +113,7 @@ class BudgetServiceTest {
     @Test
     void update_rejectsOverallBudget_whenAnotherOneExistsInMonth() {
         when(budgetDao.selectById(4L)).thenReturn(Optional.of(budget(4L, 1L)));
-        when(budgetDao.selectOverallByPeriod(1L, "2026-01")).thenReturn(Optional.of(overallBudget(3L)));
+        when(budgetDao.selectSameScope(1L, null, null, null, "MONTH", "2026-01")).thenReturn(Optional.of(overallBudget(3L)));
 
         assertThatThrownBy(() -> budgetService.update(4L, 1L, new CreateBudgetRequest(null, "2026-01", BigDecimal.valueOf(100000))))
                 .isInstanceOf(BadRequestException.class);
