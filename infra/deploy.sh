@@ -28,6 +28,17 @@ main() {
   "${COMPOSE[@]}" up -d --build
   docker image prune -f
 
+  # nginx runs a stock image with infra/nginx bind-mounted, so `up` never recreates it when only that config
+  # changes — restart it then (templates are rendered at start). The workflow pulls before this script runs, so
+  # compare against the config hash of the last deploy instead of the previous commit. Missing file = restart.
+  NGINX_HASH="$(git rev-parse HEAD:infra/nginx)"
+  NGINX_HASH_FILE="$HOME/.fem-nginx-config-hash"
+  if [[ "$(cat "$NGINX_HASH_FILE" 2>/dev/null)" != "$NGINX_HASH" ]]; then
+    echo "nginx config changed — restarting nginx"
+    "${COMPOSE[@]}" restart nginx
+    echo "$NGINX_HASH" > "$NGINX_HASH_FILE"
+  fi
+
   # The JVM services take a while to register with Eureka — poll the site through nginx for up to 5 minutes.
   for _ in $(seq 1 30); do
     if curl -fsS -o /dev/null "https://$DOMAIN/"; then
