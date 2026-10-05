@@ -34,3 +34,6 @@ replay_pid*
 # Local secrets — never commit real credentials, only *.env.example templates
 .env
 .env.prod
+
+# JMeter results (README → Kiểm thử tải)
+loadtest/out/

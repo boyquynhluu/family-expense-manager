@@ -4,7 +4,7 @@ Hệ thống quản lý chi tiêu gia đình, dùng thực tế hàng ngày, xâ
 
 **Stack:** Spring Boot 3.3.5 + Doma 2 (không dùng JPA/Hibernate) · React (Vite) · MySQL + Flyway · Docker Compose · Kafka · Redis · Eureka · Spring Cloud Gateway **Server MVC** (servlet-based, không dùng WebFlux) · springdoc-openapi (Swagger UI).
 
-> Tài liệu mô tả **kiến trúc, cách chạy và toàn bộ tính năng đã làm** theo từng mục (mỗi mục có sơ đồ luồng, xem [Tính năng theo từng mục](#tính-năng-theo-từng-mục)). Schema bảng do Flyway quản lý (`db/migration/V*__*.sql`, xem [Database Migrations](#database-migrations-flyway)). Các nghiệp vụ dự kiến làm sau nằm ở [Nghiệp vụ dự kiến](#nghiệp-vụ-dự-kiến-backlog--chưa-làm).
+> Tài liệu mô tả **kiến trúc, cách chạy và toàn bộ tính năng đã làm** theo từng mục (mỗi mục có sơ đồ luồng, xem [Tính năng theo từng mục](#tính-năng-theo-từng-mục)). Schema bảng do Flyway quản lý (`db/migration/V*__*.sql`, xem [Database Migrations](#database-migrations-flyway)). Production chạy tại **https://quanlychitieu.online** (xem [Triển khai và CI/CD](#triển-khai-và-cicd)). Mọi việc chưa làm nằm ở [Việc cần làm (TODO)](#việc-cần-làm-todo).
 
 ## Kiến trúc
 
@@ -37,13 +37,13 @@ Hệ thống quản lý chi tiêu gia đình, dùng thực tế hàng ngày, xâ
       Tất cả service đăng ký với eureka-server (port 8761)
 ```
 
-Xem thêm mô tả chi tiết từng thành phần trong `docs/` (chưa tạo — có thể copy nội dung phần dưới vào đó nếu muốn tách riêng).
+Sơ đồ trên là môi trường dev. Trên production có thêm **nginx** đứng trước (HTTPS, `/api/*` → api-gateway, còn lại → frontend), xem [Triển khai và CI/CD](#triển-khai-và-cicd). `auth-service` cũng publish Kafka (email, sự kiện thành viên), xem [Hợp đồng Kafka](#hợp-đồng-kafka).
 
 ## Port & chạy service local
 
 Mỗi service là một Spring Boot app **độc lập** — chạy riêng process/terminal (hoặc Run Configuration riêng nếu dùng IDE), không phải tuần tự trong 1 process.
 
-| Service | Port | Lệnh chạy (khi đã có `Application.java`) |
+| Service | Port | Lệnh chạy |
 |---|---|---|
 | `eureka-server` | 8761 | `mvn -f backend/eureka-server spring-boot:run` |
 | `api-gateway` | 8080 | `mvn -f backend/api-gateway spring-boot:run` |
@@ -69,11 +69,23 @@ family-expense-manager/
 │   ├── expense-service/             # Ví/danh mục/giao dịch/ngân sách — schema FEM_EXPENSE
 │   └── notification-service/        # Xử lý thông báo qua Kafka — schema FEM_NOTIFY
 ├── frontend/                        # React + Vite SPA
+├── loadtest/fem-load.jmx            # Kịch bản kiểm thử tải JMeter (xem Kiểm thử tải)
+├── .github/workflows/               # backend-ci.yml, frontend-ci.yml (CI), deploy.yml (CD lên VPS)
 └── infra/
-    ├── docker-compose.yml           # 9 container: mysql-db, kafka, redis, eureka-server, api-gateway, 3 service, frontend
-    ├── mysql/init/                  # Script tạo database/user MySQL (chạy khi container MySQL khởi tạo lần đầu)
-    └── .env.example                 # copy thành .env trước khi docker compose up
+    ├── docker-compose.yml           # Dev: app + monitoring + cloudflared, mở cổng debug JDWP 5005-5009
+    ├── docker-compose-dev.yml       # Dev: như trên nhưng monitoring tách vào profile "monitoring"
+    ├── docker-compose.prod.yml      # Production trên VPS (xem Triển khai và CI/CD)
+    ├── .env.prod.example            # Mẫu biến môi trường production (copy thành .env.prod)
+    ├── DEPLOY.md                    # Hướng dẫn cài VPS từng bước
+    ├── deploy.sh                    # Script deploy, được workflow deploy.yml gọi trên VPS
+    ├── backup-mysql.sh              # mysqldump 3 database
+    ├── init-letsencrypt.sh          # Lấy chứng chỉ HTTPS lần đầu
+    ├── nginx/templates/             # Cấu hình nginx production
+    ├── prometheus/ loki/ promtail/ grafana/   # Cấu hình monitoring (mục 12)
+    └── mysql/init/                  # Script tạo database/user MySQL (chạy khi container MySQL khởi tạo lần đầu)
 ```
+
+Môi trường dev đọc biến từ `infra/.env` (không commit, không có file mẫu riêng; các biến giống `.env.prod.example`).
 
 Mỗi service backend đi theo layout chuẩn của Doma:
 ```
@@ -84,9 +96,13 @@ Mỗi service backend đi theo layout chuẩn của Doma:
 
 ## Mô hình dữ liệu (tóm tắt)
 
-**FEM_AUTH** — `FAMILIES(id, name, created_at)` · `USERS(id, family_id, email, password_hash, display_name, role, active, provider, provider_id, is_system_admin, relationship, totp_secret, totp_enabled, totp_last_step, locked, locked_at, pending_email, ...)` · `FAMILY_MEMBERSHIPS(user_id, family_id, role)` · `FAMILY_INVITES(id, family_id, email, token, expires_at, accepted_at)` · `REFRESH_TOKENS(id, user_id, token_hash, expires_at, revoked, device_info, ip_address, last_used_at)` · `TWO_FACTOR_RECOVERY_CODES(id, user_id, code_hash, used_at)`
+**FEM_AUTH** — `FAMILIES(id, name, created_at)` · `USERS(id, family_id, email, phone, password_hash, display_name, role, active, provider, provider_id, is_system_admin, relationship, totp_secret, totp_enabled, totp_last_step, locked, locked_at, pending_email, pending_email_token, ...)` · `FAMILY_MEMBERSHIPS(user_id, family_id, role)` · `FAMILY_INVITES(id, family_id, email, token, expires_at, accepted_at)` · `REFRESH_TOKENS(id, user_id, token_hash, expires_at, revoked, device_info, ip_address, last_used_at, rotated_at)` · `TWO_FACTOR_RECOVERY_CODES(id, user_id, code_hash, used_at)`
 
-**FEM_EXPENSE** — `WALLETS(id, family_id, name, currency, initial_balance, deleted_at)` · `CATEGORIES(id, family_id, name, type, icon, color, deleted_at)` · `TRANSACTIONS(id, wallet_id, category_id, family_id, user_id, created_by_name, type, amount, occurred_at, note, receipt_path, receipt_content_type, deleted_at)` · `WALLET_TRANSFERS(id, family_id, from_wallet_id, to_wallet_id, amount, note, occurred_at, created_by_user_id)` · `BUDGETS(id, family_id, category_id (NULL = ngân sách tổng), period_month, limit_amount)` · `RECURRING_TRANSACTIONS(id, family_id, wallet_id, category_id, type, amount, note, frequency, day_of_month, day_of_week, month_of_year, start_date, end_date, next_run_date, last_run_date, active, created_by_user_id)`
+Mọi token gửi qua email (xác thực, đặt lại mật khẩu, đổi email, lời mời) chỉ được lưu dạng **SHA-256** (migration V13), DB bị lộ cũng không dùng được link.
+
+**FEM_EXPENSE** — `WALLETS(id, family_id, owner_user_id (NULL = ví chung), name, currency, initial_balance, deleted_at)` · `CATEGORIES(id, family_id, name, type, icon, color, deleted_at)` · `TRANSACTIONS(id, wallet_id, category_id, family_id, user_id, created_by_name, type, amount, occurred_at, note, is_private, receipt_path, receipt_content_type, deleted_at, deleted_by_user_id, deleted_by_name, version)` · `TRANSACTION_AUDIT_LOGS(id, family_id, transaction_id, action, actor_user_id, actor_name, before_json, after_json, created_at)` · `WALLET_TRANSFERS(id, family_id, from_wallet_id, to_wallet_id, amount, note, occurred_at, created_by_user_id)` · `TRANSFER_REQUESTS(id, family_id, requester_user_id, approver_user_id, from_wallet_id, to_wallet_id, amount, note, status, decided_by_user_id, decided_at, transfer_id, created_at)` · `BUDGETS(id, family_id, category_id (NULL = ngân sách tổng), period_month, limit_amount, version)` · `RECURRING_TRANSACTIONS(id, family_id, wallet_id, category_id, type, amount, note, frequency, day_of_month, day_of_week, month_of_year, start_date, end_date, next_run_date, last_run_date, active, created_by_user_id)` · `IDEMPOTENCY_KEYS(id, family_id, scope, idempotency_key, response_json, created_at)`
+
+Cột `version` (V10) là **optimistic locking**: hai người cùng sửa một giao dịch hoặc ngân sách thì người lưu sau nhận 409 thay vì âm thầm ghi đè. `IDEMPOTENCY_KEYS` (V11): client gửi lại `POST /transactions` hoặc `POST /transfers` với cùng header `Idempotency-Key` (ví dụ sau khi timeout) thì nhận lại đúng response cũ, không tạo dòng thứ hai (`IdempotencyGuard`).
 
 **FEM_NOTIFY** — `NOTIFICATIONS(id, family_id, user_id, type, title, message, payload_json, is_read)` · `NOTIFICATION_PREFERENCES(user_id, type, in_app_enabled, email_enabled)`
 
@@ -114,19 +130,26 @@ erDiagram
     WALLETS ||--o{ WALLET_TRANSFERS : from_wallet_id
     WALLETS ||--o{ WALLET_TRANSFERS : to_wallet_id
 
+    %% ===== FEM_EXPENSE — cố ý KHÔNG có khoá ngoại (lịch sử, không được chặn xoá vĩnh viễn) =====
+    TRANSACTIONS ||..o{ TRANSACTION_AUDIT_LOGS : transaction_id
+    WALLETS ||..o{ TRANSFER_REQUESTS : "from_wallet_id, to_wallet_id"
+    WALLET_TRANSFERS |o..o| TRANSFER_REQUESTS : transfer_id
+
     %% ===== Khác database — chỉ ràng buộc ở tầng ứng dụng =====
-    FAMILIES ..o{ WALLETS : family_id
-    FAMILIES ..o{ CATEGORIES : family_id
-    FAMILIES ..o{ TRANSACTIONS : family_id
-    FAMILIES ..o{ BUDGETS : family_id
-    FAMILIES ..o{ RECURRING_TRANSACTIONS : family_id
-    FAMILIES ..o{ WALLET_TRANSFERS : family_id
-    FAMILIES ..o{ NOTIFICATIONS : family_id
-    USERS ..o{ TRANSACTIONS : "user_id (người tạo)"
-    USERS ..o{ RECURRING_TRANSACTIONS : created_by_user_id
-    USERS ..o{ WALLET_TRANSFERS : created_by_user_id
-    USERS ..o{ NOTIFICATIONS : user_id
-    USERS ..o{ NOTIFICATION_PREFERENCES : user_id
+    FAMILIES ||..o{ WALLETS : family_id
+    FAMILIES ||..o{ CATEGORIES : family_id
+    FAMILIES ||..o{ TRANSACTIONS : family_id
+    FAMILIES ||..o{ BUDGETS : family_id
+    FAMILIES ||..o{ RECURRING_TRANSACTIONS : family_id
+    FAMILIES ||..o{ WALLET_TRANSFERS : family_id
+    FAMILIES ||..o{ NOTIFICATIONS : family_id
+    USERS ||..o{ TRANSACTIONS : "user_id (người tạo)"
+    USERS ||..o{ RECURRING_TRANSACTIONS : created_by_user_id
+    USERS ||..o{ WALLET_TRANSFERS : created_by_user_id
+    USERS ||..o{ WALLETS : "owner_user_id (ví riêng)"
+    USERS ||..o{ TRANSFER_REQUESTS : "requester_user_id, approver_user_id"
+    USERS ||..o{ NOTIFICATIONS : user_id
+    USERS ||..o{ NOTIFICATION_PREFERENCES : user_id
 ```
 
 
@@ -139,7 +162,8 @@ Topic `expense-events`, key = `familyId`, phân biệt bằng field `eventType`:
 - `BUDGET_EXCEEDED` — chi **vượt 100% lần đầu** (không lặp lại ở các giao dịch vượt tiếp theo). Thông báo trong app và email cho người tạo giao dịch.
 - `RECURRING_EXECUTED`, `RECURRING_FAILED` — scheduler giao dịch định kỳ ghi thành công hoặc gặp lỗi. Chỉ trong app.
 - `EXPENSE_DELETED` — giao dịch bị xoá (xoá mềm, vào Thùng rác). `userId`/`userDisplayName` là **người xoá**. Xoá một giao dịch: event mô tả giao dịch đó (`transactionId`, `amount`, `occurredOn`, `note`) với `itemCount = 1`; **xoá hàng loạt chỉ publish một event** với `itemCount` = số giao dịch đã xoá, để không làm ngập thông báo của cả gia đình. Chỉ trong app, người dùng tắt được trong tuỳ chọn thông báo. Ai xoá cũng được lưu ngay trên dòng giao dịch (`deleted_by_user_id`, `deleted_by_name`, migration V12) và toàn bộ lịch sử tạo/sửa/xoá/khôi phục nằm ở bảng `TRANSACTION_AUDIT_LOGS` (V13, xem `GET /api/expenses/transactions/{id}/history`).
-- `WALLET_TRANSFERRED` — publish sau khi ghi `WALLET_TRANSFERRED` (mục 14). Một dòng thông báo trong app dùng chung cho cả gia đình (ví không có chủ sở hữu riêng, nên không có "người nhận" theo user). Về email, `notification-service` gửi hai kiểu khác nhau: người tạo giao dịch nhận email "đã trừ" (địa chỉ có sẵn trong event, do expense-service đọc từ JWT lúc publish), còn **mỗi thành viên khác trong gia đình** nhận email "đã cộng, ai chuyển" — địa chỉ của họ được tra cứu qua endpoint nội bộ `GET /internal/families/{familyId}/members` của auth-service (xem "Bảo mật" bên dưới), vì notification-service không có sẵn USERS. Lỗi gửi email (kể cả `BUDGET_EXCEEDED`) chỉ được log, không throw lại — tránh Kafka redeliver event và ghi trùng dòng thông báo trong app.
+- `TRANSFER_REQUESTED`, `TRANSFER_REQUEST_APPROVED`, `TRANSFER_REQUEST_REJECTED` — yêu cầu chuyển tiền (mục 28). Tạo yêu cầu: thông báo trong app và email cho chủ ví nguồn. Duyệt: chỉ trong app (bản thân khoản chuyển đã phát `WALLET_TRANSFERRED` kèm email). Từ chối: trong app và email cho người gửi yêu cầu.
+- `WALLET_TRANSFERRED` — publish sau khi ghi `WALLET_TRANSFERS` (mục 14). Một dòng thông báo trong app dùng chung cho cả gia đình (ví không có chủ sở hữu riêng, nên không có "người nhận" theo user). Về email, `notification-service` gửi hai kiểu khác nhau: người tạo giao dịch nhận email "đã trừ" (địa chỉ có sẵn trong event, do expense-service đọc từ JWT lúc publish), còn **mỗi thành viên khác trong gia đình** nhận email "đã cộng, ai chuyển" — địa chỉ của họ được tra cứu qua endpoint nội bộ `GET /internal/families/{familyId}/members` của auth-service (xem "Bảo mật" bên dưới), vì notification-service không có sẵn USERS. Lỗi gửi email (kể cả `BUDGET_EXCEEDED`) chỉ được log, không throw lại — tránh Kafka redeliver event và ghi trùng dòng thông báo trong app.
 
 Các topic khác (khai báo dưới `kafka.topic.*` trong `application.yml`): `user-verification` và `password-reset` (email xác thực, đặt lại mật khẩu, cả xác nhận đổi email), `family-invite` (email mời thành viên), `family-member-events` (`MEMBER_JOINED`, `MEMBER_LEFT`, `MEMBER_REMOVED`, do auth-service phát), `user-registered` (có tài khoản mới, kèm danh sách email admin nhận, xem mục 25).
 
@@ -152,7 +176,7 @@ Hành động nghiệp vụ chính (đăng ký, tạo giao dịch, chuyển ví.
 - **Producer** (`KafkaSendLogging`, dùng trong cả 6 publisher ở `auth-service`/`expense-service`): trước đây kết quả `send()` bị bỏ qua hoàn toàn — publish lỗi thì mất event, không một dòng log. Giờ mọi lỗi publish được `log.error(...)` kèm topic/key/event — không tự retry thêm (kafka-clients hiện đại đã tự retry nội bộ, giới hạn bởi `delivery.timeout.ms`, đủ chịu được gián đoạn ngắn), chỉ để lỗi thật sự (Kafka chết lâu) không còn im lặng.
 - **Consumer** (6 listener trong `notification-service`): mỗi `@KafkaListener` giờ có thêm `@RetryableTopic` — xử lý lỗi (lỗi DB, bug...) được thử lại 3 lần với backoff tăng dần trên topic retry riêng (`<topic>-retry-0`, `-retry-1`...), hết lượt vẫn lỗi thì rơi vào topic `<topic>-dlt` (tự tạo) thay vì mất hẳn sau khi log — có thể xem lại/replay bằng tay từ đó.
 
-**TODO — chưa làm, đang PENDING (đã chốt thiết kế, chưa code vì đổi nhiều file):** hai điều trên chỉ giúp **biết** khi mất và **không mất khi lỗi xử lý ở consumer** — chúng không giúp email **tự động gửi lại** khi Kafka thật sự publish thất bại lúc `send()` (ví dụ Kafka chết đúng lúc user bấm "quên mật khẩu"). Với các email quan trọng (xác thực tài khoản, đặt lại mật khẩu), thiết kế đã thống nhất — kiểu Transactional Outbox nhưng chỉ ghi outbox ở nhánh lỗi (không phải ghi trước cho mọi lần publish):
+**TODO (T1 trong [Việc cần làm](#việc-cần-làm-todo)) — đã chốt thiết kế, chưa code:** hai điều trên chỉ giúp **biết** khi mất và **không mất khi lỗi xử lý ở consumer** — chúng không giúp email **tự động gửi lại** khi Kafka thật sự publish thất bại lúc `send()` (ví dụ Kafka chết đúng lúc user bấm "quên mật khẩu"). Với các email quan trọng (xác thực tài khoản, đặt lại mật khẩu), thiết kế đã thống nhất — kiểu Transactional Outbox nhưng chỉ ghi outbox ở nhánh lỗi (không phải ghi trước cho mọi lần publish):
 
 ```
 Commit DB xong (AFTER_COMMIT, như hiện tại)
@@ -187,9 +211,9 @@ Phân chia trách nhiệm:
 - `infra/mysql/init/` (chạy đúng 1 lần khi container MySQL khởi tạo lần đầu — data volume rỗng): chỉ `CREATE DATABASE` + `CREATE USER` + `GRANT` cho `fem_auth`/`fem_expense`/`fem_notify`. **Không** tạo bảng ở đây. `fem_auth` tự tạo qua biến `MYSQL_DATABASE`/`MYSQL_USER` của image `mysql`; `fem_expense`/`fem_notify` tạo bằng script [`01-create-expense-notify-databases.sh`](infra/mysql/init/01-create-expense-notify-databases.sh) (cần 4 biến `FEM_EXPENSE_DB_USER/PASSWORD`, `FEM_NOTIFY_DB_USER/PASSWORD` — đã khai trong `environment:` của service `mysql-db`).
 - `<service>/src/main/resources/db/migration/` (Flyway, chạy tự động mỗi lần service khởi động, có version): sở hữu toàn bộ `CREATE TABLE`/`ALTER TABLE`. Đặt tên theo chuẩn Flyway `V<n>__<mo_ta>.sql`, ví dụ `V1__create_families_users_refresh_tokens.sql`.
 
-Flyway tự dùng `spring.datasource.*` đã cấu hình sẵn trong mỗi `application.yml`, không cần khai báo thêm `spring.flyway.url/user/password`. Migration chạy trước khi Doma/DAO nào được gọi, nên chỉ cần `docker compose up` (hoặc chạy MySQL local) rồi start service — bảng sẽ tự có.
+Flyway tự dùng `spring.datasource.*` đã cấu hình sẵn trong mỗi `application.yml`, không cần khai báo thêm `spring.flyway.url/user/password`. Migration chạy trước khi Doma/DAO nào được gọi, nên chỉ cần `docker compose up` (hoặc chạy MySQL local) rồi start service — bảng sẽ tự có. Toàn bộ migration được chạy thật trên MySQL trong integration test (mục 11) ở mỗi lần CI.
 
-Cả 3 file `V1__*.sql` đã smoke-test chạy thật, và toàn bộ luồng (register → login → CRUD → vượt ngân sách → notification) đã chạy thật **end-to-end qua `docker compose up`** — không chỉ smoke-test riêng lẻ từng phần.
+Hiện có: auth-service V1–V15, expense-service V1–V16, notification-service V1–V2. **Không sửa migration đã chạy trên production**, luôn thêm file version mới. Trên production, `deploy.sh` backup DB trước khi khởi động service (tức trước khi migration mới chạy).
 
 > ⚠️ Nếu xoá volume `mysql-data` (`docker compose down -v`) thì script `infra/mysql/init/` sẽ chạy lại từ đầu — bình thường. Nhưng nếu volume **đã tồn tại** (đã init trước đó) và bạn thêm/sửa script trong `infra/mysql/init/` sau này, nó **sẽ không tự chạy lại** (MySQL chỉ chạy init script khi data directory rỗng) — phải `docker compose down -v` rồi `up` lại, hoặc chạy SQL thủ công vào container đang chạy.
 
@@ -217,9 +241,15 @@ Khác biệt quan trọng so với bản reactive cần lưu ý nếu sửa gate
 
 ## Bảo mật
 
-JWT được xác thực **độc lập ở từng service** (qua `common`), không chỉ tin tưởng header do gateway set — gateway cũng xác thực để fail nhanh nhưng vẫn forward nguyên `Authorization` header xuống service. Access token 15 phút, refresh token 7 ngày. Ngoài ra: đăng xuất từ xa tức thì (mục 8), 2FA (mục 9), khoá đăng nhập tạm và khoá tài khoản (mục 22, 23), IP máy khách đáng tin cậy (mục 24), phân quyền OWNER/MEMBER kiểm tra ở backend (mục 17).
+JWT được xác thực **độc lập ở từng service** (qua `common`), không chỉ tin tưởng header do gateway set — gateway cũng xác thực để fail nhanh nhưng vẫn forward nguyên `Authorization` header xuống service. Access token 15 phút, refresh token 7 ngày. Ngoài ra: đăng xuất từ xa tức thì (mục 8), 2FA (mục 9), khoá đăng nhập tạm và khoá tài khoản (mục 22, 23), IP máy khách đáng tin cậy (mục 24), phân quyền OWNER/MEMBER kiểm tra ở backend (mục 17), token gửi qua email chỉ lưu dạng băm SHA-256.
 
-Mạng: 3 service nghiệp vụ không publish port HTTP ra host; chỉ `api-gateway` (8080), `eureka-server` và `frontend` là điểm vào. Lưu ý `infra/docker-compose.yml` bản dev còn publish thêm port debug JDWP (5005-5009), Redis 6379 và Kafka 9092 ra máy host — không dùng nguyên bản này khi triển khai thật.
+**Giới hạn tần suất**, hai lớp, vượt ngưỡng đều trả 429 với cùng body `{"message": "..."}`:
+- **nginx (production, mọi request, theo IP):** `/api/*` 20 req/s, cho phép dồn 40 request một lúc; file tĩnh của frontend 50 req/s, dồn 100; tối đa 30 kết nối đồng thời mỗi IP. Request vượt mức bị chặn ngay ở nginx, không chạm tới Java (`infra/nginx/templates/default.conf.template`).
+- **Gateway (`RateLimitFilter`, endpoint nhạy cảm, theo IP, cửa sổ 1 phút):** `login` 10, `2fa/verify-login` 10, `register` 5, `resend-verification` 3, `forgot-password` 5, `reset-password` 10, `refresh` 30.
+
+Giới hạn tính theo từng địa chỉ IPv6, nên mỗi thiết bị trong gia đình có hạn mức riêng. Kẻ tấn công có cả dải IPv6 (/64) thì đổi địa chỉ được để né, và DDoS thật từ nhiều nguồn thì một VPS không tự chống được (cần lớp bảo vệ phía trước như Cloudflare).
+
+Mạng: 3 service nghiệp vụ không publish port HTTP ra host; chỉ `api-gateway` (8080), `eureka-server` và `frontend` là điểm vào. Lưu ý `infra/docker-compose.yml` bản dev còn publish thêm port debug JDWP (5005-5009), Redis 6379 và Kafka 9092 ra máy host — chỉ dùng cho dev. Production dùng `docker-compose.prod.yml`: chỉ nginx mở 80/443, MySQL chỉ nghe trên `127.0.0.1` của VPS (để vào bằng SSH tunnel), mọi thứ khác nằm trong mạng nội bộ Docker.
 
 **Gọi service-to-service (`/internal/**`):** ngoại lệ duy nhất cho quy tắc "mọi thứ giữa các service là Kafka bất đồng bộ" (xem `ExpenseEvent`'s javadoc) là `notification-service` gọi thẳng `GET /internal/families/{familyId}/members` của auth-service để lấy email các thành viên gia đình cho email "nhận được tiền" (mục 14). `api-gateway` không có route cho `/internal/**` nên chỉ gọi được trong mạng Docker nội bộ; đồng thời `InternalController` yêu cầu JWT có `role = SERVICE` (`@PreAuthorize("hasRole('SERVICE')")`) — `FamilyMemberDirectory` tự ký một JWT ngắn hạn (60 giây) bằng `JWT_SECRET` dùng chung cho mục đích này, một token của user thường (dù role gì) bị từ chối 403. Lỗi gọi (auth-service down, timeout...) chỉ log và coi như không có người nhận, không throw — không làm hỏng phần còn lại của event.
 
@@ -229,7 +259,7 @@ Mỗi mục gồm: mục tiêu, **sơ đồ luồng di chuyển** (Mermaid, GitH
 
 - **Nền tảng (N1–N4):** luồng cốt lõi từ ngày đầu — đăng ký/đăng nhập, quên mật khẩu, Google, ghi chi tiêu.
 - **Mục 1–13:** danh sách task ban đầu, đã hoàn thành (nội dung được cập nhật theo hiện trạng).
-- **Mục 14–25:** các nghiệp vụ bổ sung sau khi rà soát còn thiếu.
+- **Mục 14–29:** các nghiệp vụ bổ sung sau khi rà soát còn thiếu.
 
 ### Bản đồ tổng quan: mục nào nằm ở đâu
 
@@ -238,8 +268,8 @@ flowchart LR
     U["Trình duyệt<br/>React, i18n vi/en"]
     GW["api-gateway :8080<br/>JWT, rate limit, IP tin cậy"]
     AU["auth-service :8081<br/>N1-N3, mục 6, 8, 9, 16, 22, 23, 25"]
-    EX["expense-service :8082<br/>mục 1, 3, 4, 5, 7, 10, 14, 15, 18, 20, 21"]
-    NO["notification-service :8083<br/>mục 2, 19, 25"]
+    EX["expense-service :8082<br/>mục 1, 3, 4, 5, 7, 10, 14, 15, 18, 20, 21, 26-29"]
+    NO["notification-service :8083<br/>mục 2, 19, 25, 28"]
     DB[("MySQL<br/>Flyway migrations")]
     RD[("Redis<br/>cache, phiên thu hồi, challenge 2FA, khoá đăng nhập")]
     KF{{"Kafka<br/>expense-events, family-member-events, ..."}}
@@ -265,7 +295,7 @@ flowchart LR
 
 | Mục | Tính năng | Service chính | Trang frontend |
 |---|---|---|---|
-| N1–N4 | Đăng ký/đăng nhập (kể cả email chưa xác thực), quên mật khẩu, Google, ghi chi tiêu | auth, expense | Login, Register, Verify, Transactions |
+| N1–N4 | Đăng ký/đăng nhập bằng email hoặc số điện thoại (kể cả email chưa xác thực), quên mật khẩu, Google, ghi chi tiêu | auth, expense | Login, Register, Verify, Transactions |
 | 1 | Phân trang chung 5 dòng/trang | mọi service | mọi danh sách |
 | 2 | Cảnh báo vượt ngân sách (app và email) | expense, notification | Notifications |
 | 3 | Giao dịch định kỳ (tháng, tuần, năm) | expense | RecurringTransactions |
@@ -291,6 +321,10 @@ flowchart LR
 | 23 | Quản trị hệ thống, khoá người dùng | auth | AdminPanel |
 | 24 | IP máy khách đáng tin cậy | gateway | không có |
 | 25 | Email báo admin khi có tài khoản mới | auth, notification | không có |
+| 26 | Ví riêng và ví chung | expense | Wallets |
+| 27 | Giao dịch riêng tư | expense | Transactions, Trash |
+| 28 | Yêu cầu chuyển tiền | expense, notification | Wallets |
+| 29 | Giới hạn số tiền, chống ghi trùng và ghi đè | expense | Transactions, Wallets, Budgets |
 
 ---
 
@@ -322,6 +356,8 @@ sequenceDiagram
 
 Access token là JWT mang `sub` (userId), `familyId`, `role`. Mọi service tự xác thực JWT độc lập, gateway chỉ kiểm tra sớm để trả 401 nhanh.
 
+**Đăng nhập bằng số điện thoại:** ô đăng nhập nhận email hoặc số điện thoại (không có `@` thì hiểu là số điện thoại), vẫn kèm mật khẩu. Số điện thoại là tuỳ chọn, nhập lúc đăng ký hoặc trong Profile, được chuẩn hoá về dạng `+84…` (`PhoneNumbers`) nên `0912 345 678` và `+84912345678` là một số; mỗi số chỉ thuộc một tài khoản (`UNIQUE`). Số điện thoại **chưa được xác minh** bằng OTP (xem C8 trong TODO).
+
 #### N1b — Email chưa xác thực: đăng ký lại, gửi lại link, tự dọn
 
 Khi đăng ký xong mà chưa bấm link xác thực (hoặc link đã hết hạn), tài khoản ở trạng thái `active = false` và email vẫn nằm trong DB. Người dùng không bị kẹt:
@@ -347,7 +383,7 @@ flowchart TD
 
 - **Đăng ký lại đè lên tài khoản chưa xác thực** (chỉ khi tài khoản thường, chưa kích hoạt, chưa bị khoá và có mật khẩu). Người lạ đăng ký bằng email của bạn cũng không xác thực được vì không có hộp thư, nên đè lên không gây hại. Tài khoản đã xác thực, đăng ký qua Google hoặc bị khoá vẫn nhận 409.
 - **`POST /api/auth/resend-verification`** (công khai, body `{email}`) luôn trả cùng một thông báo dù email có tồn tại hay không, để không lộ email nào đã đăng ký. Gateway giới hạn 3 lần/phút, và mỗi tài khoản chỉ được gửi lại sau 60 giây kể từ email trước.
-- **Tự dọn:** mặc định 02:30 mỗi ngày, xoá tài khoản chưa xác thực đã quá **7 ngày sau khi token hết hạn**, kèm gia đình rỗng của nó (bỏ qua nếu tài khoản đang là chủ hộ của gia đình có thành viên khác). Đổi bằng biến môi trường `AUTH_UNVERIFIED_CLEANUP_CRON` và `AUTH_UNVERIFIED_CLEANUP_RETENTION_DAYS` trong `infra/.env`.
+- **Tự dọn:** mặc định 02:30 mỗi ngày, xoá tài khoản chưa xác thực đã quá **7 ngày sau khi token hết hạn**, kèm gia đình rỗng của nó (bỏ qua nếu tài khoản đang là chủ hộ của gia đình có thành viên khác). Đổi bằng biến môi trường `AUTH_UNVERIFIED_CLEANUP_CRON` và `AUTH_UNVERIFIED_CLEANUP_RETENTION_DAYS` trong `infra/.env` (production: `infra/.env.prod`).
 - Không gửi lại email báo admin (mục 25) khi đăng ký lại đè lên tài khoản đang chờ, để admin không bị báo trùng.
 
 #### N2 — Quên và đặt lại mật khẩu
@@ -375,6 +411,8 @@ flowchart TD
     G -- "Bật 2FA" --> H["Redirect kèm twoFactorToken<br/>FE hỏi mã 6 số, xem mục 9"]
     G -- "Không" --> I["Redirect /oauth2/callback kèm access và refresh token"]
 ```
+
+Trang Login có sẵn nút Facebook và GitHub nhưng đang ở trạng thái "sắp có" (bị vô hiệu). Backend đã có `AppOAuth2UserService` cho Facebook nhưng registration đang tắt trong `application.yml` (xem T8 trong TODO).
 
 #### N4 — Ghi chi tiêu và cập nhật dữ liệu liên quan
 
@@ -558,7 +596,7 @@ flowchart TD
     D --> F["Dashboard và báo cáo cộng tổng an toàn<br/>vì cùng một đơn vị tiền"]
 ```
 
-Số dư hiện tại của ví = số dư đầu + thu − chi + chuyển vào − chuyển ra (xem mục 14).
+Số dư hiện tại của ví = số dư đầu + thu − chi + chuyển vào − chuyển ra (xem mục 14). Ví có thể là ví chung hoặc ví riêng của một thành viên, xem mục 26.
 
 ### Mục 8 — Quản lý phiên đăng nhập, đăng xuất từ xa
 
@@ -587,7 +625,7 @@ sequenceDiagram
 
 Thời gian hiển thị: backend trả `LocalDateTime` theo giờ UTC không kèm múi giờ, frontend đổi sang giờ máy người xem bằng `formatServerDateTime` (`frontend/src/utils/format.js`).
 
-**Xoay và phát hiện dùng lại refresh token** (`AuthService#refresh`): mỗi lần refresh, token cũ bị thu hồi **nguyên tử** ngay trước khi phát token mới (`RefreshTokenDao#revokeById` chỉ update khi `revoked = false`, trả về số dòng bị ảnh hưởng) — hai request refresh song song cùng một token chỉ một request thắng, request còn lại nhận 401 thay vì cả hai cùng phát được token mới. Nếu một refresh token **đã bị thu hồi** lại được gửi lên lần nữa (dấu hiệu kinh điển của việc token bị đánh cắp và dùng song song với chủ tài khoản thật), toàn bộ phiên đăng nhập của user đó bị thu hồi ngay (`revokeAllByUserId`), buộc đăng nhập lại ở mọi thiết bị. `refresh` cũng kiểm tra tài khoản còn `active` (đã xác thực email), giống điều kiện ở `login`.
+**Xoay và phát hiện dùng lại refresh token** (`AuthService#refresh`): mỗi lần refresh, token cũ bị thu hồi **nguyên tử** ngay trước khi phát token mới (`RefreshTokenDao#revokeById` chỉ update khi `revoked = false`, trả về số dòng bị ảnh hưởng) — hai request refresh song song cùng một token chỉ một request thắng, request còn lại nhận 401 thay vì cả hai cùng phát được token mới. Nếu một refresh token **đã bị xoay** (`rotated_at`, V12) lại được gửi lên lần nữa **quá 60 giây** sau khi xoay (dấu hiệu kinh điển của việc token bị đánh cắp và dùng song song với chủ tài khoản thật), toàn bộ phiên đăng nhập của user đó bị thu hồi ngay (`revokeAllByUserId`), buộc đăng nhập lại ở mọi thiết bị. Trong 60 giây đầu thì chỉ trả 401: thường là hai tab trình duyệt dùng chung một refresh token cùng refresh một lúc, không phải bị đánh cắp. Token bị thu hồi vì đăng xuất hoặc admin khoá không có `rotated_at`, nên không bị nhầm là dùng lại. `refresh` cũng kiểm tra tài khoản còn `active` (đã xác thực email), giống điều kiện ở `login`.
 
 ### Mục 9 — Xác thực 2 lớp (TOTP)
 
@@ -765,10 +803,11 @@ sequenceDiagram
     participant N as notification-service
     participant AU as auth-service (internal)
 
-    U->>FE: Chọn ví nguồn, ví đích, số tiền, thời gian, ghi chú
-    FE->>EX: POST /api/expenses/transfers
-    EX->>DB: Kiểm tra 2 ví thuộc gia đình, chưa xoá, khác nhau, cùng loại tiền, số tiền >= 0.01
-    EX->>DB: Số tiền phải <= số dư hiện tại của VÍ NGUỒN (đầu + thu − chi + chuyển vào − chuyển ra)
+    U->>FE: Chọn ví nguồn (ví riêng của mình), ví đích, số tiền, thời gian, ghi chú
+    FE->>EX: POST /api/expenses/transfers (có thể kèm header Idempotency-Key)
+    EX->>DB: Kiểm tra 2 ví thuộc gia đình, chưa xoá, khác nhau, cùng loại tiền, số tiền 10.000đ–5.000.000đ (mục 29)
+    EX->>DB: Ví nguồn phải là ví RIÊNG của người chuyển; ví đích là ví riêng của người khác hoặc ví chung (mục 26)
+    EX->>DB: Khoá dòng ví nguồn (SELECT ... FOR UPDATE), số tiền phải <= số dư hiện tại của ví nguồn
     EX->>DB: Ghi WALLET_TRANSFERS (không tạo giao dịch thu hoặc chi)
     EX->>K: Publish WALLET_TRANSFERRED (sau khi commit)
     EX-->>FE: OK, FE tải lại lịch sử chuyển và số dư ví
@@ -783,6 +822,8 @@ sequenceDiagram
 ```
 
 Khoản chuyển **không** tính vào báo cáo thu chi, biểu đồ xu hướng hay ngân sách, nên tổng thu chi không bị sai. Endpoint: `POST/GET /api/expenses/transfers` (phân trang), `PUT /{id}`, `DELETE /{id}`.
+
+Quy tắc ví nguồn/ví đích áp dụng cho cả OWNER: không ai chuyển được tiền ra khỏi ví riêng của người khác hay ví chung. Muốn lấy tiền từ ví của thành viên khác thì gửi **yêu cầu chuyển tiền** (mục 28). Khoá dòng ví nguồn giúp hai lần chuyển đồng thời không cùng đọc một số dư rồi cùng vượt quá. Khi sửa khoản chuyển cũ (tạo trước khi có quy tắc ví riêng), mỗi phía chỉ bị kiểm tra lại nếu ví ở phía đó thay đổi.
 
 ### Mục 15 — Dữ liệu mẫu cho gia đình mới
 
@@ -827,7 +868,7 @@ flowchart TD
     OWNER_LEAVE["OWNER gọi /family/leave"] --> ERR["400: phải chuyển quyền chủ hộ trước"]
 ```
 
-Rời gia đình, chuyển quyền, xoá thành viên đều phát sự kiện thành viên (mục 19). Gia đình luôn còn ít nhất một OWNER. **Chưa có** chức năng xoá gia đình.
+Rời gia đình, chuyển quyền, xoá thành viên đều phát sự kiện thành viên (mục 19). Gia đình luôn còn ít nhất một OWNER. **Chưa có** chức năng xoá gia đình (TODO T7).
 
 ### Mục 17 — Phân quyền OWNER và MEMBER
 
@@ -835,14 +876,16 @@ Rời gia đình, chuyển quyền, xoá thành viên đều phát sự kiện t
 flowchart LR
     A["Yêu cầu từ người dùng"] --> B{"Đối tượng"}
     B -- "Ví, danh mục, ngân sách,<br/>dữ liệu mẫu" --> C["Chỉ OWNER được tạo, sửa, xoá, khôi phục<br/>MEMBER chỉ xem"]
-    B -- "Giao dịch" --> D["MEMBER: chỉ sửa, xoá, khôi phục,<br/>đính kèm ảnh của chính mình<br/>OWNER: tất cả"]
+    B -- "Giao dịch" --> D["MEMBER: chỉ sửa, xoá, khôi phục,<br/>đính kèm ảnh của chính mình<br/>OWNER: tất cả, trừ giao dịch riêng tư của người khác (mục 27)<br/>Ghi vào ví riêng của người khác: 403 (mục 26)"]
     B -- "Giao dịch định kỳ" --> E["Ai cũng tạo được<br/>sửa, bật/tắt, xoá: người tạo quy tắc hoặc OWNER"]
-    B -- "Chuyển ví" --> F["Ai cũng tạo được<br/>sửa, xoá: người tạo hoặc OWNER"]
+    B -- "Chuyển ví" --> F["Ai cũng tạo được, chỉ từ ví riêng của mình (mục 14)<br/>sửa, xoá: người tạo hoặc OWNER"]
+    B -- "Yêu cầu chuyển tiền" --> F2["Ai cũng gửi được<br/>duyệt, từ chối: chỉ chủ ví nguồn (mục 28)"]
     B -- "Gia đình, lời mời, xoá thành viên" --> G["Chỉ OWNER"]
     C --> H["Vi phạm: 403 Bạn không có quyền thực hiện thao tác này"]
     D --> H
     E --> H
     F --> H
+    F2 --> H
     G --> H
 ```
 
@@ -877,6 +920,7 @@ flowchart LR
         E4["RECURRING_FAILED"]
         E5["WALLET_TRANSFERRED"]
         E6["EXPENSE_DELETED"]
+        E7["TRANSFER_REQUESTED<br/>TRANSFER_REQUEST_APPROVED<br/>TRANSFER_REQUEST_REJECTED"]
     end
     subgraph AUTHS["auth-service, topic family-member-events"]
         A1["MEMBER_JOINED"]
@@ -889,14 +933,16 @@ flowchart LR
     E4 --> N
     E5 --> N
     E6 --> N
+    E7 --> N
     A1 --> N
     A2 --> N
     A3 --> N
     E2 -->|"nếu người tạo chưa tắt email"| M["Email cảnh báo vượt ngân sách"]
     E5 -->|"nếu chưa tắt email"| W1["Email 'đã trừ' cho người tạo"]
     E5 -->|"tra email qua auth-service /internal, nếu chưa tắt"| W2["Email 'đã cộng' cho từng thành viên khác"]
+    E7 -->|"nếu chưa tắt email"| W3["Email cho chủ ví (yêu cầu mới)<br/>hoặc người gửi (bị từ chối)"]
     N --> UI["Trang Notifications + chuông báo chưa đọc"]
-    P["Tuỳ chọn của từng người dùng<br/>hiện trong app theo loại, email cho BUDGET_EXCEEDED/WALLET_TRANSFERRED"] -.->|"lọc lúc đọc danh sách và đếm chưa đọc"| UI
+    P["Tuỳ chọn của từng người dùng<br/>hiện trong app theo loại, email cho BUDGET_EXCEEDED, WALLET_TRANSFERRED,<br/>TRANSFER_REQUESTED, TRANSFER_REQUEST_REJECTED"] -.->|"lọc lúc đọc danh sách và đếm chưa đọc"| UI
 ```
 
 Endpoint: `GET /api/notifications` (phân trang), `GET /unread-count`, `PUT /{id}/read`, `PUT /read-all`, `DELETE /{id}`, `DELETE /read` (xoá mọi thông báo đã đọc), `GET/PUT /preferences`. Vì thông báo được lưu theo gia đình, việc tắt hiển thị một loại chỉ ảnh hưởng người tắt (lọc lúc đọc), không mất thông báo của người khác. Quy tắc định kỳ đang lỗi sẽ báo lỗi mỗi ngày cho đến khi được sửa.
@@ -969,7 +1015,7 @@ sequenceDiagram
     AU->>AU: Đổi email, xoá pending, thu hồi các phiên khác
 ```
 
-Email xác nhận đổi email hiện dùng lại mẫu email "Xác thực tài khoản"; muốn câu chữ đúng ngữ cảnh cần thêm mẫu riêng ở notification-service.
+Email xác nhận đổi email hiện dùng lại mẫu email "Xác thực tài khoản" (TODO T6: thêm mẫu riêng ở notification-service).
 
 **Xuất dữ liệu và xoá tài khoản**
 
@@ -981,7 +1027,7 @@ flowchart TD
     D2 -- "Có" --> D3["400: phải chuyển quyền chủ hộ trước"]
     D2 -- "Không" --> D4["Xoá phiên, mã khôi phục 2FA, membership, lời mời đã gửi, rồi xoá user"]
     D4 --> D5{"Gia đình nào còn 0 thành viên?"}
-    D5 -- "Có" --> D6["Xoá dòng gia đình bên auth-service<br/>dữ liệu chi tiêu và thông báo của gia đình đó vẫn còn (mồ côi)"]
+    D5 -- "Có" --> D6["Xoá dòng gia đình bên auth-service<br/>dữ liệu chi tiêu và thông báo của gia đình đó vẫn còn (mồ côi, TODO T7)"]
     D5 -- "Không" --> D7["Xong, FE xoá token và về trang đăng nhập"]
     D6 --> D7
 ```
@@ -1005,14 +1051,14 @@ flowchart TD
 flowchart TD
     A["Request vào api-gateway"] --> B{"remoteAddr là địa chỉ riêng<br/>(private, loopback, link-local)?"}
     B -- "Không, kết nối trực tiếp từ ngoài" --> C["IP = remoteAddr<br/>bỏ qua mọi header chuyển tiếp"]
-    B -- "Có, đi qua proxy tin cậy<br/>(nginx, cloudflared, mạng Docker)" --> D["IP = phần tử NGOÀI CÙNG BÊN PHẢI của X-Forwarded-For<br/>do proxy gần nhất thêm vào"]
+    B -- "Có, đi qua proxy tin cậy<br/>(nginx, mạng Docker)" --> D["IP = phần tử NGOÀI CÙNG BÊN PHẢI của X-Forwarded-For<br/>do proxy gần nhất thêm vào"]
     C --> E["ClientIpFilter xoá X-Client-Ip do client gửi<br/>rồi đặt X-Client-Ip = IP đã tính"]
     D --> E
     E --> F["RateLimitFilter dùng IP này để đếm"]
     E --> G["auth-service đọc X-Client-Ip để ghi IP vào phiên"]
 ```
 
-Trước đây hệ thống tin phần tử **đầu** của `X-Forwarded-For` (client giả được). Qua Cloudflare, IP thật là phần tử cuối vì Cloudflare thêm vào sau giá trị client gửi. Giới hạn còn lại: khi gọi thẳng vào cổng 8080 từ máy host trong môi trường Docker Desktop, địa chỉ nguồn là dải riêng nên vẫn giả được bằng header; nên chỉ để cổng 8080 truy cập được qua nginx hoặc Cloudflare khi triển khai thật.
+Hệ thống không tin phần tử **đầu** của `X-Forwarded-For` vì client tự điền được; IP thật là phần tử cuối do proxy gần nhất thêm vào. Trên production, nginx là proxy duy nhất và cổng 8080 không mở ra ngoài, nên header không giả được. Mạng Docker `fem-network` bật IPv6 để nginx thấy đúng địa chỉ IPv6 thật của người dùng (VPS chỉ có IPv6 public). nginx **không** đọc `CF-Connecting-IP` vì production không đi qua Cloudflare; tin header đó khi không có Cloudflare sẽ cho phép giả IP. Giới hạn còn lại chỉ ở dev: gọi thẳng cổng 8080 từ máy host trong Docker Desktop thì địa chỉ nguồn là dải riêng, nên vẫn giả được bằng header.
 
 ### Mục 25 — Email báo cho admin khi có tài khoản mới
 
@@ -1054,17 +1100,110 @@ sequenceDiagram
 - Sự kiện chỉ được gửi sau khi giao dịch tạo tài khoản commit. Gửi mail lỗi (SMTP chưa cấu hình hoặc một địa chỉ hỏng) chỉ ghi log, không làm Kafka gửi lại sự kiện.
 - Mẫu email: `notification-service/src/main/resources/mail-templates/new-user-registered-email.html`. Link "Mở trang quản trị" trỏ tới `FRONTEND_BASE_URL/admin`.
 
+### Mục 26 — Ví riêng và ví chung
+
+```mermaid
+flowchart TD
+    A["OWNER tạo hoặc sửa ví<br/>chọn chủ ví: một thành viên hoặc 'Ví chung'"] --> B[("WALLETS.owner_user_id<br/>NULL = ví chung")]
+    C["Ghi giao dịch, giao dịch định kỳ<br/>vào một ví"] --> D{"WalletService.canUse"}
+    D -- "Người gọi là OWNER" --> OK["Cho phép"]
+    D -- "Ví chung" --> OK
+    D -- "Ví riêng của chính người gọi" --> OK
+    D -- "Ví riêng của thành viên khác" --> X["403 Ví riêng của thành viên khác"]
+```
+
+- **Xem không bị giới hạn:** mọi thành viên vẫn thấy mọi ví và số dư. Giới hạn chỉ áp dụng khi ghi tiền vào hoặc ra khỏi ví.
+- Ví có từ trước migration V14 giữ nguyên là ví chung để không ai mất quyền khi nâng cấp; OWNER gán chủ ví sau trên trang Wallets.
+- Chuyển tiền có quy tắc chặt hơn (chỉ từ ví riêng của chính mình), xem mục 14.
+
+### Mục 27 — Giao dịch riêng tư
+
+```mermaid
+flowchart TD
+    A["Người tạo tích 'Riêng tư'<br/>TRANSACTIONS.is_private = true"] --> B{"Ai xem?"}
+    B -- "Người tạo" --> C["Thấy đầy đủ như giao dịch thường"]
+    B -- "Người khác, kể cả OWNER" --> D{"Danh sách chỉ lọc theo ngày?"}
+    D -- "Có" --> E["Hiện dòng che: chỉ người tạo và thời gian,<br/>số tiền, ví, danh mục, ghi chú hiện ***"]
+    D -- "Không, có lọc ví, danh mục, loại, ghi chú, số tiền" --> F["Ẩn hẳn dòng đó<br/>vì bộ lọc khớp sẽ làm lộ thông tin"]
+    A --> G["Số tiền VẪN được tính vào số dư ví, tổng hợp,<br/>báo cáo, ngân sách: tổng của gia đình luôn đúng tiền thật"]
+```
+
+- Chi tiết, ảnh hoá đơn, lịch sử, thùng rác và file export của giao dịch riêng tư chỉ người tạo xem được; người khác (kể cả OWNER) nhận 404.
+- Chỉ người tạo được đổi trạng thái riêng tư. OWNER sửa giao dịch thường của người khác không bật được riêng tư, vì như vậy chính OWNER cũng mất quyền xem.
+- Thông báo `EXPENSE_DELETED` của giao dịch riêng tư che số tiền và ghi chú bằng `***`.
+
+### Mục 28 — Yêu cầu chuyển tiền
+
+```mermaid
+sequenceDiagram
+    actor B as Thành viên B
+    participant EX as TransferRequestService
+    participant N as notification-service
+    actor A as Chủ ví A
+
+    B->>EX: POST /api/expenses/transfer-requests<br/>từ ví riêng của A sang ví riêng của B, số tiền, ghi chú
+    EX->>EX: Kiểm tra: ví nguồn là ví riêng của người khác (không phải ví chung, không phải của B)<br/>ví nhận là ví riêng của B, cùng tiền tệ, 10.000đ–5.000.000đ<br/>B có dưới 5 yêu cầu đang chờ
+    EX->>N: TRANSFER_REQUESTED, trạng thái PENDING
+    N-->>A: Thông báo trong app + email
+    alt A đồng ý: POST /{id}/approve
+        EX->>EX: Tạo khoản chuyển thật qua WalletTransferService (đủ mọi kiểm tra, kể cả số dư)<br/>và đánh dấu COMPLETED trong cùng một transaction
+        EX->>N: TRANSFER_REQUEST_APPROVED (trong app) + WALLET_TRANSFERRED (email như mục 14)
+    else A từ chối: POST /{id}/reject
+        EX->>N: TRANSFER_REQUEST_REJECTED, trạng thái REJECTED
+        N-->>B: Thông báo trong app + email
+    end
+```
+
+- Chỉ chủ ví nguồn được duyệt hoặc từ chối; người khác gọi thì nhận 404 (không lộ yêu cầu tồn tại). Không ai ngoài chủ ví chuyển được tiền ra khỏi ví riêng của họ.
+- Duyệt mà chuyển thất bại (ví dụ không còn đủ số dư) thì yêu cầu vẫn ở PENDING. Hai người bấm cùng lúc (double click) thì người sau nhận 409.
+- `GET /transfer-requests` (phân trang) trả cả yêu cầu mình đã gửi và yêu cầu đang chờ mình duyệt; `GET /pending-count` là số trên huy hiệu ở trang Wallets (component `TransferRequests.jsx`).
+- `TRANSFER_REQUESTS` cố ý không có khoá ngoại tới `WALLETS`: yêu cầu là lịch sử, không được chặn việc xoá ví.
+
+### Mục 29 — Giới hạn số tiền, chống ghi trùng và ghi đè
+
+- **Giới hạn số tiền** (`TransactionAmounts`): mọi khoản tiền di chuyển (giao dịch thu/chi, giao dịch định kỳ, import CSV/Excel, chuyển ví, yêu cầu chuyển tiền) phải từ **10.000đ đến 5.000.000đ**. Ngân sách có giới hạn riêng trong `BudgetService`; số dư đầu của ví không bị giới hạn. Frontend kiểm tra cùng giới hạn trong `utils/inputLimits.js`, hai nơi phải sửa đồng bộ.
+- **Chống ghi trùng** (`IdempotencyGuard`, bảng `IDEMPOTENCY_KEYS`): `POST /transactions` và `POST /transfers` nhận header `Idempotency-Key`; gửi lại cùng key thì nhận lại đúng response cũ thay vì tạo dòng thứ hai.
+- **Chống ghi đè** (optimistic locking, cột `version` trên `TRANSACTIONS` và `BUDGETS`): hai người cùng sửa một dòng thì người lưu sau nhận 409 và phải tải lại.
+
 ---
 
-## Nghiệp vụ dự kiến (backlog — chưa làm)
+## Việc cần làm (TODO)
 
-Kết quả review nghiệp vụ ngày 01/10/2026. Thứ tự đề xuất: **B1 → B2 → B3 → A1/A2 → phần còn lại**.
+Mọi việc chưa làm của project, gom về một chỗ (cập nhật 05/10/2026). Thứ tự đề xuất:
+
+1. **Vận hành (V1, V2):** site đã chạy thật, nên các việc ảnh hưởng người dùng và dữ liệu được làm trước.
+2. **Toàn vẹn số liệu:** B1 → B2 → B3 → A1/A2.
+3. **Phần còn lại** của A, C và T, tuỳ nhu cầu.
+
+### V. Vận hành và hạ tầng
+
+- [ ] **V1 — Truy cập bằng IPv4.** VPS chỉ có IPv6 public (IPv4 `10.10.1.19` chỉ là NAT để đi ra), nên người dùng ở mạng chỉ có IPv4 không vào được site. Hỏi Topcloud cấp IPv4 public hoặc NAT cổng 80/443 về VPS. Cách thay thế là Cloudflare proxy, nhưng phương án này đã bị loại; nếu dùng lại thì phải thêm `set_real_ip_from` + `real_ip_header CF-Connecting-IP` vào nginx (xem `infra/DEPLOY.md`).
+- [ ] **V2 — Đẩy backup ra ngoài VPS.** `backup-mysql.sh` chỉ ghi vào `/var/backups/fem` (cron hằng đêm) và `~/fem-backups` (trước mỗi lần deploy) trên chính VPS, nên hỏng ổ đĩa là mất cả dữ liệu lẫn backup. Dùng rclone/rsync đẩy lên Google Drive/S3 hoặc máy khác. Sao lưu thêm volume ảnh hoá đơn `receipt-uploads`.
+- [ ] **V3 — Giám sát và cảnh báo.** Bật monitoring trên VPS (`--profile monitoring`, xem mục 12), thêm uptime check từ bên ngoài (dịch vụ hỗ trợ IPv6) để nhận email khi site chết. Bật email khi workflow lỗi: GitHub → Settings tài khoản → Notifications → Actions → "Only notify for failed workflows".
+- [ ] **V4 — Bảo mật VPS.** Cài `unattended-upgrades` (tự vá bảo mật) và `fail2ban` cho SSH.
+- [ ] **V5 — RAM của VPS.** Tổng `mem_limit` trong `docker-compose.prod.yml` khoảng 4,5 GB; kiểm tra bằng `free -h` và `docker stats`. Nếu thiếu thì giảm limit hoặc nâng VPS, chưa cần load balancer (xem [Triển khai và CI/CD](#triển-khai-và-cicd)).
+- [ ] **V6 — Tự deploy khi chỉ sửa `infra/`.** Commit chỉ sửa `infra/**` hoặc `deploy.yml` không chạy CI nên không tự deploy; thêm trigger `push` theo `paths: infra/**` vào `deploy.yml`.
+- [ ] **V7 — Build image trên GitHub.** Hiện VPS tự build 5 image Java mỗi lần deploy (tốn CPU/RAM, lâu). Có thể build trên GitHub Actions, đẩy lên GHCR rồi VPS chỉ `pull`; khi đó compose đổi sang `image: ghcr.io/...`.
+
+- [ ] **V8 — Đo tải thật.** Chạy [kiểm thử tải](#kiểm-thử-tải-jmeter) trên máy local với tài nguyên bằng VPS, ghi lại ngưỡng req/s và nút thắt vào README, rồi chỉnh `DB_POOL_SIZE`/`TOMCAT_MAX_THREADS`/`mem_limit` nếu cần.
+
+### T. Kỹ thuật
+
+- [ ] **T1 — Outbox cho Kafka.** Thiết kế đã chốt ở [Chịu lỗi khi Kafka gặp sự cố](#chịu-lỗi-khi-kafka-gặp-sự-cố): bảng `OUTBOX_EVENTS`, đổi 6 publisher sang chờ ack có timeout, job gửi lại. Cần chốt trước: chỉ 2 email quan trọng (xác thực, đặt lại mật khẩu) hay cả 6 loại event.
+- [ ] **T2 — Test cho frontend.** Backend có unit test và integration test chạy trong CI; frontend chưa có test nào (CI chỉ lint và build). Bắt đầu bằng Vitest + React Testing Library cho các hook dùng chung (`usePagedList`) và form chính.
+- [ ] **T3 — Job dọn `IDEMPOTENCY_KEYS`** (expense-service). Mỗi request có `Idempotency-Key` ghi một dòng và không có gì xoá; dòng chỉ cần sống lâu hơn `IN_FLIGHT_TIMEOUT` (1 phút) trong `IdempotencyGuard`, nên purge dòng cũ hơn vài ngày.
+- [ ] **T4 — Job dọn `REFRESH_TOKENS` và `FAMILY_INVITES` hết hạn** (auth-service). Hiện chỉ bị xoá khi có hành động cụ thể (logout, đổi mật khẩu, xoá lời mời...).
+- [ ] **T5 — Dịch thông báo lỗi của backend.** Lỗi validation và nghiệp vụ luôn là tiếng Việt, kể cả khi giao diện đang ở tiếng Anh (mục 13).
+- [ ] **T6 — Mẫu email riêng cho đổi email.** Hiện dùng lại mẫu "Xác thực tài khoản" (mục 22).
+- [ ] **T7 — Xoá gia đình và dọn dữ liệu mồ côi.** Chưa có chức năng xoá gia đình (mục 16). Khi gia đình bị xoá vì không còn thành viên (mục 22), ví, giao dịch và thông báo của nó vẫn nằm lại ở `fem_expense`/`fem_notify`; cần một sự kiện Kafka (ví dụ `FAMILY_DELETED`) để expense-service và notification-service dọn theo.
+- [ ] **T8 — Đăng nhập Facebook và GitHub.** Nút đã có trên trang Login nhưng đang vô hiệu ("sắp có"); Facebook đã có `AppOAuth2UserService` nhưng registration đang tắt trong `application.yml`, GitHub chưa có gì ở backend.
+- [ ] **T9 — Dọn phần demo cũ.** Service `cloudflared` trong hai file compose dev và script `infra/get-tunnel-url.sh`/`.bat` là di sản của giai đoạn demo (backend chạy local, lộ ra qua Cloudflare Quick Tunnel, frontend trên GitHub Pages). Production không dùng nữa; xoá nếu không còn cần chia sẻ bản dev ra ngoài.
 
 ### A. Hoàn thiện nghiệp vụ đã có
 
-- [ ] **A1 — Chính sách ví âm.** Chuyển tiền đã kiểm tra số dư ví nguồn (`WalletTransferService`), nhưng ghi khoản chi (`TransactionService`) thì không, nên ví có thể âm. Cần một quy tắc theo loại ví (xem C3): tiền mặt và tài khoản ngân hàng không được âm, thẻ tín dụng được âm trong hạn mức.
+- [ ] **A1 — Chính sách ví âm.** Chuyển tiền và duyệt yêu cầu chuyển tiền đã kiểm tra số dư ví nguồn (`WalletTransferService`), nhưng ghi khoản chi (`TransactionService`) thì không, nên ví có thể âm. Cần một quy tắc theo loại ví (xem C3): tiền mặt và tài khoản ngân hàng không được âm, thẻ tín dụng được âm trong hạn mức.
 - [ ] **A2 — Thông báo khi sửa giao dịch.** Hiện chỉ phát `EXPENSE_CREATED` và `EXPENSE_DELETED`; khoản 50k bị sửa thành 5 triệu thì cả nhà không biết. Cần thêm `EXPENSE_UPDATED` (nêu giá trị cũ → mới; giao dịch riêng tư thì che `***` như khi xoá).
-- [ ] **A3 — Audit log cho ví, ngân sách, chuyển tiền.** Hiện chỉ giao dịch có lịch sử sửa (`TRANSACTION_AUDIT_LOGS`, mục N4).
+- [ ] **A3 — Audit log cho ví, ngân sách, chuyển tiền.** Hiện chỉ giao dịch có lịch sử sửa (`TRANSACTION_AUDIT_LOGS`, xem `GET /api/expenses/transactions/{id}/history`).
 - [ ] **A4 — Giao dịch định kỳ "nhắc và chờ xác nhận".** Hiện scheduler luôn tự ghi đúng số tiền cố định. Hoá đơn có số tiền thay đổi (điện, nước) cần chế độ tạo bản nháp và thông báo để người dùng nhập số thật rồi xác nhận.
 - [ ] **A5 — Phân quyền chi tiết hơn OWNER/MEMBER (mục 17).** Thêm vai trò chỉ xem (VIEWER) và vai trò trẻ em (giới hạn chi theo ngày/tháng); duyệt khoản chi vượt ngưỡng (thành viên chi trên X thì giao dịch ở trạng thái chờ đến khi chủ hộ duyệt).
 - [ ] **A6 — Ngân sách nâng cao (mục 18).** Ngân sách theo ví hoặc theo thành viên; chuyển phần còn dư sang tháng sau (rollover); ngân sách theo năm.
@@ -1086,6 +1225,124 @@ Kết quả review nghiệp vụ ngày 01/10/2026. Thứ tự đề xuất: **B1
 - [ ] **C6 — Danh mục con và tag.** `CATEGORIES.parent_id` (2 cấp, báo cáo cộng dồn lên danh mục cha); tag tự do để gom chi tiêu theo sự kiện, ví dụ "Du lịch Đà Lạt".
 - [ ] **C7 — Email tổng kết tháng** gửi cho các thành viên (thu, chi, top danh mục, so sánh với tháng trước, tình trạng ngân sách). Dùng scheduler cùng SMTP sẵn có của notification-service; cho tắt/bật trong tuỳ chọn thông báo (mục 19).
 - [ ] **C8 — Xác minh số điện thoại bằng OTP.** Hiện số điện thoại dùng để đăng nhập (USERS.phone, migration V14/V15) chưa được xác minh, nên một người có thể nhập số của người khác. Khi có ngân sách gửi tin thì thêm bước OTP qua Zalo ZNS (khoảng 300đ/tin, cần OA đã xác thực) hoặc SMS Brandname, và cột `phone_verified_at`.
+
+---
+
+## Triển khai và CI/CD
+
+Production chạy tại **https://quanlychitieu.online** trên một VPS Topcloud (Ubuntu, Docker), dùng `infra/docker-compose.prod.yml`.
+
+```
+Người dùng ──IPv6:443──▶ nginx (HTTPS, Let's Encrypt)
+                           ├── /api/* ──▶ api-gateway ──▶ auth / expense / notification-service
+                           └── /*     ──▶ frontend (nginx tĩnh)
+MySQL, Kafka, Redis, Eureka: chỉ trong mạng Docker fem-network.
+MySQL nghe thêm trên 127.0.0.1:3306 của VPS để vào bằng SSH tunnel.
+```
+
+- **VPS chỉ có IPv6 public**, domain chỉ có bản ghi AAAA, không dùng Cloudflare. Người dùng chỉ có IPv4 chưa vào được (TODO V1).
+- Code nằm ở `/opt/family-expense-manager` (nhánh `main`), user SSH `deploy` (chỉ đăng nhập bằng key, đã tắt root). Biến môi trường ở `infra/.env.prod` (không commit, mẫu là `.env.prod.example`; mọi URL đều suy ra từ `DOMAIN`).
+- Hướng dẫn cài VPS từ đầu: **[infra/DEPLOY.md](infra/DEPLOY.md)**.
+
+### Luồng CI/CD
+
+```mermaid
+flowchart LR
+    A["push feature/dev"] --> CI1["Backend CI / Frontend CI<br/>(chỉ test, không deploy)"]
+    A --> PR["PR vào main"] --> M["merge vào main"]
+    M --> CI2["Backend CI / Frontend CI<br/>trên main"]
+    CI2 -- "xanh" --> D["Deploy to VPS<br/>runner tự cài trên VPS (nhãn fem-vps)"]
+    CI2 -- "đỏ" --> X["Không deploy, site giữ bản cũ"]
+    D --> S["git pull main → backup MySQL<br/>→ docker compose up -d --build<br/>→ chờ https://DOMAIN/ trả lời (tối đa 5 phút)"]
+    MAN["Actions → Deploy to VPS → Run workflow"] --> D
+```
+
+| Workflow | Chạy khi | Làm gì |
+|---|---|---|
+| `backend-ci.yml` | push/PR có thay đổi `backend/**` | `mvn verify`: build, unit test, integration test với MySQL thật (Testcontainers) |
+| `frontend-ci.yml` | push/PR có thay đổi `frontend/**` | `npm ci`, lint, build |
+| `deploy.yml` | một trong hai CI trên **xanh trên `main`**, hoặc bấm tay | Chạy `infra/deploy.sh` trên VPS |
+
+- **Vì sao dùng self-hosted runner:** runner của GitHub không có IPv6 nên không SSH vào được VPS chỉ có IPv6. Runner cài trên VPS (`~/actions-runner`, service systemd, user `deploy`, nhãn `fem-vps`) tự kết nối ra GitHub để nhận job, nên không cần mở thêm cổng.
+- **Commit chỉ sửa `infra/`, README hoặc `deploy.yml`** không chạy CI nên không tự deploy; deploy tay bằng nút **Run workflow** (TODO V6).
+- Hai lần deploy không bao giờ chạy song song (`concurrency: deploy-prod`).
+- `deploy.sh` backup MySQL vào `~/fem-backups` (giữ 7 ngày) trước khi khởi động lại service, vì migration Flyway chạy lúc service khởi động. Backup hằng đêm vẫn chạy bằng cron vào `/var/backups/fem` (giữ 14 ngày).
+
+### Thao tác thường dùng trên VPS
+
+```bash
+ssh fem                                   # alias SSH trên máy Windows
+fem ps                                    # alias = docker compose -f .../docker-compose.prod.yml --env-file .../.env.prod
+fem logs -f expense-service
+/opt/family-expense-manager/infra/deploy.sh   # deploy tay, giống hệt CD
+```
+
+- **Rollback:** `cd /opt/family-expense-manager && git checkout <commit-cũ> && fem up -d --build`; nếu migration đã chạy thì khôi phục DB từ backup. Xong nhớ `git checkout main` (lần deploy sau `deploy.sh` cũng tự làm việc này).
+- **Vào MySQL từ máy Windows:** `ssh -N -L 3307:127.0.0.1:3306 fem`, rồi kết nối DB tool tới `127.0.0.1:3307`.
+- **Không bao giờ chạy `fem down -v`**: lệnh này xoá volume MySQL và chứng chỉ HTTPS.
+- Chứng chỉ Let's Encrypt tự gia hạn (container `certbot`, kiểm tra 2 lần/ngày), nginx tự reload mỗi 6 giờ.
+
+### Có cần load balancer không
+
+Chưa. Toàn bộ hệ thống chạy trên một VPS với lượng người dùng của một vài gia đình; chạy thêm bản sao service trên cùng máy chỉ tốn RAM mà không tăng độ sẵn sàng. Gateway đã gọi service qua Eureka (`LoadBalancerFilterFunctions.lb(...)`), nên khi thật sự cần scale chỉ phải tăng số instance. Thứ tự khi quá tải: đo bằng [kiểm thử tải](#kiểm-thử-tải-jmeter) → chỉnh pool DB/thread theo kết quả → nâng cấu hình VPS → nhiều VPS + load balancer.
+
+## Kiểm thử tải (JMeter)
+
+Kịch bản: [`loadtest/fem-load.jmx`](loadtest/fem-load.jmx) (JMeter 5.6+).
+
+```mermaid
+flowchart LR
+    S["setUp: đăng nhập 1 lần<br/>lấy token, ví, danh mục chi"] --> R["Nhóm Đọc (mặc định 20 thread)<br/>summary, reports/category (cache Redis)<br/>transactions trang 1, reports/trend (MySQL)<br/>notifications/unread-count"]
+    S --> W["Nhóm Ghi (mặc định TẮT)<br/>POST /transactions, số tiền ngẫu nhiên 10.000–5.000.000<br/>Idempotency-Key ngẫu nhiên"]
+```
+
+**Không chạy trên production:**
+- Nhóm Ghi tạo dữ liệu thật và có thể làm notification-service gửi email thật (vượt ngân sách).
+- Tải nặng làm site sập với người dùng thật.
+- nginx sẽ chặn một IP vượt 20 req/s, nên số đo được chỉ là ngưỡng của rate limit, không phải sức chịu của hệ thống.
+
+**Chuẩn bị (máy local):**
+1. Chạy stack dev: `docker compose -f infra/docker-compose-dev.yml up -d --build`. Muốn sát VPS hơn thì giới hạn Docker Desktop (Settings → Resources) về CPU/RAM bằng VPS. Để trống `SMTP_*` trong `infra/.env` để không gửi email thật.
+2. Đăng ký một tài khoản riêng cho test (**không bật 2FA**), xác thực email, rồi bấm "Tạo ví & danh mục mẫu" (mục 15).
+
+**Chạy** (chế độ dòng lệnh; GUI chỉ dùng để xem/sửa kịch bản):
+```bash
+jmeter -n -t loadtest/fem-load.jmx \
+  -Jemail=loadtest@example.com -Jpassword='...' \
+  -JreadThreads=50 -JwriteThreads=5 -Jrampup=60 -Jduration=300 \
+  -l loadtest/out/result.jtl -e -o loadtest/out/report
+```
+
+| Tham số `-J` | Mặc định | Ý nghĩa |
+|---|---|---|
+| `protocol`, `host`, `port` | `http`, `localhost`, `8080` | Đích gửi, mặc định là api-gateway của stack dev (không qua nginx) |
+| `email`, `password` | `loadtest@example.com`, rỗng | Tài khoản test |
+| `readThreads`, `writeThreads` | `20`, `0` | Số người dùng ảo đọc / ghi |
+| `rampup`, `duration` | `60`, `300` | Giây để tăng đủ thread / giây chạy |
+| `yearMonth` | tháng hiện tại | Tháng cho summary và báo cáo |
+
+Access token sống 15 phút, nên mỗi lần chạy giữ `duration` dưới 900 giây. Kết quả nằm ở `loadtest/out/report/index.html` (đã có trong `.gitignore`).
+
+**Đọc kết quả:**
+- Chạy nhiều lần, tăng dần `readThreads` (10 → 50 → 100 → 200).
+- **Ngưỡng chịu tải** là throughput (req/s) cao nhất khi **p95 dưới khoảng 500 ms và lỗi dưới 1%**.
+- Trong lúc chạy, xem `docker stats` hoặc Grafana (mục 12) để biết thành phần nào bão hoà trước, rồi chỉnh theo bảng sau:
+
+| Dấu hiệu | Nút thắt | Chỉnh |
+|---|---|---|
+| CPU một service ~100%, latency tăng đều | CPU | Nâng vCPU của VPS; tăng thread không giúp gì |
+| CPU thấp, latency cao, log có `Connection is not available, request timed out` | Pool DB (mặc định 10 kết nối mỗi service) | Tăng `DB_POOL_SIZE` trong `infra/.env.prod`, giữ 3 × giá trị này dưới `max_connections` của MySQL (151) |
+| CPU thấp, request xếp hàng, MySQL nhàn | Thread Tomcat (mặc định 200) | Tăng `TOMCAT_MAX_THREADS` (mỗi thread tốn RAM) |
+| MySQL CPU cao | Truy vấn | `EXPLAIN` truy vấn chậm, thêm index, cache thêm endpoint đọc nhiều |
+| Container bị khởi động lại, log có `OutOfMemoryError` | RAM | Tăng `mem_limit` của service đó hoặc nâng RAM VPS (TODO V5) |
+
+`DB_POOL_SIZE` và `TOMCAT_MAX_THREADS` áp dụng cho auth-, expense- và notification-service; để trống thì dùng mặc định của Spring Boot. Sửa xong chạy `fem up -d` (hoặc deploy lại) và đo lại.
+
+**Kiểm tra rate limit của nginx trên production** (an toàn, chỉ gửi GET không cần đăng nhập):
+```bash
+seq 1 100 | xargs -P 50 -I{} curl -s -o /dev/null -w "%{http_code}\n" https://quanlychitieu.online/api/auth/me | sort | uniq -c
+```
+100 request gửi song song (50 cùng lúc, vì gửi tuần tự thì không bao giờ vượt 20 req/s). Kết quả đúng: khoảng 40–60 dòng `401` (chưa đăng nhập, request đã tới backend), phần còn lại là `429` (bị nginx chặn).
 
 ---
 
@@ -1114,82 +1371,3 @@ Bảng port của các service/tool phổ biến trong hạ tầng nói chung �
 | Jenkins | CI/CD automation server | 8080 |
 
 > Lưu ý: `Tomcat`/`Jenkins` (8080) trùng port với `api-gateway` của project này — nếu chạy chung máy, chỉ được bật một trong hai trên cùng port 8080.
-
-## Hiện trạng deploy (dev/demo, chưa phải VPS)
-
-```
-                         INTERNET
-                            │
-                            ▼
-              GitHub Pages - FE
-              https://xxx.github.io
-                            │
-                            │ API
-                            ▼
-              Cloudflare Tunnel
-              https://api-xxxxx.trycloudflare.com
-                            │
-                            ▼
-                  localhost:8081
-                            │
-                            ▼
-                    Spring Boot BE
-```
-
-Tức là hệ thống **chưa chạy trên VPS nào** — backend đang chạy trên máy local, lộ ra ngoài qua Cloudflare Quick Tunnel (URL ngẫu nhiên, đổi mỗi lần container `cloudflared` restart). Đây là mô hình để demo/test, chưa phải production.
-
-### Triển khai lên VPS
-
-Hướng dẫn từng bước: **[infra/DEPLOY.md](infra/DEPLOY.md)**. Các file dùng cho VPS:
-
-| File | Vai trò |
-|---|---|
-| `infra/docker-compose.prod.yml` | Bản chạy thật: không JDWP, không publish cổng nào ngoài nginx 80/443, `restart: unless-stopped`, `mem_limit` + `MaxRAMPercentage`, xoay log, image ghim phiên bản, monitoring tách vào profile và Grafana chỉ nghe trên 127.0.0.1 |
-| `infra/nginx/templates/default.conf.template` | Nginx: HTTP → HTTPS, `/api/*` → api-gateway, còn lại → frontend; `/actuator/**` không ra ngoài |
-| `infra/init-letsencrypt.sh` + service `certbot` | Lấy chứng chỉ Let's Encrypt lần đầu; certbot tự gia hạn, nginx tự reload mỗi 6 giờ |
-| `infra/.env.prod.example` | Mẫu biến môi trường (`.env.prod` đã nằm trong `.gitignore`); các URL đều suy ra từ `DOMAIN` |
-| `infra/backup-mysql.sh` | `mysqldump` 3 database mỗi đêm qua cron, giữ 14 ngày |
-
-Đã xử lý: bỏ JDWP, bỏ cổng MySQL/Kafka/Redis/Eureka, restart policy, TLS + domain, URL theo domain, giới hạn RAM, xoay log, backup MySQL, ghim phiên bản image, chặn actuator.
-
-**Còn lại:**
-- [ ] CI/CD deploy tự động lên VPS (hiện chỉ có CI build/test — `backend-ci.yml`, `frontend-ci.yml`; deploy vẫn thủ công theo DEPLOY.md bước 8).
-- [ ] Đẩy file backup ra ngoài VPS (rclone/rsync) — script chỉ ghi vào `/var/backups/fem` trên chính VPS.
-
-**Không cấp thiết, có thể làm sau (housekeeping, tích rác rất chậm ở quy mô project hiện tại):**
-- [ ] Job dọn định kỳ bảng `IDEMPOTENCY_KEYS` (expense-service) — mỗi request tạo giao dịch/chuyển ví có gửi `Idempotency-Key` sẽ ghi 1 dòng, không có gì xoá sau khi đã dùng xong; nên purge các dòng cũ hơn vài ngày (dòng chỉ cần sống lâu hơn `IN_FLIGHT_TIMEOUT` 1 phút trong `IdempotencyGuard` một chút, không cần giữ lâu).
-- [ ] Job dọn `REFRESH_TOKENS` và `FAMILY_INVITES` đã hết hạn (auth-service) — hiện chỉ bị xoá khi có hành động cụ thể (logout, đổi mật khẩu, xoá lời mời...), token/invite hết hạn nhưng chưa ai đụng tới sẽ nằm lại trong DB vô hạn.
-
-
-===============Deploy==============
-Windows
-   │
-   │ git push
-   ▼
-GitHub
-   │
-   │ lần đầu: clone
-   ▼
-VPS
-   │
-   ├── Docker
-   │
-   ├── Git
-   │
-   └── /opt/family-expense-manager
-          │
-          └── infra/.env
-                 │
-                 ▼
-          Docker Compose
-                 │
-        ┌────────┼─────────┐
-        ▼        ▼         ▼
-      MySQL    Redis     Kafka
-        │
-   ┌────┼─────┐
-   ▼    ▼     ▼
- auth expense notify
-
-Sau này khi có domain + HTTPS thì Internet chỉ cần:
-Port: 80/443
