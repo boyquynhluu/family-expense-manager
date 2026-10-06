@@ -1,6 +1,8 @@
 package com.family.expensemanager.expense.service;
 
+import com.family.expensemanager.common.currency.CurrencyUtil;
 import com.family.expensemanager.common.dto.PageResponse;
+import com.family.expensemanager.common.event.ExpenseEvent;
 import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.NotFoundException;
@@ -10,6 +12,7 @@ import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.domain.entity.WalletAdjustment;
 import com.family.expensemanager.expense.dto.WalletAdjustmentRequest;
 import com.family.expensemanager.expense.dto.WalletAdjustmentResponse;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
@@ -36,6 +39,7 @@ import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
  * <p>
  * Who: the family OWNER for any wallet, otherwise only the owner of a private wallet for that wallet. Unlike
  * recording a transaction, a plain member may NOT adjust a shared wallet: an adjustment can set any balance.
+ * Every adjustment is announced to the family (in app + email to everyone but the one who made it).
  *
  * @author boyquynhluu
  */
@@ -51,6 +55,7 @@ public class WalletAdjustmentService {
     private final WalletAdjustmentDao walletAdjustmentDao;
     private final WalletService walletService;
     private final PeriodLockService periodLockService;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     public WalletAdjustmentResponse create(Long familyId, Long userId, String userName, boolean callerIsOwner,
@@ -83,6 +88,13 @@ public class WalletAdjustmentService {
             adjustment.setCreatedByName(truncateName(userName));
             adjustment.setCreatedAt(now);
             walletAdjustmentDao.insert(adjustment);
+            String actor = userName != null ? userName : "Một thành viên";
+            String message = actor + " đã điều chỉnh số dư ví " + wallet.getName() + ": "
+                    + CurrencyUtil.formatCurrency(before) + " → " + CurrencyUtil.formatCurrency(request.actualBalance())
+                    + " (" + (difference.signum() > 0 ? "+" : "") + CurrencyUtil.formatCurrency(difference) + ")"
+                    + (request.note() != null && !request.note().isBlank() ? ". Ghi chú: " + request.note() : "") + ".";
+            eventPublisher.publishEvent(ExpenseEvent.notice(ExpenseEvent.WALLET_ADJUSTED, familyId, userId, userName,
+                    null, null, "Số dư ví đã được điều chỉnh", message, "/wallets"));
             return WalletAdjustmentResponse.from(adjustment);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
             throw e;

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * Payload published by expense-service to the {@code expense-events} Kafka topic
@@ -45,6 +46,10 @@ import java.time.LocalDate;
  * ready-to-show Vietnamese {@code title}/{@code message} (expense-service has all the context; notification-service
  * just stores and emails them) plus {@code linkPath} (the frontend page to open, e.g. "/loans"). Who gets the email:
  * {@code targetUserId} if set, else every member whose role is {@code targetRole} if set, else the whole family.
+ * {@code recipientUserIds} ({@link #noticeTo}) overrides both: exactly those members. A type may also leave its actor
+ * out of the email (notification-service's NotificationType) — nobody is emailed about what they did themself.
+ * {@code {user:<id>}} in a notice's title/message is replaced by that member's display name when it is consumed
+ * (expense-service has no user directory; notification-service does).
  *
  * @author boyquynhluu
  */
@@ -72,7 +77,8 @@ public record ExpenseEvent(
         String title,
         String message,
         String linkPath,
-        String targetRole) {
+        String targetRole,
+        List<Long> recipientUserIds) {
 
     public static final String EXPENSE_CREATED = "EXPENSE_CREATED";
     public static final String BUDGET_EXCEEDED = "BUDGET_EXCEEDED";
@@ -93,10 +99,33 @@ public record ExpenseEvent(
     public static final String LOAN_DUE_SOON = "LOAN_DUE_SOON";
     public static final String SAVINGS_MILESTONE = "SAVINGS_MILESTONE";
     public static final String MONTHLY_SUMMARY = "MONTHLY_SUMMARY";
+    // Loans (B3) and balance adjustments (B1).
+    public static final String LOAN_CREATED = "LOAN_CREATED";
+    public static final String LOAN_PAYMENT = "LOAN_PAYMENT";
+    public static final String LOAN_SETTLED = "LOAN_SETTLED";
+    public static final String LOAN_REMOVED = "LOAN_REMOVED";
+    public static final String WALLET_ADJUSTED = "WALLET_ADJUSTED";
+
+    /** Placeholder for a member's display name in a notice, see the class doc. */
+    public static String userToken(Long userId) {
+        return "{user:" + userId + "}";
+    }
 
     // Explicit because the extra constructors below would otherwise leave Jackson's record-creator choice ambiguous.
     @JsonCreator
     public ExpenseEvent {
+    }
+
+    /** Pre-recipientUserIds shape. */
+    public ExpenseEvent(String eventType, Long familyId, Long userId, Long transactionId, Long categoryId,
+                        BigDecimal amount, String periodMonth, BigDecimal limitAmount, BigDecimal totalSpent,
+                        String categoryName, String userEmail, String userDisplayName, Instant occurredAt,
+                        LocalDate occurredOn, String note, String fromWalletName, String toWalletName,
+                        Integer itemCount, Boolean privateEntry, Long targetUserId, String title, String message,
+                        String linkPath, String targetRole) {
+        this(eventType, familyId, userId, transactionId, categoryId, amount, periodMonth, limitAmount, totalSpent,
+                categoryName, userEmail, userDisplayName, occurredAt, occurredOn, note, fromWalletName, toWalletName,
+                itemCount, privateEntry, targetUserId, title, message, linkPath, targetRole, null);
     }
 
     /** Pre-notice shape — every publisher of the original event types (no title/message/linkPath/targetRole). */
@@ -119,7 +148,15 @@ public record ExpenseEvent(
                                       String linkPath) {
         return new ExpenseEvent(eventType, familyId, actorUserId, null, null, null, null, null, null, null, null,
                 actorName, Instant.now(), null, null, null, null, null, null, targetUserId, title, message, linkPath,
-                targetRole);
+                targetRole, null);
+    }
+
+    /** A generic notice emailed to exactly {@code recipientUserIds} (an empty list: in-app only). */
+    public static ExpenseEvent noticeTo(String eventType, Long familyId, Long actorUserId, String actorName,
+                                        List<Long> recipientUserIds, String title, String message, String linkPath) {
+        return new ExpenseEvent(eventType, familyId, actorUserId, null, null, null, null, null, null, null, null,
+                actorName, Instant.now(), null, null, null, null, null, null, null, title, message, linkPath,
+                null, List.copyOf(recipientUserIds));
     }
 
     /** Whether this is a generic notice (see {@link #notice}) rather than one of the original typed events. */

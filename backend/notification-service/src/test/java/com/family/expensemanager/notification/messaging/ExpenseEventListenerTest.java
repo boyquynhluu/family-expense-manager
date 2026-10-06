@@ -453,12 +453,49 @@ class ExpenseEventListenerTest {
 
     @Test
     void inAppOnlyNotice_sendsNoEmail_andASystemNoticeIsFiledUnderUserZero() throws Exception {
-        listener.onExpenseEvent(ExpenseEvent.notice(ExpenseEvent.EXPENSE_UPDATED, 1L, null, null, null, null,
-                "Giao dịch đã được sửa", "An đã sửa giao dịch", "/transactions"));
+        listener.onExpenseEvent(ExpenseEvent.notice(ExpenseEvent.LOAN_REMOVED, 1L, null, null, null, null,
+                "Khoản vay đã bị xoá", "Khoản vay đã bị xoá", "/loans"));
 
         ArgumentCaptor<Notification> saved = ArgumentCaptor.forClass(Notification.class);
         verify(notificationDao).insert(saved.capture());
         assertThat(saved.getValue().getUserId()).isZero();
         verify(mailSender, never()).createMimeMessage();
+    }
+
+    @Test
+    void noticeTo_emailsOnlyTheListedMembers_neverTheActor_andNamesUsersInTheText() throws Exception {
+        when(preferenceService.isEmailEnabled(any(), eq(NotificationType.LOAN_CREATED))).thenReturn(true);
+        when(memberDirectory.listMembers(1L)).thenReturn(List.of(
+                new FamilyMemberDirectory.Member(7L, "mom@b.com", "Mẹ", "OWNER"),
+                new FamilyMemberDirectory.Member(8L, "dad@b.com", "Bố", "MEMBER"),
+                new FamilyMemberDirectory.Member(9L, "kid@b.com", "Bé Na", "CHILD")));
+        when(mailSender.createMimeMessage()).thenReturn(new MimeMessage((jakarta.mail.Session) null));
+
+        listener.onExpenseEvent(ExpenseEvent.noticeTo(ExpenseEvent.LOAN_CREATED, 1L, 7L, "Mẹ", List.of(7L, 8L),
+                "Khoản vay mới", "{user:8} vay Anh Hùng 2.000.000 ₫ (Người ghi: {user:7}, {user:99})", "/loans"));
+
+        ArgumentCaptor<Notification> saved = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao).insert(saved.capture());
+        assertThat(saved.getValue().getMessage())
+                .isEqualTo("Bố vay Anh Hùng 2.000.000 ₫ (Người ghi: Mẹ, Một thành viên)");
+        ArgumentCaptor<MimeMessage> mail = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(mailSender).send(mail.capture());
+        assertThat(mail.getValue().getAllRecipients()).extracting(Object::toString).containsExactly("dad@b.com");
+    }
+
+    @Test
+    void expenseUpdated_emailsTheFamily_exceptWhoeverMadeTheChange() throws Exception {
+        when(preferenceService.isEmailEnabled(any(), eq(NotificationType.EXPENSE_UPDATED))).thenReturn(true);
+        when(memberDirectory.listMembers(1L)).thenReturn(List.of(
+                new FamilyMemberDirectory.Member(7L, "mom@b.com", "Mẹ", "OWNER"),
+                new FamilyMemberDirectory.Member(8L, "dad@b.com", "Bố", "MEMBER")));
+        when(mailSender.createMimeMessage()).thenReturn(new MimeMessage((jakarta.mail.Session) null));
+
+        listener.onExpenseEvent(ExpenseEvent.notice(ExpenseEvent.EXPENSE_UPDATED, 1L, 8L, "Bố", null, null,
+                "Giao dịch đã được sửa", "Bố đã sửa giao dịch", "/transactions"));
+
+        ArgumentCaptor<MimeMessage> mail = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(mailSender).send(mail.capture());
+        assertThat(mail.getValue().getAllRecipients()).extracting(Object::toString).containsExactly("mom@b.com");
     }
 }

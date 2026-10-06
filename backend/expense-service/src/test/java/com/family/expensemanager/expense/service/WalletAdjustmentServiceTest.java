@@ -1,5 +1,6 @@
 package com.family.expensemanager.expense.service;
 
+import com.family.expensemanager.common.event.ExpenseEvent;
 import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ConflictException;
@@ -16,6 +17,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
@@ -48,12 +50,14 @@ class WalletAdjustmentServiceTest {
     private WalletService walletService;
     @Mock
     private PeriodLockService periodLockService;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private WalletAdjustmentService service;
 
     @BeforeEach
     void setUp() {
-        service = new WalletAdjustmentService(walletAdjustmentDao, walletService, periodLockService, CLOCK);
+        service = new WalletAdjustmentService(walletAdjustmentDao, walletService, periodLockService, eventPublisher, CLOCK);
     }
 
     @Test
@@ -77,6 +81,13 @@ class WalletAdjustmentServiceTest {
         InOrder order = inOrder(walletService);
         order.verify(walletService).lockForUpdate(5L);
         order.verify(walletService).currentBalanceOf(wallet);
+        // The family is told what changed (emailed to everyone but An — see NotificationType.WALLET_ADJUSTED).
+        ArgumentCaptor<ExpenseEvent> event = ArgumentCaptor.forClass(ExpenseEvent.class);
+        verify(eventPublisher).publishEvent(event.capture());
+        assertThat(event.getValue().eventType()).isEqualTo(ExpenseEvent.WALLET_ADJUSTED);
+        assertThat(event.getValue().userId()).isEqualTo(MEMBER_ID);
+        assertThat(event.getValue().message()).startsWith("An đã điều chỉnh số dư ví ")
+                .contains(" → ").endsWith("Ghi chú: Quên ghi tiền gửi xe.");
     }
 
     @Test

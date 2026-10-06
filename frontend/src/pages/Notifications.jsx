@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import client from "../api/client";
 import { BellIcon, TrashIcon } from "../components/AppIcons";
 import Pagination from "../components/Pagination";
@@ -11,6 +12,7 @@ import { confirmDialog } from "../utils/confirm";
 
 export default function Notifications() {
   const { t } = useTranslation("notifications");
+  const navigate = useNavigate();
   const { pageData, setPage, reload } = usePagedList("/notifications");
   const notifications = pageData.content;
   const [unreadCount, setUnreadCount] = useState(0);
@@ -59,6 +61,16 @@ export default function Notifications() {
       setError(err.response?.data?.message || t("markReadFailed"));
     }
     refresh();
+  }
+
+  // Clicking a notification marks it read and opens the page it is about (linkPath from the API).
+  async function openNotification(n) {
+    if (!n.isRead) {
+      await markAsRead(n.id);
+    }
+    if (n.linkPath) {
+      navigate(n.linkPath);
+    }
   }
 
   async function markAllAsRead() {
@@ -158,8 +170,17 @@ export default function Notifications() {
               {notifications.map((n) => (
                 <li
                   key={n.id}
-                  className={n.isRead ? "read" : "unread"}
-                  onClick={() => !n.isRead && markAsRead(n.id)}
+                  className={`${n.isRead ? "read" : "unread"}${n.linkPath ? " clickable" : ""}`}
+                  onClick={() => openNotification(n)}
+                  onKeyDown={(e) => {
+                    if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                      e.preventDefault();
+                      openNotification(n);
+                    }
+                  }}
+                  role={n.linkPath ? "link" : undefined}
+                  tabIndex={n.linkPath ? 0 : undefined}
+                  title={n.linkPath ? t("openHint") : undefined}
                 >
                   <span className="notification-icon">
                     <BellIcon />
