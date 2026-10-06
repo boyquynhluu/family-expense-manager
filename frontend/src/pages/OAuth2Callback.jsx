@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../hooks/useAuth";
+import { loginUrl, takeStashedRedirect } from "../utils/authRedirect";
 
 // Landed on after Google/Facebook login: auth-service redirects here with either
 // ?accessToken=...&refreshToken=..., ?twoFactorToken=... (account has 2FA on — Login
@@ -23,18 +24,21 @@ export default function OAuth2Callback() {
     const error = searchParams.get("error");
     const twoFactorToken = searchParams.get("twoFactorToken");
 
+    // The page the user was sent to log in from (stashed by Login before leaving for Google).
+    const redirectTo = takeStashedRedirect();
+
     if (twoFactorToken) {
-      navigate("/login", { replace: true, state: { twoFactorToken } });
+      navigate(loginUrl(redirectTo), { replace: true, state: { twoFactorToken } });
       return;
     }
 
     if (error || !accessToken || !refreshToken) {
-      navigate("/login", { replace: true, state: { oauth2Error: true, oauth2ErrorCode: error } });
+      navigate(loginUrl(redirectTo), { replace: true, state: { oauth2Error: true, oauth2ErrorCode: error } });
       return;
     }
 
     loginWithTokens(accessToken, refreshToken);
-    navigate("/", { replace: true });
+    navigate(redirectTo, { replace: true });
   }, [searchParams, loginWithTokens, navigate]);
 
   return (

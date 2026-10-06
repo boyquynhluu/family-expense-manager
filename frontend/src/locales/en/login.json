@@ -32,5 +32,11 @@
   "resendVerification": "Resend verification email",
   "resendVerificationSending": "Sending...",
   "resendVerificationSent": "If the account is waiting for verification, we have sent the verification email again.",
-  "resendVerificationFailed": "Could not resend the verification email"
+  "resendVerificationFailed": "Could not resend the verification email",
+  "sessionExpired": "Your session has expired. Please log in again.",
+  "recoveryCodePlaceholder": "Recovery code",
+  "useRecoveryCode": "Use a recovery code",
+  "useAuthenticatorCode": "Use the 6-digit code from your authenticator app",
+  "totpAutofillHint": "The 6th digit confirms on its own. If your 2FA key is saved in a password manager (iCloud Passwords, 1Password, Bitwarden…), the code is suggested right on the keyboard or in the field.",
+  "recoveryCodeHint": "Each recovery code works only once."
 }

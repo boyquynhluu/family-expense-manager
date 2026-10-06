@@ -1,4 +1,5 @@
 import axios from "axios";
+import { currentPath, loginUrl } from "../utils/authRedirect";
 import { clearTokens, getAccessToken, getRefreshToken, saveTokens } from "../utils/tokenStorage";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api";
@@ -67,8 +68,11 @@ client.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         return client(originalRequest);
       } catch (refreshError) {
+        // The session is over (refresh token expired or revoked): log in again, then come back to this page.
         clearTokens();
-        window.location.href = "/login";
+        if (window.location.pathname !== "/login") {
+          window.location.href = loginUrl(currentPath(), { expired: true });
+        }
         return Promise.reject(refreshError);
       }
     }
