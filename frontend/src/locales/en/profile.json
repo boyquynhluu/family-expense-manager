@@ -188,5 +188,6 @@
   "limitsHint": "Enter at least one cap (daily or monthly), greater than 0. Use \"Remove caps\" to clear them all.",
   "limitRequired": "Enter at least one cap (daily or monthly) greater than 0",
   "limitRemove": "Remove caps",
-  "limitRemoved": "Removed {{name}}'s caps"
+  "limitRemoved": "Removed {{name}}'s caps",
+  "openInAuthenticatorButton": "Open in authenticator app"
 }

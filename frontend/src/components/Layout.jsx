@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useTrashCount } from "../hooks/useTrashCount";
 import { useUnreadNotifications } from "../hooks/useUnreadNotifications";
@@ -33,7 +33,15 @@ export default function Layout() {
   const unreadCount = useUnreadNotifications();
   const trashCount = useTrashCount();
   const location = useLocation();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // A deliberate logout lands on a plain /login: no "?redirect=" back to this page (ProtectedRoute would add one
+  // if it noticed the cleared session first) — the next person to log in on this device starts at the dashboard.
+  function handleLogout() {
+    navigate("/login", { replace: true });
+    logout();
+  }
 
   const links = [
     { to: "/", label: t("nav.dashboard"), icon: GridIcon },
@@ -116,7 +124,7 @@ export default function Layout() {
             <span>{displayName}</span>
           </div>
         )}
-        <Button variant="dark-outline" className="mt-3 w-full" onClick={logout}>
+        <Button variant="dark-outline" className="mt-3 w-full" onClick={handleLogout}>
           <LogoutIcon />
           {t("logout")}
         </Button>

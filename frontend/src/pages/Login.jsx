@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import client, { oauth2AuthorizationUrl } from "../api/client";
 import { EyeIcon, EyeOffIcon, FacebookIcon, GithubIcon, GoogleIcon, KeyIcon, MailIcon } from "../components/AuthIcons";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuth } from "../hooks/useAuth";
+import { loginUrl, safeRedirect, stashRedirect } from "../utils/authRedirect";
 import { LIMITS } from "../utils/inputLimits";
 import { isValidLoginIdentifier, looksLikeEmail } from "../utils/phone";
 import { Button, IconButton } from "../components/ui/Button";
@@ -17,6 +18,9 @@ export default function Login() {
   const { login, verifyTwoFactor } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  // The page to return to after logging in (?redirect=, set by ProtectedRoute / the API client); "/" by default.
+  const redirectTo = safeRedirect(searchParams.get("redirect"));
   // Email or phone number — the backend tells them apart.
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -35,6 +39,10 @@ export default function Login() {
   // of email/password.
   const [twoFactorToken, setTwoFactorToken] = useState(location.state?.twoFactorToken ?? null);
   const [totpCode, setTotpCode] = useState("");
+  // The 6-digit authenticator code by default; a recovery code (letters too, no auto-submit) on request.
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
+  // Set synchronously, unlike `loading`: an autofilled code can fire onChange twice before React re-renders.
+  const verifyingRef = useRef(false);
 
   // Guards against StrictMode's dev-only double-invoke of effects (mount → cleanup →
   // mount again), which would otherwise show the success toast twice — see
@@ -45,13 +53,19 @@ export default function Login() {
     if (handledLocationState.current) return;
     handledLocationState.current = true;
 
+    if (searchParams.get("expired")) {
+      // Sent here by the API client when the session could not be refreshed. The id keeps several failed
+      // requests from stacking the same toast; dropping ?expired keeps a page reload from showing it again.
+      toast.error(t("sessionExpired"), { id: "session-expired", duration: 8000 });
+      navigate(loginUrl(redirectTo), { replace: true, state: location.state });
+    }
     if (location.state?.passwordResetSuccess) {
       toast.success(t("passwordResetSuccess"));
-      navigate(location.pathname, { replace: true, state: {} });
+      navigate(loginUrl(redirectTo), { replace: true, state: {} });
     } else if (location.state?.twoFactorToken) {
       // Already copied into component state above; drop it from history so a refresh
       // doesn't replay a (single-use) challenge.
-      navigate(location.pathname, { replace: true, state: {} });
+      navigate(loginUrl(redirectTo), { replace: true, state: {} });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -65,7 +79,7 @@ export default function Login() {
       if (result.requiresTwoFactor) {
         setTwoFactorToken(result.twoFactorToken);
       } else {
-        navigate("/");
+        navigate(redirectTo, { replace: true });
       }
     } catch (err) {
       setError(err.response?.data?.message || t("loginFailed"));
@@ -91,18 +105,43 @@ export default function Login() {
     }
   }
 
-  async function handleTwoFactorSubmit(e) {
-    e.preventDefault();
+  async function submitTwoFactor(code) {
+    if (verifyingRef.current) return;
+    verifyingRef.current = true;
     setError("");
     setLoading(true);
     try {
-      await verifyTwoFactor(twoFactorToken, totpCode, rememberMe);
-      navigate("/");
+      await verifyTwoFactor(twoFactorToken, code.trim(), rememberMe);
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err.response?.data?.message || t("twoFactorCodeInvalid"));
+      // Emptied so the next code (or the password manager's autofill) can go straight in.
+      if (!useRecoveryCode) setTotpCode("");
     } finally {
+      verifyingRef.current = false;
       setLoading(false);
     }
+  }
+
+  function handleTwoFactorSubmit(e) {
+    e.preventDefault();
+    submitTwoFactor(totpCode);
+  }
+
+  // Digits only (a pasted "123 456" becomes "123456"); the 6th digit submits on its own — typed, pasted or
+  // filled in by the phone keyboard / a password manager that holds the TOTP key (autoComplete one-time-code).
+  function handleTotpChange(value) {
+    const digits = value.replace(/\D/g, "").slice(0, LIMITS.totpCode);
+    setTotpCode(digits);
+    if (digits.length === LIMITS.totpCode) {
+      submitTwoFactor(digits);
+    }
+  }
+
+  function toggleRecoveryCode() {
+    setUseRecoveryCode((v) => !v);
+    setTotpCode("");
+    setError("");
   }
 
   if (twoFactorToken) {
@@ -122,16 +161,41 @@ export default function Login() {
               <span className="auth-input-icon">
                 <KeyIcon />
               </span>
-              <Input variant="bare"
-                value={totpCode}
-                maxLength={LIMITS.twoFactorCode}
-                onChange={(e) => setTotpCode(e.target.value)}
-                placeholder={t("twoFactorCodePlaceholder")}
-                aria-label={t("twoFactorCodePlaceholder")}
-                autoFocus
-                required
-              />
+              {useRecoveryCode ? (
+                <Input variant="bare"
+                  key="recovery"
+                  value={totpCode}
+                  maxLength={LIMITS.twoFactorCode}
+                  onChange={(e) => setTotpCode(e.target.value)}
+                  placeholder={t("recoveryCodePlaceholder")}
+                  aria-label={t("recoveryCodePlaceholder")}
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  autoFocus
+                  required
+                />
+              ) : (
+                <Input variant="bare"
+                  key="totp"
+                  value={totpCode}
+                  onChange={(e) => handleTotpChange(e.target.value)}
+                  placeholder="000000"
+                  aria-label={t("twoFactorCodePlaceholder")}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]{6}"
+                  className="totp-code-input"
+                  readOnly={loading}
+                  autoFocus
+                  required
+                />
+              )}
             </Field>
+            <p className="auth-card-subtitle">{useRecoveryCode ? t("recoveryCodeHint") : t("totpAutofillHint")}</p>
+            <Button variant="link" className="self-start text-sm" onClick={toggleRecoveryCode}>
+              {useRecoveryCode ? t("useAuthenticatorCode") : t("useRecoveryCode")}
+            </Button>
 
             <Button variant="hero" size="lg" className="mt-1 w-full" type="submit" disabled={loading}>
               {loading ? t("verifying") : t("confirm")}
@@ -233,6 +297,7 @@ export default function Login() {
           <a
             className="oauth2-icon-button"
             href={oauth2AuthorizationUrl("google")}
+            onClick={() => stashRedirect(redirectTo)}
             title={t("loginWithGoogle")}
           >
             <span className="oauth2-icon-badge oauth2-badge-google">

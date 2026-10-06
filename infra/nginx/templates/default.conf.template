@@ -64,6 +64,14 @@ server {
         return 429 '{"message":"Quá nhiều yêu cầu, vui lòng thử lại sau."}';
     }
 
+    # Docker's embedded DNS, re-asked every 10s. A deploy recreates api-gateway/frontend with NEW IPs; a plain
+    # `proxy_pass http://frontend:80` is resolved once when nginx starts and would keep hitting the old IPs (502)
+    # until nginx restarts. A variable in proxy_pass makes nginx resolve the name per request via this resolver.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    resolver_timeout 5s;
+    set $fem_gateway http://api-gateway:8080;
+    set $fem_frontend http://frontend:80;
+
     gzip on;
     gzip_types text/plain text/css application/json application/javascript image/svg+xml;
 
@@ -82,7 +90,7 @@ server {
     # URLs (OAuth2 redirect) and find the real client IP (ClientIpFilter uses the right-most X-Forwarded-For).
     location /api/ {
         limit_req zone=fem_api burst=40 nodelay;
-        proxy_pass http://api-gateway:8080;
+        proxy_pass $fem_gateway;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -97,7 +105,7 @@ server {
     # Everything else → the React build (its own nginx handles SPA routes).
     location / {
         limit_req zone=fem_web burst=100 nodelay;
-        proxy_pass http://frontend:80;
+        proxy_pass $fem_frontend;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto https;
     }

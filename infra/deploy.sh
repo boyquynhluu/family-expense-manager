@@ -25,7 +25,19 @@ main() {
     BACKUP_DIR="${PREDEPLOY_BACKUP_DIR:-$HOME/fem-backups}" KEEP_DAYS=7 "$SCRIPT_DIR/backup-mysql.sh"
   fi
 
-  "${COMPOSE[@]}" up -d --build
+  # The build resolves base images on Docker Hub, and the VPS link to it is flaky (TLS handshake timeouts) —
+  # retry a few times before failing the deploy.
+  for attempt in 1 2 3 4; do
+    if "${COMPOSE[@]}" up -d --build; then
+      break
+    fi
+    if [[ "$attempt" -eq 4 ]]; then
+      echo "Build failed after $attempt attempts" >&2
+      exit 1
+    fi
+    echo "Build failed (attempt $attempt) — retrying in 30s" >&2
+    sleep 30
+  done
   docker image prune -f
 
   # nginx runs a stock image with infra/nginx bind-mounted, so `up` never recreates it when only that config

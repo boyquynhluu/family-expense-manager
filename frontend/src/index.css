@@ -121,6 +121,12 @@ h1 {
   font-size: 1.15rem;
 }
 
+/* 6-digit 2FA code on the login page: spaced out like the code in the authenticator app. */
+.totp-code-input {
+  letter-spacing: 0.35em;
+  font-variant-numeric: tabular-nums;
+}
+
 .auth-card-subtitle {
   margin: -0.4rem 0 0;
   color: #374151;

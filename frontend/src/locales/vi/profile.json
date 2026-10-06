@@ -188,5 +188,6 @@
   "limitsHint": "Nhập ít nhất một trong hai hạn mức (ngày hoặc tháng), số tiền phải lớn hơn 0. Dùng \"Bỏ hạn mức\" để gỡ toàn bộ.",
   "limitRequired": "Hãy nhập ít nhất một hạn mức (ngày hoặc tháng) lớn hơn 0",
   "limitRemove": "Bỏ hạn mức",
-  "limitRemoved": "Đã bỏ hạn mức của {{name}}"
+  "limitRemoved": "Đã bỏ hạn mức của {{name}}",
+  "openInAuthenticatorButton": "Mở trong ứng dụng xác thực"
 }

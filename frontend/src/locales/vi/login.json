@@ -32,5 +32,11 @@
   "resendVerification": "Gửi lại email xác thực",
   "resendVerificationSending": "Đang gửi...",
   "resendVerificationSent": "Nếu tài khoản đang chờ xác thực, chúng tôi đã gửi lại email xác thực.",
-  "resendVerificationFailed": "Không gửi lại được email xác thực"
+  "resendVerificationFailed": "Không gửi lại được email xác thực",
+  "sessionExpired": "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.",
+  "recoveryCodePlaceholder": "Mã khôi phục",
+  "useRecoveryCode": "Dùng mã khôi phục",
+  "useAuthenticatorCode": "Dùng mã 6 số từ ứng dụng xác thực",
+  "totpAutofillHint": "Nhập đủ 6 số là tự xác nhận. Nếu khoá 2 lớp được lưu trong trình quản lý mật khẩu (iCloud Passwords, 1Password, Bitwarden…), mã sẽ được gợi ý ngay trên bàn phím hoặc ô nhập.",
+  "recoveryCodeHint": "Mỗi mã khôi phục chỉ dùng được một lần."
 }
