@@ -55,6 +55,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -151,9 +152,72 @@ class NewFeatureServicesTest {
         @Mock private LoanPaymentDao loanPaymentDao;
         @Mock private WalletService walletService;
         @Mock private PeriodLockService periodLockService;
+        @Mock private ApplicationEventPublisher eventPublisher;
 
         private LoanService service() {
-            return new LoanService(loanDao, loanPaymentDao, walletService, periodLockService, CLOCK);
+            return new LoanService(loanDao, loanPaymentDao, walletService, periodLockService, eventPublisher, CLOCK);
+        }
+
+        private ExpenseEvent publishedNotice() {
+            ArgumentCaptor<ExpenseEvent> event = ArgumentCaptor.forClass(ExpenseEvent.class);
+            verify(eventPublisher).publishEvent(event.capture());
+            return event.getValue();
+        }
+
+        @Test
+        void recordingALoanForAnotherMember_emailsThatMember_andTheOtherWalletsOwner() {
+            Wallet mine = wallet("CASH", null);
+            mine.setName("Tiền mặt");
+            Wallet grandma = wallet("CASH", null);
+            grandma.setId(6L);
+            grandma.setName("Ví bà");
+            grandma.setOwnerUserId(9L);
+            when(walletService.requireOwnedByFamily(5L, 1L)).thenReturn(mine);
+            when(walletService.requireOwnedByFamily(6L, 1L)).thenReturn(grandma);
+
+            service().create(1L, 7L, "Mẹ", true, new LoanRequest("BORROWED", null, null, new BigDecimal("2000000"), 5L,
+                    LocalDate.of(2026, 10, 1), null, null, 8L, 6L));
+
+            ExpenseEvent event = publishedNotice();
+            assertThat(event.eventType()).isEqualTo(ExpenseEvent.LOAN_CREATED);
+            assertThat(event.userId()).isEqualTo(7L);
+            assertThat(event.recipientUserIds()).containsExactly(8L, 9L);
+            assertThat(event.title()).isEqualTo("Khoản vay mới");
+            assertThat(event.message()).startsWith("{user:8} vay ví Ví bà ").contains("nhận vào ví Tiền mặt")
+                    .endsWith("(Người ghi: {user:7})");
+        }
+
+        @Test
+        void theLastRepayment_isASettledNotice_andDeletingIt_isInAppOnly() {
+            Loan loan = loan();
+            when(loanDao.selectById(3L)).thenReturn(Optional.of(loan));
+            when(loanPaymentDao.sumByLoanId(3L)).thenReturn(new BigDecimal("2000000"));
+            when(walletService.requireOwnedByFamily(5L, 1L)).thenReturn(wallet("CASH", null));
+
+            service().addPayment(1L, 3L, 7L, "An", false,
+                    new LoanPaymentRequest(new BigDecimal("1000000"), 5L, LocalDateTime.of(2026, 10, 5, 9, 0), null));
+
+            ExpenseEvent settled = publishedNotice();
+            assertThat(settled.eventType()).isEqualTo(ExpenseEvent.LOAN_SETTLED);
+            assertThat(settled.recipientUserIds()).containsExactly(7L);
+            assertThat(settled.message()).contains("đã tất toán").doesNotContain("Người ghi");
+
+            LoanPayment payment = new LoanPayment();
+            payment.setId(11L);
+            payment.setLoanId(3L);
+            payment.setWalletId(5L);
+            payment.setAmount(new BigDecimal("1000000"));
+            payment.setPaidAt(LocalDateTime.of(2026, 10, 5, 9, 0));
+            payment.setCreatedByUserId(7L);
+            when(loanPaymentDao.selectById(11L)).thenReturn(Optional.of(payment));
+            clearInvocations(eventPublisher);
+
+            service().deletePayment(1L, 3L, 11L, 7L, false);
+
+            ExpenseEvent removed = publishedNotice();
+            assertThat(removed.eventType()).isEqualTo(ExpenseEvent.LOAN_REMOVED);
+            assertThat(removed.recipientUserIds()).isEmpty();
+            assertThat(removed.message()).contains("Khoản này mở lại");
         }
 
         private LoanRequest request(String direction) {
@@ -276,7 +340,9 @@ class NewFeatureServicesTest {
             l.setWalletId(5L);
             l.setStartDate(LocalDate.of(2026, 10, 1));
             l.setStatus("OPEN");
+            l.setMemberUserId(7L);
             l.setCreatedByUserId(7L);
+            l.setCounterpartyName("Anh Hùng");
             return l;
         }
     }

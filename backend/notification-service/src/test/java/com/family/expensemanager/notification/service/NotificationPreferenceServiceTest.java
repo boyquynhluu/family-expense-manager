@@ -53,8 +53,9 @@ class NotificationPreferenceServiceTest {
         assertThat(result).filteredOn(NotificationPreferenceResponse::emailSupported)
                 .extracting(NotificationPreferenceResponse::type)
                 .containsExactly("BUDGET_EXCEEDED", "WALLET_TRANSFERRED", "TRANSFER_REQUESTED", "TRANSFER_REQUEST_REJECTED",
-                        "RECURRING_DRAFT_CREATED", "BILL_DUE_SOON", "APPROVAL_REQUESTED", "APPROVAL_DECIDED",
-                        "LOAN_DUE_SOON", "SAVINGS_MILESTONE", "MONTHLY_SUMMARY");
+                        "EXPENSE_UPDATED", "RECURRING_DRAFT_CREATED", "BILL_DUE_SOON", "APPROVAL_REQUESTED",
+                        "APPROVAL_DECIDED", "LOAN_DUE_SOON", "SAVINGS_MILESTONE", "MONTHLY_SUMMARY", "LOAN_CREATED",
+                        "LOAN_PAYMENT", "LOAN_SETTLED", "WALLET_ADJUSTED");
     }
 
     @Test

@@ -86,7 +86,7 @@ Trang **Ví** có:
 - **Danh sách ví**: số dư hiện tại, loại ví, nút xem lịch sử thay đổi.
 - **Chuyển tiền giữa các ví**: chuyển **từ ví riêng của bạn** sang ví của người khác hoặc ví chung. Chuyển tiền không tính là thu hay chi.
 - **Yêu cầu chuyển tiền**: xin người khác chuyển từ ví riêng của họ sang ví của bạn. Họ nhận email và bấm *Đồng ý* hoặc *Từ chối*.
-- **Điều chỉnh số dư**: khi số dư trong app lệch với thực tế (quên ghi, phí ngân hàng…), nhập **số dư thực tế**. App tự ghi phần chênh lệch, không làm sai báo cáo thu chi.
+- **Điều chỉnh số dư**: khi số dư trong app lệch với thực tế (quên ghi, phí ngân hàng…), nhập **số dư thực tế**. App tự ghi phần chênh lệch, không làm sai báo cáo thu chi. Cả nhà (trừ người điều chỉnh) nhận thông báo và email về số dư cũ → mới.
 - **Số dư theo tháng**: số dư đầu tháng, thu, chi, chuyển, điều chỉnh, vay/nợ và số dư cuối tháng của từng ví.
 
 > **Vì sao không ghi được khoản chi?** Ví tiền mặt, ngân hàng, tiết kiệm không được âm; thẻ tín dụng chỉ được âm tới hạn mức. Nếu số dư trong app sai, hãy **điều chỉnh số dư** trước.
@@ -129,6 +129,7 @@ Vào **Ngân sách** (chủ hộ đặt, mọi người xem):
    Sau đó nhập số tiền, ví nhận/chi tiền, ngày vay, hạn trả.
 2. Mỗi lần trả hoặc thu nợ: bấm **Trả / thu** → **Ghi lần trả**. App tự tính số còn nợ và đánh dấu "Đã trả xong".
 3. App nhắc **3 ngày trước hạn** (email gửi cho thành viên đứng tên). Tiền vay/cho vay không tính là thu hay chi.
+   Khi có khoản vay mới, một lần trả/thu, hoặc khoản đã trả hết, thành viên đứng tên (và chủ ví bên kia nếu vay trong gia đình) nhận thông báo và email. Người tự ghi thì không nhận email.
 4. Lọc danh sách theo thành viên để xem từng người đang vay/cho vay những khoản nào.
 
 **Mục tiêu tiết kiệm**
@@ -172,7 +173,7 @@ Vào **Hồ sơ**:
 
 ## 11. Thông báo và bảo mật tài khoản
 
-- **Thông báo** (biểu tượng chuông): vượt ngân sách, giao dịch bị sửa/xoá, chuyển tiền, khoản chờ duyệt, hoá đơn/khoản vay sắp đến hạn, mốc tiết kiệm, tổng kết tháng… Bấm **Tuỳ chọn** để tắt từng loại trong app hoặc qua email.
+- **Thông báo** (biểu tượng chuông): vượt ngân sách, giao dịch bị sửa (kèm email)/xoá, chuyển tiền, điều chỉnh số dư, khoản vay mới/trả nợ, khoản chờ duyệt, hoá đơn/khoản vay sắp đến hạn, mốc tiết kiệm, tổng kết tháng… Bấm **Tuỳ chọn** để tắt từng loại trong app hoặc qua email.
 - **Hồ sơ → Xác thực 2 lớp (2FA)**: bật bằng app Google Authenticator hoặc tương tự. **Lưu lại 8 mã khôi phục** ở nơi an toàn.
 - **Hồ sơ → Phiên đăng nhập**: xem các thiết bị đang đăng nhập và đăng xuất từ xa thiết bị lạ.
 - Quên mật khẩu: bấm **Quên mật khẩu** ở trang đăng nhập. Đăng nhập sai 5 lần liên tiếp sẽ bị tạm khoá 15 phút.

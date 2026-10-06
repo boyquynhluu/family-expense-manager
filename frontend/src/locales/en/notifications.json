@@ -43,7 +43,13 @@
     "APPROVAL_DECIDED": "Approval decision",
     "LOAN_DUE_SOON": "Loan due soon",
     "SAVINGS_MILESTONE": "Savings milestone",
-    "MONTHLY_SUMMARY": "Monthly summary"
+    "MONTHLY_SUMMARY": "Monthly summary",
+    "LOAN_CREATED": "New loan",
+    "LOAN_PAYMENT": "Loan repayment",
+    "LOAN_SETTLED": "Loan settled",
+    "LOAN_REMOVED": "Loan or repayment deleted",
+    "WALLET_ADJUSTED": "Balance adjusted"
   },
-  "savePreferencesConfirm": "Save notification preferences?"
+  "savePreferencesConfirm": "Save notification preferences?",
+  "openHint": "Click to open the related page"
 }

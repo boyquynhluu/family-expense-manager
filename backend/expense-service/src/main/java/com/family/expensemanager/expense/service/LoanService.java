@@ -2,6 +2,7 @@ package com.family.expensemanager.expense.service;
 
 import com.family.expensemanager.common.currency.CurrencyUtil;
 import com.family.expensemanager.common.dto.PageResponse;
+import com.family.expensemanager.common.event.ExpenseEvent;
 import com.family.expensemanager.common.exception.ApiException;
 import com.family.expensemanager.common.exception.BadRequestException;
 import com.family.expensemanager.common.exception.ConflictException;
@@ -15,6 +16,7 @@ import com.family.expensemanager.expense.domain.entity.Wallet;
 import com.family.expensemanager.expense.dto.LoanPaymentRequest;
 import com.family.expensemanager.expense.dto.LoanRequest;
 import com.family.expensemanager.expense.dto.LoanResponse;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
@@ -25,6 +27,7 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -38,6 +41,8 @@ import static com.family.expensemanager.common.exception.ExceptionLogger.logged;
  * {@link WalletService#currentBalanceOf}) — never income or expense, budgets or category reports. Money leaving a
  * wallet (lending, repaying a debt) follows the negative-balance policy (A1); dates follow closed months (B2).
  * Anyone may record a loan on a wallet they can use; its creator or the OWNER may change or delete it.
+ * Recording, repaying and settling a loan email the member it is in the name of and, for a loan inside the family,
+ * the owner of the other wallet — never the one who did it; deletions are in-app only.
  *
  * @author boyquynhluu
  */
@@ -58,6 +63,7 @@ public class LoanService {
     private final LoanPaymentDao loanPaymentDao;
     private final WalletService walletService;
     private final PeriodLockService periodLockService;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     public LoanResponse create(Long familyId, Long userId, String userName, boolean callerIsOwner, LoanRequest request) {
@@ -94,6 +100,13 @@ public class LoanService {
             loan.setCreatedByName(truncate(userName));
             loan.setCreatedAt(LocalDateTime.now(clock));
             loanDao.insert(loan);
+            boolean borrowed = BORROWED.equals(loan.getDirection());
+            String message = ExpenseEvent.userToken(memberUserId)
+                    + (borrowed ? " vay " + party(loan) + " " + money(loan.getPrincipal()) + ", nhận vào ví "
+                    : " cho " + party(loan) + " vay " + money(loan.getPrincipal()) + " từ ví ") + wallet.getName()
+                    + (loan.getDueDate() != null ? ", hạn trả " + loan.getDueDate() : "") + "." + recordedBy(loan, userId);
+            publish(ExpenseEvent.LOAN_CREATED, loan, userId, userName, recipients(loan, other),
+                    borrowed ? "Khoản vay mới" : "Khoản cho vay mới", message);
             return LoanResponse.from(loan, BigDecimal.ZERO, List.of());
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
             throw e;
@@ -179,6 +192,9 @@ public class LoanService {
                         walletService.requireOwnedByFamily(loan.getCounterpartyWalletId(), familyId), loan.getPrincipal());
             }
             loanDao.delete(loan);
+            publish(ExpenseEvent.LOAN_REMOVED, loan, userId, null, List.of(),
+                    BORROWED.equals(loan.getDirection()) ? "Khoản vay đã bị xoá" : "Khoản cho vay đã bị xoá",
+                    ExpenseEvent.userToken(userId) + " đã xoá khoản " + summary(loan) + ".");
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
             throw e;
         } catch (Exception e) {
@@ -222,10 +238,12 @@ public class LoanService {
             payment.setCreatedByName(truncate(userName));
             payment.setCreatedAt(LocalDateTime.now(clock));
             loanPaymentDao.insert(payment);
-            if (request.amount().compareTo(remaining) == 0) {
+            boolean settled = request.amount().compareTo(remaining) == 0;
+            if (settled) {
                 loan.setStatus(CLOSED);
                 loanDao.update(loan);
             }
+            publishPayment(loan, payment, wallet, remaining.subtract(request.amount()), settled, userId, userName);
             return get(familyId, loanId);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
             throw e;
@@ -253,10 +271,17 @@ public class LoanService {
                         walletService.requireOwnedByFamily(loan.getCounterpartyWalletId(), familyId), payment.getAmount());
             }
             loanPaymentDao.delete(payment);
-            if (CLOSED.equals(loan.getStatus())) {
+            boolean reopened = CLOSED.equals(loan.getStatus());
+            if (reopened) {
                 loan.setStatus(OPEN);
                 loanDao.update(loan);
             }
+            boolean borrowed = BORROWED.equals(loan.getDirection());
+            publish(ExpenseEvent.LOAN_REMOVED, loan, userId, null, List.of(),
+                    borrowed ? "Lần trả nợ đã bị xoá" : "Lần thu nợ đã bị xoá",
+                    ExpenseEvent.userToken(userId) + " đã xoá lần " + (borrowed ? "trả " : "thu ")
+                            + money(payment.getAmount()) + " của khoản " + summary(loan) + "."
+                            + (reopened ? " Khoản này mở lại." : ""));
             return get(familyId, loanId);
         } catch (ApiException | AccessDeniedException | AuthenticationException | UncheckedIOException e) {
             throw e;
@@ -288,6 +313,62 @@ public class LoanService {
             throw logged(log, new BadRequestException("Hãy nhập tên người cho vay / người vay, hoặc chọn một ví trong gia đình"));
         }
         return request.counterpartyName().trim();
+    }
+
+    private void publishPayment(Loan loan, LoanPayment payment, Wallet wallet, BigDecimal remaining, boolean settled,
+                                Long userId, String userName) {
+        boolean borrowed = BORROWED.equals(loan.getDirection());
+        String message = ExpenseEvent.userToken(loan.getMemberUserId())
+                + (borrowed ? " đã trả " + party(loan) + " " + money(payment.getAmount()) + " từ ví "
+                : " đã thu " + money(payment.getAmount()) + " từ " + party(loan) + " vào ví ") + wallet.getName() + ". "
+                + (settled ? "Khoản " + summary(loan) + " đã tất toán."
+                : (borrowed ? "Còn nợ " : "Còn phải thu ") + money(remaining) + ".")
+                + recordedBy(loan, userId);
+        String title = settled
+                ? (borrowed ? "Khoản vay đã trả hết" : "Khoản cho vay đã thu đủ")
+                : (borrowed ? "Đã trả nợ" : "Đã thu nợ");
+        Wallet other = loan.getCounterpartyWalletId() == null ? null
+                : walletService.requireOwnedByFamily(loan.getCounterpartyWalletId(), loan.getFamilyId());
+        publish(settled ? ExpenseEvent.LOAN_SETTLED : ExpenseEvent.LOAN_PAYMENT, loan, userId, userName,
+                recipients(loan, other), title, message);
+    }
+
+    private void publish(String type, Loan loan, Long userId, String userName, List<Long> recipients, String title,
+                         String message) {
+        eventPublisher.publishEvent(ExpenseEvent.noticeTo(type, loan.getFamilyId(), userId, userName, recipients,
+                title, message, "/loans"));
+    }
+
+    /** Who is emailed: the member the loan is in the name of and the owner of the family wallet on the other side. */
+    private static List<Long> recipients(Loan loan, Wallet other) {
+        List<Long> ids = new ArrayList<>();
+        if (loan.getMemberUserId() != null) {
+            ids.add(loan.getMemberUserId());
+        }
+        if (other != null && other.getOwnerUserId() != null && !ids.contains(other.getOwnerUserId())) {
+            ids.add(other.getOwnerUserId());
+        }
+        return ids;
+    }
+
+    /** "vay Anh Hùng 3.000.000 ₫" / "cho ví Tiền mặt vay 3.000.000 ₫", in the member's name. */
+    private static String summary(Loan loan) {
+        String member = ExpenseEvent.userToken(loan.getMemberUserId());
+        return BORROWED.equals(loan.getDirection())
+                ? member + " vay " + party(loan) + " " + money(loan.getPrincipal())
+                : member + " cho " + party(loan) + " vay " + money(loan.getPrincipal());
+    }
+
+    private static String party(Loan loan) {
+        return loan.getCounterpartyWalletId() != null ? "ví " + loan.getCounterpartyName() : loan.getCounterpartyName();
+    }
+
+    private static String recordedBy(Loan loan, Long userId) {
+        return userId.equals(loan.getMemberUserId()) ? "" : " (Người ghi: " + ExpenseEvent.userToken(userId) + ")";
+    }
+
+    private static String money(BigDecimal amount) {
+        return CurrencyUtil.formatCurrency(amount);
     }
 
     /** The caller themself unless the OWNER names another member. */

@@ -43,7 +43,13 @@
     "APPROVAL_DECIDED": "Kết quả duyệt khoản chi",
     "LOAN_DUE_SOON": "Khoản vay sắp đến hạn",
     "SAVINGS_MILESTONE": "Mốc tiết kiệm",
-    "MONTHLY_SUMMARY": "Tổng kết tháng"
+    "MONTHLY_SUMMARY": "Tổng kết tháng",
+    "LOAN_CREATED": "Khoản vay mới",
+    "LOAN_PAYMENT": "Trả / thu nợ",
+    "LOAN_SETTLED": "Khoản vay tất toán",
+    "LOAN_REMOVED": "Khoản vay / lần trả bị xoá",
+    "WALLET_ADJUSTED": "Điều chỉnh số dư ví"
   },
-  "savePreferencesConfirm": "Lưu tuỳ chọn thông báo?"
+  "savePreferencesConfirm": "Lưu tuỳ chọn thông báo?",
+  "openHint": "Bấm để mở trang liên quan"
 }

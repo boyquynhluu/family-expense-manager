@@ -30,6 +30,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.NumberFormat;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Locale;
 
 import lombok.extern.slf4j.Slf4j;
@@ -202,22 +203,37 @@ public class ExpenseEventListener {
      * or the whole family; each recipient's own opt-out is honoured and a failing address is only logged (a rethrow
      * would make Kafka redeliver and insert the in-app row twice).
      */
+    private static final java.util.regex.Pattern USER_TOKEN = java.util.regex.Pattern.compile("\\{user:(\\d+)}");
+
     private void handleNotice(ExpenseEvent event) {
-        save(event, truncate(event.title(), MAX_TITLE_LENGTH), truncate(event.message(), MAX_MESSAGE_LENGTH));
         NotificationType type = NotificationType.fromName(event.eventType());
-        if (type == null || !type.isEmailSupported()) {
+        boolean emails = type != null && type.isEmailSupported();
+        boolean namesUsers = hasUserToken(event.title()) || hasUserToken(event.message());
+        List<FamilyMemberDirectory.Member> members = emails || namesUsers
+                ? memberDirectory.listMembers(event.familyId()) : List.of();
+        String title = resolveUserNames(event.title(), members);
+        String message = resolveUserNames(event.message(), members);
+        save(event, truncate(title, MAX_TITLE_LENGTH), truncate(message, MAX_MESSAGE_LENGTH));
+        if (!emails) {
             return;
         }
         String link = frontendUrl + (event.linkPath() != null ? event.linkPath() : "/notifications");
-        String messageHtml = escape(event.message()).replace("\n", "<br>");
-        for (FamilyMemberDirectory.Member member : memberDirectory.listMembers(event.familyId())) {
+        String messageHtml = escape(message).replace("\n", "<br>");
+        for (FamilyMemberDirectory.Member member : members) {
             if (member.email() == null) {
                 continue;
             }
-            if (event.targetUserId() != null && !event.targetUserId().equals(member.userId())) {
+            if (!type.emailsActor() && member.userId().equals(event.userId())) {
                 continue;
             }
-            if (event.targetUserId() == null && event.targetRole() != null && !event.targetRole().equals(member.role())) {
+            if (event.recipientUserIds() != null) {
+                if (!event.recipientUserIds().contains(member.userId())) {
+                    continue;
+                }
+            } else if (event.targetUserId() != null && !event.targetUserId().equals(member.userId())) {
+                continue;
+            } else if (event.targetUserId() == null && event.targetRole() != null
+                    && !event.targetRole().equals(member.role())) {
                 continue;
             }
             if (!preferenceService.isEmailEnabled(member.userId(), type)) {
@@ -228,15 +244,40 @@ public class ExpenseEventListener {
             String recipientName = member.displayName() != null ? member.displayName() : member.email();
             String html = noticeTemplate
                     .replace("{{recipientName}}", escape(recipientName))
-                    .replace("{{title}}", escape(event.title()))
+                    .replace("{{title}}", escape(title))
                     .replace("{{message}}", messageHtml)
                     .replace("{{link}}", escape(link));
             try {
-                sendHtml(member.email(), event.title(), html);
+                sendHtml(member.email(), title, html);
             } catch (MessagingException | MailException e) {
                 log.error("Không gửi được email {} familyId={}, userId={}", type, event.familyId(), member.userId(), e);
             }
         }
+    }
+
+    private static boolean hasUserToken(String text) {
+        return text != null && text.contains("{user:");
+    }
+
+    /** {@code {user:<id>}} → that member's display name (see ExpenseEvent); unknown ids read "Một thành viên". */
+    private static String resolveUserNames(String text, List<FamilyMemberDirectory.Member> members) {
+        if (!hasUserToken(text)) {
+            return text;
+        }
+        java.util.regex.Matcher matcher = USER_TOKEN.matcher(text);
+        StringBuilder out = new StringBuilder();
+        while (matcher.find()) {
+            Long userId = Long.valueOf(matcher.group(1));
+            String name = members.stream()
+                    .filter(m -> userId.equals(m.userId()))
+                    .map(m -> m.displayName() != null ? m.displayName() : m.email())
+                    .filter(java.util.Objects::nonNull)
+                    .findFirst()
+                    .orElse("Một thành viên");
+            matcher.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(name));
+        }
+        matcher.appendTail(out);
+        return out.toString();
     }
 
     private static String truncate(String value, int max) {
