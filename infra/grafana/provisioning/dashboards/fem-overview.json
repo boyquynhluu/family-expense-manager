@@ -12,6 +12,7 @@
       "id": 1,
       "title": "HTTP request rate (req/s)",
       "type": "timeseries",
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" } },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "targets": [
@@ -26,12 +27,13 @@
       "id": 2,
       "title": "HTTP 5xx error rate (req/s)",
       "type": "timeseries",
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" } },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(http_server_requests_seconds_count{outcome=\"SERVER_ERROR\"}[5m])) by (application)",
+          "expr": "sum(rate(http_server_requests_seconds_count{outcome=\"SERVER_ERROR\"}[5m])) by (application) or sum(rate(http_server_requests_seconds_count[5m])) by (application) * 0",
           "legendFormat": "{{application}}"
         }
       ]
@@ -40,6 +42,7 @@
       "id": 3,
       "title": "JVM heap used (bytes)",
       "type": "timeseries",
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" } },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "targets": [
@@ -54,6 +57,7 @@
       "id": 4,
       "title": "Service uptime",
       "type": "timeseries",
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" } },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
       "targets": [
