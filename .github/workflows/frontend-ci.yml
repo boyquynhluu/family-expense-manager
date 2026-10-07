@@ -26,6 +26,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history: Sonar uses git blame to tell new code from old.
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -47,3 +50,11 @@ jobs:
       - name: Build
         working-directory: frontend
         run: npm run build
+
+      # Project keys in frontend/sonar-project.properties.
+      - name: SonarQube Cloud scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        with:
+          projectBaseDir: frontend
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
