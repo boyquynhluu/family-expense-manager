@@ -131,7 +131,9 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_HEAP_OPTS: "-Xms256m -Xmx512m"
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"]
+      # A TCP probe, not kafka-broker-api-versions.sh: that script boots a whole JVM (~6s) on every run,
+      # which at a 15s interval kept the VPS CPU busy and made every request slower.
+      test: ["CMD-SHELL", "nc -z localhost 9092"]
       interval: 15s
       timeout: 10s
       retries: 10
@@ -374,10 +376,13 @@ services:
     <<: [*restart, *logging]
     mem_limit: 256m
     privileged: true
+    # Only the metric groups the VPS dashboard uses, collected once a minute — with every group at 30s it took
+    # ~30% of a CPU on its own.
     command:
       - --docker_only=true
-      - --housekeeping_interval=30s
+      - --housekeeping_interval=60s
       - --store_container_labels=false
+      - --enable_metrics=cpu,memory,network,oom_event
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro

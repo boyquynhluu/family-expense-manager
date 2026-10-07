@@ -15,7 +15,9 @@ scrape_configs:
   - job_name: docker
     docker_sd_configs:
       - host: unix:///var/run/docker.sock
-        refresh_interval: 5s
+        # How often new/removed containers are discovered (logs themselves are tailed continuously) — every 5s
+        # kept dockerd busy answering container-list calls.
+        refresh_interval: 30s
     relabel_configs:
       - source_labels: ["__meta_docker_container_name"]
         regex: "/(.*)"

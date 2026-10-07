@@ -128,7 +128,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "topk(10, histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{application!~\"api-gateway|eureka-server\", uri!~\"/actuator.*|UNKNOWN|root\"}[$__range])) by (le, application, uri)))",
+          "expr": "topk(10, histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{application!~\"api-gateway|eureka-server\", uri!~\"/actuator.*|UNKNOWN|root\"}[$__range])) by (le, application, uri)) > 0)",
           "legendFormat": "{{application}} {{uri}}",
           "instant": true
         }

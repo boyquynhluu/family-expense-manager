@@ -38,6 +38,6 @@ scrape_configs:
       - targets: ["node-exporter:9100"]
 
   - job_name: cadvisor
-    scrape_interval: 30s
+    scrape_interval: 60s   # = cAdvisor housekeeping_interval; scraping faster only re-reads the same values
     static_configs:
       - targets: ["cadvisor:8080"]
