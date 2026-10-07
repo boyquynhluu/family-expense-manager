@@ -30,3 +30,14 @@ scrape_configs:
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: ["notification-service:8083"]
+
+  # VPS host (CPU, RAM, disk, load) and per-container usage — prod monitoring profile only
+  # (infra/docker-compose.prod.yml); in dev these targets are simply reported as down.
+  - job_name: node-exporter
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  - job_name: cadvisor
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["cadvisor:8080"]

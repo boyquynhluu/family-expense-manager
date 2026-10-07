@@ -317,7 +317,8 @@ services:
     networks:
       - fem-network
 
-  # --- Monitoring (optional): docker compose -f docker-compose.prod.yml --profile monitoring up -d
+  # --- Monitoring (optional): COMPOSE_PROFILES=monitoring in .env.prod (then every `up`, incl. deploy.sh, runs it),
+  # or once by hand: docker compose -f docker-compose.prod.yml --profile monitoring up -d
   # No public port: Grafana listens on the VPS's 127.0.0.1 only — open it through an SSH tunnel
   # (ssh -L 3001:127.0.0.1:3001 user@vps, then http://localhost:3001).
   prometheus:
@@ -326,9 +327,59 @@ services:
     profiles: [monitoring]
     <<: [*restart, *logging]
     mem_limit: 256m
+    # Default flags + retention: without a size cap the TSDB only stops growing after 15 days.
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --storage.tsdb.retention.size=2GB
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
+    networks:
+      - fem-network
+
+  # VPS-level metrics (CPU, RAM, disk, load) from the host's /proc, /sys and / mounted read-only. Stays on
+  # fem-network (host networking would publish :9100 to the internet), so its network counters are the
+  # container's own — per-container traffic comes from cAdvisor instead.
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: fem-node-exporter
+    profiles: [monitoring]
+    <<: [*restart, *logging]
+    mem_limit: 64m
+    pid: host
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/host/root
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker/.+)($$|/)
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro,rslave
+    networks:
+      - fem-network
+
+  # Per-container CPU / memory / network. >= v0.60 (ghcr.io): gcr.io's v0.52 cannot resolve containers on Docker 29's
+  # containerd image store ("failed to identify the read-write layer ID") and exports them without names.
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.60.6
+    container_name: fem-cadvisor
+    profiles: [monitoring]
+    <<: [*restart, *logging]
+    mem_limit: 256m
+    privileged: true
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=30s
+      - --store_container_labels=false
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
     networks:
       - fem-network
 

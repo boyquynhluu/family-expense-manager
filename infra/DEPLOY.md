@@ -171,14 +171,20 @@ docker image prune -f
 
 ## 9. Monitoring (tuỳ chọn)
 
+Thêm `COMPOSE_PROFILES=monitoring` vào `infra/.env.prod` để mọi lần `fem up` (kể cả CD qua `deploy.sh`) đều chạy
+monitoring, rồi:
+
 ```bash
-fem --profile monitoring up -d
+fem up -d
 # Grafana chỉ nghe trên 127.0.0.1 của VPS — mở qua SSH tunnel từ máy của bạn:
-ssh -L 3001:127.0.0.1:3001 root@<IP-VPS>
+ssh -N -L 3001:127.0.0.1:3001 fem
 # rồi mở http://localhost:3001 (admin / GRAFANA_ADMIN_PASSWORD)
 ```
 
-Prometheus + Loki + Grafana tốn thêm ~1 GB RAM — chỉ bật khi VPS có từ 6 GB.
+Dashboard có sẵn: **Family Expense Manager - Overview** (HTTP, JVM, log) và **VPS & Containers** (CPU/RAM/disk của
+VPS từ node-exporter, CPU/RAM/network từng container từ cAdvisor). Prometheus giữ 15 ngày (tối đa 2 GB), Loki giữ 7 ngày.
+
+Monitoring tốn thêm ~1.2 GB RAM — chỉ bật khi VPS có từ 6 GB.
 
 ## Giới hạn RAM đã đặt
 
