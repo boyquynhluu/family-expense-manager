@@ -179,6 +179,10 @@ fem up -d
 # Grafana chỉ nghe trên 127.0.0.1 của VPS — mở qua SSH tunnel từ máy của bạn:
 ssh -N -L 3001:127.0.0.1:3001 fem
 # rồi mở http://localhost:3001 (admin / GRAFANA_ADMIN_PASSWORD)
+
+# Prometheus (không có đăng nhập — cũng chỉ nghe trên 127.0.0.1 của VPS):
+ssh -N -L 9091:127.0.0.1:9090 fem
+# rồi mở http://localhost:9091 (Status → Targets để xem service nào đang down)
 ```
 
 Dashboard có sẵn: **Family Expense Manager - Overview** (HTTP, JVM, log) và **VPS & Containers** (CPU/RAM/disk của

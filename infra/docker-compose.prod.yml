@@ -333,6 +333,10 @@ services:
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=15d
       - --storage.tsdb.retention.size=2GB
+    # Prometheus has no login — loopback only, like Grafana: ssh -N -L 9091:127.0.0.1:9090 <vps>, then
+    # http://localhost:9091 (9091 locally so it doesn't clash with the dev stack's Prometheus on 9090).
+    ports:
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
