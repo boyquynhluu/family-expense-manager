@@ -69,11 +69,93 @@
       ]
     },
     {
+      "id": 6,
+      "title": "Response time p95 by service (95% of requests are faster)",
+      "type": "timeseries",
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" } },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{uri!~\"/actuator.*\"}[5m])) by (le, application))",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "api-gateway response time p50 / p95 / p99 (what users see)",
+      "type": "timeseries",
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" } },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.50, sum(rate(http_server_requests_seconds_bucket{application=\"api-gateway\", uri!~\"/actuator.*\"}[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{application=\"api-gateway\", uri!~\"/actuator.*\"}[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{application=\"api-gateway\", uri!~\"/actuator.*\"}[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Slowest endpoints — p95 over the selected time range",
+      "type": "bargauge",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 24 },
+      "options": { "orientation": "horizontal", "displayMode": "gradient" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s", "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null }, { "color": "orange", "value": 0.3 }, { "color": "red", "value": 1 }
+          ] }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "topk(10, histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{application!~\"api-gateway|eureka-server\", uri!~\"/actuator.*|UNKNOWN|root\"}[$__range])) by (le, application, uri)))",
+          "legendFormat": "{{application}} {{uri}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Requests slower than 1s (%)",
+      "type": "timeseries",
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" } },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0 } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "100 * (1 - sum(rate(http_server_requests_seconds_bucket{le=\"1.0\", uri!~\"/actuator.*\"}[5m])) by (application) / sum(rate(http_server_requests_seconds_count{uri!~\"/actuator.*\"}[5m])) by (application))",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
       "id": 5,
       "title": "Container logs (all services)",
       "type": "logs",
       "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 33 },
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki" },

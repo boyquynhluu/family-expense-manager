@@ -58,3 +58,15 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+    # Histogram buckets for http_server_requests_seconds, so Grafana can compute p50/p95/p99 response times
+    # (infra/grafana/.../fem-overview.json) — without them only the average and max exist. The range caps the
+    # bucket count; the SLO buckets give exact "slower than 300ms / 1s" ratios.
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      minimum-expected-value:
+        http.server.requests: 5ms
+      maximum-expected-value:
+        http.server.requests: 30s
+      slo:
+        http.server.requests: 300ms,1s
