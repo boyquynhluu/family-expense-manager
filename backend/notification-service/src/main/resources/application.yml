@@ -21,6 +21,10 @@ spring:
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
         spring.json.trusted.packages: "com.family.expensemanager.*"
+        # ~30 consumers (6 topics + their @RetryableTopic retry/DLT topics) each sent an empty fetch to Kafka every
+        # 500ms (the default) — constant CPU on both sides while idle. The broker still answers as soon as a record
+        # arrives (fetch.min.bytes=1), so this does not delay delivery; it only makes idle fetches rarer.
+        fetch.max.wait.ms: 5000
   mail:
     host: ${SMTP_HOST:}
     port: ${SMTP_PORT:587}

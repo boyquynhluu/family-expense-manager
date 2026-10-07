@@ -66,7 +66,9 @@ services:
     ports:
       - "9092:9092"
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"]
+      # A TCP probe, not kafka-broker-api-versions.sh: that script boots a whole JVM (~6s) on every run,
+      # which at a 15s interval kept the VPS CPU busy and made every request slower.
+      test: ["CMD-SHELL", "nc -z localhost 9092"]
       interval: 15s
       timeout: 10s
       retries: 10
