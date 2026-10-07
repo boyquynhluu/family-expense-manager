@@ -41,11 +41,14 @@ jobs:
       # them. ubuntu-latest runners ship with Docker, which is all Testcontainers needs.
       # `sonar` then uploads the analysis + JaCoCo coverage to SonarQube Cloud (project keys in backend/pom.xml);
       # sonar.qualitygate.wait makes this step fail when the Quality Gate fails, which also blocks the deploy.
+      # Sonar runs only for PRs and main: the free SonarQube Cloud plan rejects analyses of other branches, so a
+      # push to feature/** failed this job even though the build and tests passed (the PR run covers that code).
       - name: Build, unit tests, integration tests and Sonar analysis
         working-directory: backend
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: mvn -B -ntp verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+          SONAR_GOAL: ${{ (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') && 'org.sonarsource.scanner.maven:sonar-maven-plugin:sonar' || '' }}
+        run: mvn -B -ntp verify $SONAR_GOAL
 
       # So a red build shows WHICH test failed without digging through the raw log.
       - name: Upload test reports
