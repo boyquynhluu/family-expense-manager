@@ -24,6 +24,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history: Sonar uses git blame to tell new code from old.
+          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -36,9 +39,13 @@ jobs:
       # `verify`, not `test`: the *IT.java integration tests (real MySQL via Testcontainers, incl. the
       # Flyway migrations) are bound to maven-failsafe in the verify phase, so `test` silently skipped
       # them. ubuntu-latest runners ship with Docker, which is all Testcontainers needs.
-      - name: Build, unit tests and integration tests (all modules)
+      # `sonar` then uploads the analysis + JaCoCo coverage to SonarQube Cloud (project keys in backend/pom.xml);
+      # sonar.qualitygate.wait makes this step fail when the Quality Gate fails, which also blocks the deploy.
+      - name: Build, unit tests, integration tests and Sonar analysis
         working-directory: backend
-        run: mvn -B -ntp verify
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: mvn -B -ntp verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
 
       # So a red build shows WHICH test failed without digging through the raw log.
       - name: Upload test reports

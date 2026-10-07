@@ -39,6 +39,15 @@
         <!-- >= 1.21.4: older versions talk to Docker with an API version Docker Engine 29+ rejects
              (min API 1.44), so every *IT failed with "Could not find a valid Docker environment". -->
         <testcontainers.version>1.21.4</testcontainers.version>
+
+        <!-- SonarQube Cloud (scan runs in .github/workflows/backend-ci.yml). Monorepo: the frontend is a
+             separate Sonar project, see frontend/sonar-project.properties. qualitygate.wait fails the CI step
+             (and so blocks the deploy) when the Quality Gate fails. -->
+        <sonar.organization>boyquynhluu</sonar.organization>
+        <sonar.projectKey>boyquynhluu_fem-backend</sonar.projectKey>
+        <sonar.projectName>FEM Backend</sonar.projectName>
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <sonar.qualitygate.wait>true</sonar.qualitygate.wait>
     </properties>
 
     <dependencyManagement>
@@ -118,4 +127,30 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <build>
+        <plugins>
+            <!-- Code coverage for SonarQube Cloud: the agent records unit (surefire) + *IT (failsafe) runs,
+                 `report` writes target/site/jacoco/jacoco.xml per module — the path Sonar reads by default. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>
