@@ -51,8 +51,10 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      # Project keys in frontend/sonar-project.properties.
+      # Project keys in frontend/sonar-project.properties. PRs and main only — the free SonarQube Cloud plan
+      # does not analyse other branches (see backend-ci.yml).
       - name: SonarQube Cloud scan
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
         uses: SonarSource/sonarqube-scan-action@v5
         with:
           projectBaseDir: frontend
