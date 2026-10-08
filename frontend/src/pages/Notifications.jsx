@@ -8,7 +8,9 @@ import Pagination from "../components/Pagination";
 import { Button, IconButton } from "../components/ui/Button";
 import { Checkbox } from "../components/ui/Input";
 import { usePagedList } from "../hooks/usePagedList";
+import { useVisiblePolling } from "../hooks/useVisiblePolling";
 import { confirmDialog } from "../utils/confirm";
+import { notifyUnreadChanged } from "../utils/notificationEvents";
 
 export default function Notifications() {
   const { t } = useTranslation("notifications");
@@ -32,6 +34,7 @@ export default function Notifications() {
   function refresh() {
     reload();
     loadUnreadCount();
+    notifyUnreadChanged(); // keep the sidebar badge in step with what was just read/deleted
   }
 
   useEffect(() => {
@@ -45,13 +48,10 @@ export default function Notifications() {
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    // Polling instead of a persistent connection keeps this simple and matches the
-    // rest of the app's request/response style — good enough at this app's scale.
-    const interval = setInterval(refresh, 15_000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reload]);
+  // Polling instead of a persistent connection keeps this simple and matches the
+  // rest of the app's request/response style — good enough at this app's scale.
+  // Paused while the tab is hidden; the list and count are already loaded on mount.
+  useVisiblePolling(refresh, 15_000, { immediate: false });
 
   async function markAsRead(id) {
     setError("");

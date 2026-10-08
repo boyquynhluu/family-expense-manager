@@ -1,27 +1,35 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import client from "../api/client";
+import { onUnreadChanged } from "../utils/notificationEvents";
+import { useVisiblePolling } from "./useVisiblePolling";
 
-/** Polls the unread notification count so the sidebar badge stays close to real-time. */
-export function useUnreadNotifications(intervalMs = 15_000) {
+/**
+ * Unread notification count for the sidebar badge: refreshed right after the Notifications page changes it
+ * (onUnreadChanged), plus a slow poll — only while the tab is visible — to pick up new notifications.
+ */
+export function useUnreadNotifications(intervalMs = 60_000) {
   const [count, setCount] = useState(0);
+  const mounted = useRef(true);
+
+  const poll = useCallback(() => {
+    client
+      .get("/notifications/unread-count")
+      .then((res) => {
+        if (mounted.current) setCount(res.data.data.count);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    function poll() {
-      client
-        .get("/notifications/unread-count")
-        .then((res) => {
-          if (!cancelled) setCount(res.data.data.count);
-        })
-        .catch(() => {});
-    }
-    poll();
-    const interval = setInterval(poll, intervalMs);
+    mounted.current = true;
+    const unsubscribe = onUnreadChanged(poll);
     return () => {
-      cancelled = true;
-      clearInterval(interval);
+      mounted.current = false;
+      unsubscribe();
     };
-  }, [intervalMs]);
+  }, [poll]);
+
+  useVisiblePolling(poll, intervalMs);
 
   return count;
 }
