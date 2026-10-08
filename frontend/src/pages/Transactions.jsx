@@ -18,6 +18,7 @@ import Pagination from "../components/Pagination";
 import SeedDefaultsButton from "../components/SeedDefaultsButton";
 import TransactionHistoryModal from "../components/TransactionHistoryModal";
 import { useAuth } from "../hooks/useAuth";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { PAGE_SIZE } from "../hooks/usePagedList";
 import RefundModal from "../components/RefundModal";
 import TransactionApprovals from "../components/TransactionApprovals";
@@ -154,14 +155,25 @@ export default function Transactions() {
     return () => clearTimeout(timer);
   }, [highlightId, pageData]);
 
+  // The search box only hits the backend once typing pauses (it used to send a request per keystroke);
+  // clearing it applies at once. Every other filter field applies immediately.
+  const debouncedQ = useDebouncedValue(filter.q);
+  const appliedFilter = { ...filter, q: filter.q === "" ? "" : debouncedQ };
+  const appliedFilterKey = JSON.stringify(appliedFilter);
+  // Bumped on every load() — a response is only applied if no newer load() started since, so a slow
+  // older request (e.g. for "an") can never overwrite the results of a newer one (e.g. "an uong").
+  const loadSeq = useRef(0);
+
   // Filtering/paging happens on the backend now (see README "1. Phân trang/lọc chỉ làm
   // ở frontend") — the client only ever holds the current page's rows.
   function load() {
-    const params = { ...filterParams(filter), page, size: PAGE_SIZE };
+    const params = { ...filterParams(appliedFilter), page, size: PAGE_SIZE };
+    const seq = ++loadSeq.current;
 
     client
       .get("/expenses/transactions", { params })
       .then((res) => {
+        if (seq !== loadSeq.current) return;
         const data = res.data.data;
         // Deleting the last row on a page beyond the first leaves it empty — step back
         // one page rather than showing a stranded "no results" screen.
@@ -173,13 +185,17 @@ export default function Transactions() {
           setPageData(data);
         }
       })
-      .catch((err) => toast.error(err.response?.data?.message || t("transactions:loadFailed")));
+      .catch((err) => {
+        if (seq !== loadSeq.current) return;
+        toast.error(err.response?.data?.message || t("transactions:loadFailed"));
+      });
   }
 
   // Paging keeps the selection; a new filter clears it, since it can hide rows that are
   // still selected and a bulk delete would then remove rows the user can no longer see.
   useEffect(() => setSelectedIds(new Set()), [filter]);
-  useEffect(load, [filter, page, t]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- appliedFilterKey stands in for appliedFilter
+  useEffect(load, [appliedFilterKey, page, t]);
 
   function loadTags() {
     client.get("/expenses/tags").then((res) => setTagOptions(res.data.data)).catch(() => {});
@@ -187,11 +203,15 @@ export default function Transactions() {
 
   function loadWalletsAndCategories() {
     loadTags();
-    client.get("/expenses/wallets").then((res) => setWallets(res.data.data));
-    client.get("/expenses/categories").then((res) => {
-      setCategories(res.data.data);
-      setForm((f) => ({ ...f, categoryId: f.categoryId || String(res.data.data[0]?.id ?? "") }));
-    });
+    const showError = (err) => toast.error(err.response?.data?.message || t("transactions:loadFailed"));
+    client.get("/expenses/wallets").then((res) => setWallets(res.data.data)).catch(showError);
+    client
+      .get("/expenses/categories")
+      .then((res) => {
+        setCategories(res.data.data);
+        setForm((f) => ({ ...f, categoryId: f.categoryId || String(res.data.data[0]?.id ?? "") }));
+      })
+      .catch(showError);
   }
 
   useEffect(() => {
@@ -421,7 +441,7 @@ export default function Transactions() {
   async function showSaved(id) {
     try {
       const res = await client.get(`/expenses/transactions/${id}/location`, {
-        params: { ...filterParams(filter), size: PAGE_SIZE },
+        params: { ...filterParams(appliedFilter), size: PAGE_SIZE },
       });
       const { inList, page: target } = res.data.data;
       if (!inList) {

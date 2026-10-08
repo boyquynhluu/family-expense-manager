@@ -29,8 +29,9 @@ h1 {
   font-weight: 600;
 }
 
-/* Auth pages — cozy living room photo (public/images/auth-background.png, provided by
-   the user) with a soft dark overlay on top so white text/cards stay legible. */
+/* Auth pages — cozy living room photo (src/assets/auth-background.webp, provided by
+   the user) with a soft dark overlay on top so white text/cards stay legible. WebP (~40 KB, was a 1.7 MB PNG)
+   imported from src/ so Vite fingerprints it into /assets and browsers cache it for a year. */
 .auth-page {
   min-height: 100vh;
   min-height: 100dvh;
@@ -41,7 +42,7 @@ h1 {
   position: relative;
   overflow: hidden;
   color: #fff;
-  background-image: url("/images/auth-background.png");
+  background-image: url("./assets/auth-background.webp");
   background-size: cover;
   background-position: center;
 }

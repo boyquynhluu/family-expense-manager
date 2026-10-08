@@ -16,7 +16,8 @@ export default function FamilySwitcher() {
   const [families, setFamilies] = useState([]);
 
   useEffect(() => {
-    client.get("/auth/my-families").then((res) => setFamilies(res.data.data));
+    // Optional UI: if the list can't be loaded the switcher simply stays hidden (single-family view).
+    client.get("/auth/my-families").then((res) => setFamilies(res.data.data)).catch(() => {});
   }, [familyId]);
 
   if (families.length <= 1) {

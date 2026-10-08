@@ -1,19 +1,18 @@
-import { useEffect, useState } from "react";
-import {
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import client from "../api/client";
 import { BalanceIcon, CalendarIcon, TrendDownIcon, TrendUpIcon, WalletIcon } from "../components/AppIcons";
 import WalletMonthlyTable from "../components/WalletMonthlyTable";
 import { formatCurrency } from "../utils/format";
+
+const TrendChart = lazy(() => import("../components/TrendChart"));
+
+const CHART_HEIGHT = 280;
+
+/** Grey placeholder shown while a block's data (or the chart's code) is still loading. */
+function Skeleton({ height }) {
+  return <div className="w-full animate-pulse rounded-lg bg-slate-200" style={{ height }} />;
+}
 
 const CATEGORY_COLORS = ["#4f46e5", "#0ea5e9", "#f59e0b", "#16a34a", "#db2777", "#7c3aed", "#dc2626", "#0891b2"];
 
@@ -30,7 +29,8 @@ export default function Dashboard() {
   const [wallets, setWallets] = useState([]);
   const [categories, setCategories] = useState([]);
   const [walletBreakdownRows, setWalletBreakdownRows] = useState([]);
-  const [trend, setTrend] = useState([]);
+  // null = still loading (a skeleton is shown), [] = loaded but empty.
+  const [trend, setTrend] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -58,12 +58,26 @@ export default function Dashboard() {
 
   // Wallets/categories aren't month-scoped on the backend, so they're loaded once.
   useEffect(() => {
-    client.get("/expenses/wallets").then((res) => setWallets(res.data.data));
-    client.get("/expenses/categories").then((res) => setCategories(res.data.data));
-    client.get("/expenses/reports/trend", { params: { months: 6 } }).then((res) => setTrend(res.data.data));
-  }, []);
+    let cancelled = false;
+    const showError = (err) => {
+      if (!cancelled) setError(err.response?.data?.message || t("summaryLoadFailed"));
+    };
+    client.get("/expenses/wallets").then((res) => !cancelled && setWallets(res.data.data)).catch(showError);
+    client.get("/expenses/categories").then((res) => !cancelled && setCategories(res.data.data)).catch(showError);
+    client
+      .get("/expenses/reports/trend", { params: { months: 6 } })
+      .then((res) => !cancelled && setTrend(res.data.data))
+      .catch((err) => {
+        if (cancelled) return;
+        setTrend([]);
+        showError(err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [t]);
 
-  const trendChartData = trend.map((row) => ({
+  const trendChartData = (trend ?? []).map((row) => ({
     yearMonth: row.yearMonth,
     [t("income")]: Number(row.totalIncome),
     [t("expense")]: Number(row.totalExpense),
@@ -112,6 +126,14 @@ export default function Dashboard() {
 
       {error && <p className="error-text">{error}</p>}
 
+      {!summary && !error && (
+        <div className="summary-cards">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} height={88} />
+          ))}
+        </div>
+      )}
+
       {summary && (
         <div className="summary-cards">
           <div className="card card-income">
@@ -146,20 +168,14 @@ export default function Dashboard() {
 
       <div className="section-card">
         <h2>{t("trendTitle")}</h2>
-        {trendChartData.length === 0 ? (
+        {trend === null ? (
+          <Skeleton height={CHART_HEIGHT} />
+        ) : trendChartData.length === 0 ? (
           <p className="empty-state">{t("noData")}</p>
         ) : (
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={trendChartData} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="yearMonth" />
-              <YAxis tickFormatter={(v) => formatCurrency(v)} width={90} />
-              <Tooltip formatter={(value) => formatCurrency(value)} />
-              <Legend />
-              <Line type="monotone" dataKey={t("income")} stroke="#16a34a" strokeWidth={2} />
-              <Line type="monotone" dataKey={t("expense")} stroke="#dc2626" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
+          <Suspense fallback={<Skeleton height={CHART_HEIGHT} />}>
+            <TrendChart data={trendChartData} incomeKey={t("income")} expenseKey={t("expense")} />
+          </Suspense>
         )}
       </div>
 
