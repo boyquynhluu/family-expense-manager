@@ -2,10 +2,12 @@ package com.family.expensemanager.gateway.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.function.HandlerFilterFunction;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
 
 import static org.springframework.cloud.gateway.server.mvc.filter.BeforeFilterFunctions.rewritePath;
+import static org.springframework.cloud.gateway.server.mvc.filter.CircuitBreakerFilterFunctions.circuitBreaker;
 import static org.springframework.cloud.gateway.server.mvc.filter.LoadBalancerFilterFunctions.lb;
 import static org.springframework.cloud.gateway.server.mvc.handler.GatewayRouterFunctions.route;
 import static org.springframework.cloud.gateway.server.mvc.handler.HandlerFunctions.http;
@@ -27,6 +29,19 @@ import static org.springframework.web.servlet.function.RequestPredicates.path;
 @Configuration
 public class GatewayRoutesConfig {
 
+    /**
+     * One circuit breaker per downstream service (shared by its routes), added BEFORE lb() so it wraps it —
+     * "no instance registered in Eureka" counts as a failure too. Failed or short-circuited calls go to
+     * FallbackController's 503; a 502/503/504 answer from the service counts as a failure (defaults in
+     * CircuitBreakerConfiguration).
+     */
+    private static HandlerFilterFunction<ServerResponse, ServerResponse> breaker(String serviceId) {
+        return circuitBreaker(config -> config
+                .setId(serviceId)
+                .setFallbackUri("forward:/fallback/" + serviceId)
+                .setStatusCodes("502", "503", "504"));
+    }
+
     // Docs routes are registered before the catch-all "/api/<service>/**" routes below:
     // Spring Cloud Gateway MVC combines RouterFunction beans in declaration order and
     // uses the first match, so the more specific docs route must come first or the
@@ -37,6 +52,7 @@ public class GatewayRoutesConfig {
         return route("auth-service-docs")
                 .route(path("/api/auth/v3/api-docs"), http())
                 .before(rewritePath("/api/auth/v3/api-docs", "/v3/api-docs"))
+                .filter(breaker("auth-service"))
                 .filter(lb("auth-service"))
                 .build();
     }
@@ -46,6 +62,7 @@ public class GatewayRoutesConfig {
         return route("expense-service-docs")
                 .route(path("/api/expenses/v3/api-docs"), http())
                 .before(rewritePath("/api/expenses/v3/api-docs", "/v3/api-docs"))
+                .filter(breaker("expense-service"))
                 .filter(lb("expense-service"))
                 .build();
     }
@@ -55,6 +72,7 @@ public class GatewayRoutesConfig {
         return route("notification-service-docs")
                 .route(path("/api/notifications/v3/api-docs"), http())
                 .before(rewritePath("/api/notifications/v3/api-docs", "/v3/api-docs"))
+                .filter(breaker("notification-service"))
                 .filter(lb("notification-service"))
                 .build();
     }
@@ -63,6 +81,7 @@ public class GatewayRoutesConfig {
     public RouterFunction<ServerResponse> authServiceRoute() {
         return route("auth-service")
                 .route(path("/api/auth/**"), http())
+                .filter(breaker("auth-service"))
                 .filter(lb("auth-service"))
                 .build();
     }
@@ -73,6 +92,7 @@ public class GatewayRoutesConfig {
     public RouterFunction<ServerResponse> authServiceAdminRoute() {
         return route("auth-service-admin")
                 .route(path("/api/admin/**"), http())
+                .filter(breaker("auth-service"))
                 .filter(lb("auth-service"))
                 .build();
     }
@@ -81,6 +101,7 @@ public class GatewayRoutesConfig {
     public RouterFunction<ServerResponse> expenseServiceRoute() {
         return route("expense-service")
                 .route(path("/api/expenses/**"), http())
+                .filter(breaker("expense-service"))
                 .filter(lb("expense-service"))
                 .build();
     }
@@ -89,6 +110,7 @@ public class GatewayRoutesConfig {
     public RouterFunction<ServerResponse> notificationServiceRoute() {
         return route("notification-service")
                 .route(path("/api/notifications/**"), http())
+                .filter(breaker("notification-service"))
                 .filter(lb("notification-service"))
                 .build();
     }

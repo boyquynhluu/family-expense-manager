@@ -1,5 +1,6 @@
 package com.family.expensemanager.expense.dao;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import org.seasar.doma.Dao;
@@ -27,4 +28,8 @@ public interface IdempotencyKeyDao {
 
     @Select
     Optional<IdempotencyKey> selectByFamilyIdAndScopeAndKey(Long familyId, String scope, String idempotencyKey);
+
+    /** Deletes every key created before {@code cutoff} — see IdempotencyKeyCleanupScheduler. */
+    @Delete(sqlFile = true)
+    int deleteCreatedBefore(LocalDateTime cutoff);
 }

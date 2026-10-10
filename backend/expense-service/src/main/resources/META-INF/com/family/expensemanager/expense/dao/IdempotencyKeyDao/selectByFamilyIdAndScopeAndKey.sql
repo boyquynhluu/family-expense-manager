@@ -3,6 +3,7 @@ SELECT
     family_id,
     scope,
     idempotency_key,
+    request_hash,
     response_json,
     created_at
 FROM

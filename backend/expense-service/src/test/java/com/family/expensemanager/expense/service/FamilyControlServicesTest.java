@@ -139,10 +139,12 @@ class FamilyControlServicesTest {
         private SpendingLimitService spendingLimitService;
         @Mock
         private ApplicationEventPublisher eventPublisher;
+        @Mock
+        private IdempotencyGuard idempotencyGuard;
 
         private TransactionApprovalService service() {
             return new TransactionApprovalService(approvalDao, familySettingDao, transactionService, walletService,
-                    categoryService, periodLockService, spendingLimitService, eventPublisher, CLOCK);
+                    categoryService, periodLockService, spendingLimitService, eventPublisher, CLOCK, idempotencyGuard);
         }
 
         private void threshold(String value) {

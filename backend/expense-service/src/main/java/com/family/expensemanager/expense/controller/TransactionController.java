@@ -67,7 +67,7 @@ public class TransactionController {
         if (transactionApprovalService.requiresApproval(CurrentUser.familyId(), CurrentUser.role(), request)) {
             return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.ACCEPTED)
                     .body(ApiResponse.ok(transactionApprovalService.submit(CurrentUser.familyId(), CurrentUser.userId(),
-                            CurrentUser.email(), CurrentUser.displayName(), request)));
+                            CurrentUser.email(), CurrentUser.displayName(), request, idempotencyKey)));
         }
         return org.springframework.http.ResponseEntity.ok(ApiResponse.ok(transactionService.create(
                 CurrentUser.familyId(), CurrentUser.userId(), CurrentUser.email(), CurrentUser.displayName(),

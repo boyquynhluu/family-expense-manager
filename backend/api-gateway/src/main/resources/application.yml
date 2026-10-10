@@ -7,6 +7,15 @@ spring:
   # Spring Cloud Gateway Server MVC (servlet-based, not WebFlux) does not support
   # routes-as-YAML — routes are defined as RouterFunction beans in
   # com.family.expensemanager.gateway.config.GatewayRoutesConfig.
+  cloud:
+    gateway:
+      mvc:
+        # Without these a hung downstream service held the gateway thread forever. read-timeout must cover the
+        # slowest legitimate call (Excel import/export) and stay below the circuit breaker's time limiter
+        # (CircuitBreakerConfiguration) and nginx's proxy_read_timeout (120s).
+        http-client:
+          connect-timeout: ${GATEWAY_CONNECT_TIMEOUT:2s}
+          read-timeout: ${GATEWAY_READ_TIMEOUT:60s}
 
 eureka:
   client:

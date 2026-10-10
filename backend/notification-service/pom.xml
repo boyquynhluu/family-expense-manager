@@ -59,6 +59,22 @@
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka</artifactId>
         </dependency>
+        <!-- Resilience4j (circuit breaker + retry) for the two remote dependencies of the notification path:
+             auth-service (FamilyMemberDirectory, @CircuitBreaker/@Retry — needs AOP) and the SMTP server
+             (ResilientMailSenderPostProcessor). resilience4j-micrometer publishes their state to Prometheus.
+             Versions come from the Spring Cloud BOM (resilience4j-bom). -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-micrometer</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-mail</artifactId>

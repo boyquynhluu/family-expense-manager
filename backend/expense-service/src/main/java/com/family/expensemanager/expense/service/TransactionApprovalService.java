@@ -57,6 +57,7 @@ public class TransactionApprovalService {
     private static final String TYPE_EXPENSE = "EXPENSE";
     private static final int MAX_PAGE_SIZE = 100;
     private static final int MAX_NAME_LENGTH = 100;
+    private static final String IDEMPOTENCY_SCOPE = "SUBMIT_TRANSACTION_APPROVAL";
 
     private final TransactionApprovalDao approvalDao;
     private final FamilySettingDao familySettingDao;
@@ -67,6 +68,7 @@ public class TransactionApprovalService {
     private final SpendingLimitService spendingLimitService;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
+    private final IdempotencyGuard idempotencyGuard;
 
     public FamilySettingsResponse settings(Long familyId) {
         return new FamilySettingsResponse(threshold(familyId));
@@ -104,6 +106,17 @@ public class TransactionApprovalService {
         }
         BigDecimal threshold = threshold(familyId);
         return threshold != null && request.amount() != null && request.amount().compareTo(threshold) > 0;
+    }
+
+    /**
+     * {@link #submit(Long, Long, String, String, TransactionRequest)} at most once per {@code Idempotency-Key}
+     * (see {@link IdempotencyGuard}) — the same key POST /transactions takes, so a retried above-threshold expense
+     * files one approval request, not two. A null/blank key files it unconditionally.
+     */
+    public TransactionApprovalResponse submit(Long familyId, Long userId, String userEmail, String userName,
+                                              TransactionRequest request, String idempotencyKey) {
+        return idempotencyGuard.runOnce(familyId, IDEMPOTENCY_SCOPE, idempotencyKey, request,
+                TransactionApprovalResponse.class, () -> submit(familyId, userId, userEmail, userName, request));
     }
 
     /**

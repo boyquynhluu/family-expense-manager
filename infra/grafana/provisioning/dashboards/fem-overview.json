@@ -151,11 +151,59 @@
       ]
     },
     {
+      "id": 10,
+      "title": "Circuit breakers not closed (1 = open / half-open)",
+      "type": "timeseries",
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" } },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 33 },
+      "fieldConfig": { "defaults": { "min": 0, "max": 1, "decimals": 0 } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(resilience4j_circuitbreaker_state{state=~\"open|half_open|forced_open\"}) by (application, name)",
+          "legendFormat": "{{application}} → {{name}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Circuit breaker failure rate (%)",
+      "type": "timeseries",
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" } },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 33 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "max(resilience4j_circuitbreaker_failure_rate) by (application, name) >= 0",
+          "legendFormat": "{{application}} → {{name}}"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Calls short-circuited by an open breaker (per min)",
+      "type": "timeseries",
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" } },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 33 },
+      "fieldConfig": { "defaults": { "min": 0 } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "60 * sum(rate(resilience4j_circuitbreaker_not_permitted_calls_total[5m])) by (application, name)",
+          "legendFormat": "{{application}} → {{name}}"
+        }
+      ]
+    },
+    {
       "id": 5,
       "title": "Container logs (all services)",
       "type": "logs",
       "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 33 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 41 },
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki" },

@@ -36,6 +36,52 @@ spring:
           auth: true
           starttls:
             enable: true
+          # JavaMail waits forever by default — a hung SMTP server would block the Kafka listener thread sending
+          # the email (and every notification queued behind it). Milliseconds. A timeout fails the send, so the
+          # event goes through the listeners' @RetryableTopic retries instead of hanging.
+          connectiontimeout: 5000
+          timeout: 10000
+          writetimeout: 10000
+
+# Resilience for the two remote calls of the notification path (states/rates exported to Prometheus as
+# resilience4j_circuitbreaker_* / resilience4j_retry_*, shown on the Grafana overview dashboard).
+resilience4j:
+  circuitbreaker:
+    instances:
+      # FamilyMemberDirectory → auth-service /internal/**. Only network errors and 5xx count: a 4xx is a
+      # bug/config problem a pause would not fix. Open = straight to the empty-list fallback for 30s.
+      auth-service:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 2
+        automatic-transition-from-open-to-half-open-enabled: true
+        record-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+      # ResilientMailSenderPostProcessor → SMTP. Every send failure counts except a rejected recipient
+      # (SmtpFailurePredicate). Open = sends fail at once for 60s instead of each waiting for the SMTP timeouts.
+      smtp:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 60s
+        permitted-number-of-calls-in-half-open-state: 2
+        automatic-transition-from-open-to-half-open-enabled: true
+        record-failure-predicate: com.family.expensemanager.notification.config.SmtpFailurePredicate
+  retry:
+    instances:
+      # One retry after a short pause for a transient blip. Not for an open breaker (CallNotPermittedException is
+      # not listed), so a down auth-service is not hammered.
+      auth-service:
+        max-attempts: 2
+        wait-duration: 300ms
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
 
 eureka:
   client:
