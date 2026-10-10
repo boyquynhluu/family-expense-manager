@@ -99,8 +99,8 @@ class TransactionServiceTest {
                 transactionSplitDao, tagDao);
         // None of these tests exercise idempotency (they all pass a null key) — just run the action,
         // like the real IdempotencyGuard does for a null/blank key.
-        lenient().when(idempotencyGuard.runOnce(any(), any(), any(), any(), any()))
-                .thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(4)).get());
+        lenient().when(idempotencyGuard.runOnce(any(), any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> ((Supplier<Object>) invocation.getArgument(5)).get());
     }
 
     @Test

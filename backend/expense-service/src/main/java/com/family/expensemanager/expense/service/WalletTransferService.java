@@ -72,7 +72,7 @@ public class WalletTransferService {
      */
     public WalletTransferResponse create(Long familyId, Long userId, String userEmail, String userDisplayName,
                                           String role, CreateWalletTransferRequest request, String idempotencyKey) {
-        return idempotencyGuard.runOnce(familyId, IDEMPOTENCY_SCOPE, idempotencyKey, WalletTransferResponse.class,
+        return idempotencyGuard.runOnce(familyId, IDEMPOTENCY_SCOPE, idempotencyKey, request, WalletTransferResponse.class,
                 () -> doCreate(familyId, userId, userEmail, userDisplayName, request));
     }
 

@@ -30,6 +30,10 @@ public class IdempotencyKey {
     @Column(name = "idempotency_key")
     private String idempotencyKey;
 
+    /** SHA-256 (hex) of the request body this key was first used with; null for rows older than V29. */
+    @Column(name = "request_hash")
+    private String requestHash;
+
     @Column(name = "response_json")
     private String responseJson;
 
@@ -66,6 +70,14 @@ public class IdempotencyKey {
 
     public void setIdempotencyKey(String idempotencyKey) {
         this.idempotencyKey = idempotencyKey;
+    }
+
+    public String getRequestHash() {
+        return requestHash;
+    }
+
+    public void setRequestHash(String requestHash) {
+        this.requestHash = requestHash;
     }
 
     public String getResponseJson() {

@@ -71,6 +71,18 @@
             <groupId>org.apache.httpcomponents.client5</groupId>
             <artifactId>httpclient5</artifactId>
         </dependency>
+        <!-- Circuit breaker per downstream service (GatewayRoutesConfig / CircuitBreakerConfiguration): a
+             service that is down or hanging is failed fast with a 503 instead of tying up gateway threads.
+             Version comes from the Spring Cloud BOM. -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
+        </dependency>
+        <!-- Publishes the breakers' state/failure rate to Prometheus (resilience4j_circuitbreaker_*). -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-micrometer</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-loadbalancer</artifactId>

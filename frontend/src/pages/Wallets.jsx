@@ -13,6 +13,7 @@ import WalletAdjustments from "../components/WalletAdjustments";
 import WalletMonthlyTable from "../components/WalletMonthlyTable";
 import { useAuth } from "../hooks/useAuth";
 import { useClientPage } from "../hooks/useClientPage";
+import { useIdempotencyKey } from "../hooks/useIdempotencyKey";
 import { usePagedList } from "../hooks/usePagedList";
 import { usePeriodLocks } from "../hooks/usePeriodLocks";
 import { confirmDialog } from "../utils/confirm";
@@ -57,6 +58,8 @@ export default function Wallets() {
   const validateName = (value) => (hasInvalidNameChars(value) ? t("wallets:nameInvalidChars") : cleanText(value));
   const { role, userId } = useAuth();
   const isOwner = role === "OWNER";
+  // Retrying a transfer whose response got lost must not move the money twice (see useIdempotencyKey).
+  const transferKey = useIdempotencyKey();
   const [wallets, setWallets] = useState([]);
   // Paged on the client: the full list is still needed for the wallet selects and owner checks.
   const walletsPage = useClientPage(wallets);
@@ -249,7 +252,10 @@ export default function Wallets() {
       } else {
         if (!(await confirmDialog(t("wallets:transferAddConfirm", {amount: `${formattedAmount} ₫`})))) return;
 
-        await client.post("/expenses/transfers", payload);
+        await client.post("/expenses/transfers", payload, {
+          headers: { "Idempotency-Key": transferKey.keyFor(payload) },
+        });
+        transferKey.reset();
         toast.success(t("wallets:transferSaved"));
         setTransferForm(emptyTransferForm());
         // Newest transfers come first, so jump to page 0 (reload if already there).

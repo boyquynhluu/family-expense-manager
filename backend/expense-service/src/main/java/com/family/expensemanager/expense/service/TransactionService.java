@@ -103,7 +103,7 @@ public class TransactionService {
      */
     public TransactionResponse create(Long familyId, Long userId, String userEmail, String userDisplayName,
                                        boolean callerIsOwner, TransactionRequest request, String idempotencyKey) {
-        return idempotencyGuard.runOnce(familyId, IDEMPOTENCY_SCOPE, idempotencyKey, TransactionResponse.class,
+        return idempotencyGuard.runOnce(familyId, IDEMPOTENCY_SCOPE, idempotencyKey, request, TransactionResponse.class,
                 () -> doCreate(familyId, userId, userEmail, userDisplayName, callerIsOwner, request));
     }
 

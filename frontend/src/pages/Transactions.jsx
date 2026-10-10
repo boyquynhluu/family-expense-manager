@@ -19,6 +19,7 @@ import SeedDefaultsButton from "../components/SeedDefaultsButton";
 import TransactionHistoryModal from "../components/TransactionHistoryModal";
 import { useAuth } from "../hooks/useAuth";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { useIdempotencyKey } from "../hooks/useIdempotencyKey";
 import { PAGE_SIZE } from "../hooks/usePagedList";
 import RefundModal from "../components/RefundModal";
 import TransactionApprovals from "../components/TransactionApprovals";
@@ -115,6 +116,8 @@ export default function Transactions() {
   const cleanText = useCleanText();
   const { role, userId } = useAuth();
   const { isLocked } = usePeriodLocks();
+  // Retrying a create whose response got lost must not record the transaction twice (see useIdempotencyKey).
+  const createKey = useIdempotencyKey();
   const [pageData, setPageData] = useState(emptyPage);
   const [wallets, setWallets] = useState([]);
   // Wallet of the entry being edited — kept selectable even if it has since become another
@@ -404,7 +407,10 @@ export default function Transactions() {
         await client.put(`/expenses/transactions/${editingId}`, payload);
         savedId = editingId;
       } else {
-        const res = await client.post("/expenses/transactions", payload);
+        const res = await client.post("/expenses/transactions", payload, {
+          headers: { "Idempotency-Key": createKey.keyFor(payload) },
+        });
+        createKey.reset();
         if (res.status === 202) {
           // README A5: above the approval threshold — nothing is recorded until the OWNER approves.
           toast(t("transactions:sentForApproval"), { icon: "⏳" });
