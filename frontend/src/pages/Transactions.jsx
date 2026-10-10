@@ -15,14 +15,14 @@ import {
     UploadIcon,
 } from "../components/AppIcons";
 import Pagination from "../components/Pagination";
+import RefundModal from "../components/RefundModal";
 import SeedDefaultsButton from "../components/SeedDefaultsButton";
+import TransactionApprovals from "../components/TransactionApprovals";
 import TransactionHistoryModal from "../components/TransactionHistoryModal";
 import { useAuth } from "../hooks/useAuth";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useIdempotencyKey } from "../hooks/useIdempotencyKey";
 import { PAGE_SIZE } from "../hooks/usePagedList";
-import RefundModal from "../components/RefundModal";
-import TransactionApprovals from "../components/TransactionApprovals";
 import { usePeriodLocks } from "../hooks/usePeriodLocks";
 import { confirmDialog } from "../utils/confirm";
 import { maxDateTime, minDateTime } from "../utils/dateLimits";
@@ -210,10 +210,7 @@ export default function Transactions() {
     client.get("/expenses/wallets").then((res) => setWallets(res.data.data)).catch(showError);
     client
       .get("/expenses/categories")
-      .then((res) => {
-        setCategories(res.data.data);
-        setForm((f) => ({ ...f, categoryId: f.categoryId || String(res.data.data[0]?.id ?? "") }));
-      })
+      .then((res) => setCategories(res.data.data))
       .catch(showError);
   }
 
@@ -240,6 +237,28 @@ export default function Transactions() {
       setForm((f) => (f.walletId ? f : { ...f, walletId: String(firstFormWalletId) }));
     }
   }, [firstFormWalletId]);
+
+  // The category pickers only list categories of the chosen type. Keep the form's selection one of them —
+  // after switching type, loading categories or cancelling an edit — or the <select> shows its first option
+  // while the state still holds a category of the OTHER type, which the backend then rejects ("Danh mục … thuộc
+  // loại EXPENSE, không khớp loại INCOME"). Split parts with such a category go back to "choose a category".
+  const formCategories = categories.filter((c) => c.type === form.type);
+  const formCategoryIdsKey = formCategories.map((c) => c.id).join(",");
+  useEffect(() => {
+    const validIds = formCategoryIdsKey ? formCategoryIdsKey.split(",") : [];
+    setForm((f) => {
+      const categoryId = validIds.includes(f.categoryId) ? f.categoryId : (validIds[0] ?? "");
+      const splitsValid = f.splits.every((p) => p.categoryId === "" || validIds.includes(p.categoryId));
+      if (categoryId === f.categoryId && splitsValid) return f;
+      return {
+        ...f,
+        categoryId,
+        splits: splitsValid
+          ? f.splits
+          : f.splits.map((p) => (p.categoryId === "" || validIds.includes(p.categoryId) ? p : { ...p, categoryId: "" })),
+      };
+    });
+  }, [formCategoryIdsKey]);
 
   function updateField(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -690,7 +709,7 @@ export default function Transactions() {
                   <span className="required-mark" aria-hidden="true"> *</span>
                 </span>
                 <Select value={form.categoryId} onChange={(e) => updateField("categoryId", e.target.value)} required>
-                  {categories.filter((c) => c.type === form.type).map((c) => (
+                  {formCategories.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.parentId ? `— ${c.name}` : c.name}
                     </option>
@@ -771,7 +790,7 @@ export default function Transactions() {
                   <div key={index} className="flex flex-wrap items-end gap-2">
                     <Select value={part.categoryId} onChange={(e) => updateSplit(index, "categoryId", e.target.value)} required>
                       <option value="">{t("transactions:splitChooseCategory")}</option>
-                      {categories.filter((c) => c.type === form.type).map((c) => (
+                      {formCategories.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.parentId ? `— ${c.name}` : c.name}
                         </option>
