@@ -16,3 +16,6 @@ PATH=/usr/local/bin:/usr/bin:/bin
 
 # Shell task — template (disk usage warning every hour):
 # 0  *  *   *   *    bash /opt/family-expense-manager/infra/batch/bin/example-task.sh >> /var/log/fem-batch/example-task.log 2>&1
+
+# Off-VPS copy of the nightly MySQL dump (local backup runs 03:00 in root's crontab)
+30   3  *   *   *    bash /opt/family-expense-manager/infra/batch/bin/offsite-backup.sh >> /var/log/fem-batch/offsite-backup.log 2>&1
