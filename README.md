@@ -67,7 +67,8 @@ family-expense-manager/
 │   ├── api-gateway/                 # Gateway + JWT pre-filter
 │   ├── auth-service/                # Đăng ký/đăng nhập/JWT — schema FEM_AUTH
 │   ├── expense-service/             # Ví/danh mục/giao dịch/ngân sách — schema FEM_EXPENSE
-│   └── notification-service/        # Xử lý thông báo qua Kafka — schema FEM_NOTIFY
+│   ├── notification-service/        # Xử lý thông báo qua Kafka — schema FEM_NOTIFY
+│   └── batch/                       # Spring Batch: job chạy một lần rồi thoát — schema FEM_BATCH (xem Batch)
 ├── frontend/                        # React + Vite SPA
 ├── loadtest/fem-load.jmx            # Kịch bản kiểm thử tải JMeter (xem Kiểm thử tải)
 ├── .github/workflows/               # backend-ci.yml, frontend-ci.yml (CI), deploy.yml (CD lên VPS)
@@ -77,9 +78,11 @@ family-expense-manager/
     ├── docker-compose.prod.yml      # Production trên VPS (xem Triển khai và CI/CD)
     ├── .env.prod.example            # Mẫu biến môi trường production (copy thành .env.prod)
     ├── DEPLOY.md                    # Hướng dẫn cài VPS từng bước
+    ├── BACKUP-S3.md                 # Backup ra ngoài VPS: AWS S3 + rclone (tạo bucket, IAM, cấu hình VPS, khôi phục)
     ├── deploy.sh                    # Script deploy, được workflow deploy.yml gọi trên VPS
     ├── backup-mysql.sh              # mysqldump 3 database
     ├── init-letsencrypt.sh          # Lấy chứng chỉ HTTPS lần đầu
+    ├── batch/                       # Batch shell: bin/ (tác vụ), lib/ (hàm dùng chung), conf/, cron/ (xem Batch)
     ├── nginx/templates/             # Cấu hình nginx production
     ├── prometheus/ loki/ promtail/ grafana/   # Cấu hình monitoring (mục 12)
     └── mysql/init/                  # Script tạo database/user MySQL (chạy khi container MySQL khởi tạo lần đầu)
@@ -221,6 +224,116 @@ Flyway tự dùng `spring.datasource.*` đã cấu hình sẵn trong mỗi `appl
 Hiện có: auth-service V1–V15, expense-service V1–V28, notification-service V1–V2. **Không sửa migration đã chạy trên production**, luôn thêm file version mới. Trên production, `deploy.sh` backup DB trước khi khởi động service (tức trước khi migration mới chạy).
 
 > ⚠️ Nếu xoá volume `mysql-data` (`docker compose down -v`) thì script `infra/mysql/init/` sẽ chạy lại từ đầu — bình thường. Nhưng nếu volume **đã tồn tại** (đã init trước đó) và bạn thêm/sửa script trong `infra/mysql/init/` sau này, nó **sẽ không tự chạy lại** (MySQL chỉ chạy init script khi data directory rỗng) — phải `docker compose down -v` rồi `up` lại, hoặc chạy SQL thủ công vào container đang chạy.
+
+## Batch (Java và Shell)
+
+Hai loại batch, tách theo việc chúng làm:
+
+| | Batch Java (`backend/batch`) | Batch shell (`infra/batch`) |
+|---|---|---|
+| Dùng cho | Xử lý dữ liệu nghiệp vụ: cần transaction, logic domain, khối lượng lớn, chạy tiếp khi lỗi | Vận hành: dọn dẹp, kiểm tra, cảnh báo, kích hoạt job Java |
+| Công nghệ | Spring Batch 5 (chunk-oriented), lịch sử chạy lưu trong schema `fem_batch` | Bash + `flock` + cron |
+| Chạy ở đâu | Container chạy một lần (`docker compose run --rm batch …`), xong là thoát | Trên host VPS, do cron của user `deploy` gọi |
+
+Luồng chạy: `cron → infra/batch/bin/run-java-job.sh <job> → container batch (Spring Batch) → exit code → log + cảnh báo nếu lỗi`.
+
+Các job `@Scheduled` đang có trong từng service (dọn tài khoản chưa xác thực, giao dịch định kỳ, nhắc hạn, báo cáo tháng, dọn thùng rác, dọn idempotency key) vẫn giữ nguyên. Chuyển dần job nặng sang Spring Batch khi cần chạy tiếp từ chỗ lỗi hoặc cần lịch sử chạy — và trước khi chạy một service nhiều instance, vì khi đó mỗi `@Scheduled` sẽ chạy ở mọi instance.
+
+### Cấu trúc batch Java
+
+```
+backend/batch/
+├── pom.xml                         # spring-boot-starter-batch, jdbc, doma, mysql, flyway
+├── Dockerfile                      # image chạy một lần (build từ context backend/)
+└── src/
+    ├── main/java/com/family/expensemanager/batch/
+    │   ├── BatchApplication.java   # chạy đúng job được chọn rồi System.exit(mã kết quả)
+    │   ├── common/                 # dùng chung cho mọi job
+    │   │   └── listener/JobLoggingListener.java   # log bắt đầu/kết thúc, số dòng đọc/ghi/lọc/bỏ qua
+    │   ├── job/                    # ★ mỗi job một package
+    │   │   └── example/            # MẪU — sao chép khi tạo job mới, rồi xoá
+    │   │       ├── ExampleJobConfig.java   # khai báo Job + Step (chunk)
+    │   │       ├── ExampleItem.java        # dữ liệu đi qua reader → processor → writer
+    │   │       ├── ExampleReader.java      # ItemReader (@StepScope)
+    │   │       ├── ExampleProcessor.java   # ItemProcessor (trả null = lọc bỏ)
+    │   │       └── ExampleWriter.java      # ItemWriter (nhận cả chunk)
+    │   └── dao/                    # Doma DAO của batch (SQL ở META-INF/.../batch/dao/<Dao>/<method>.sql)
+    ├── main/resources/
+    │   ├── application.yml         # datasource fem_batch, web-application-type: none
+    │   └── db/migration/V1__spring_batch_metadata.sql   # bảng BATCH_* của Spring Batch 5.1.2
+    └── test/java/.../batch/job/example/ExampleJobTest.java   # MẪU test: JobLauncherTestUtils + H2
+```
+
+- **Chọn job và tham số qua dòng lệnh** (Spring Boot tự xử lý, không cần code launcher): `--spring.batch.job.name=<tên bean Job>` và các tham số dạng `key=value`, ví dụ `yearMonth=2026-09`.
+- **Exit code:** `0` = COMPLETED, `5` = FAILED, `1` = không khởi động được (ví dụ job cùng tham số đã COMPLETED trước đó).
+- **Tham số định danh lần chạy.** Job nghiệp vụ không dùng `RunIdIncrementer`: cùng `yearMonth` thì không chạy trùng, còn lần chạy FAILED sẽ được **chạy tiếp từ chunk cuối cùng đã commit**. `exampleJob` có incrementer chỉ để chạy thử được nhiều lần.
+- **Chunk-oriented:** đọc theo keyset (`WHERE id > :lastId`, không dùng OFFSET); writer ghi theo lô và **idempotent** (upsert hoặc điều kiện "chưa xử lý"), vì chunk chạy lại sẽ được ghi lại; khai báo rõ `skip`/`retry`.
+
+#### Thêm một job mới
+1. Sao chép `job/example/` thành `job/<tên>/`, đổi tên class, đặt tên bean `<tên>Job` và step `<tên>Step`.
+2. Viết reader/processor/writer; gắn `JobLoggingListener` vào job.
+3. Sao chép `ExampleJobTest`; khi job đọc/ghi bảng thật thì chuyển sang Testcontainers MySQL (như các `*IT` của service).
+4. Chạy thử trên VPS: `bash infra/batch/bin/run-java-job.sh <tên>Job key=value`, rồi thêm lịch vào `infra/batch/cron/fem-batch.cron`.
+5. Khi đã có job thật, xoá package `example/`, `ExampleJobTest` và dòng mẫu trong file cron.
+
+#### Đọc/ghi dữ liệu nghiệp vụ
+`fem_batch` chỉ chứa metadata của Spring Batch. Khi job cần dữ liệu của một service:
+- Thêm một `DataSource` thứ hai (ví dụ `fem_expense`) trong package `config/` cùng một Doma `Config` bean (xem `DomaConfiguration` của service), giữ DataSource `fem_batch` làm `@Primary` cho Spring Batch.
+- **Đọc** bằng user chỉ có quyền `SELECT`; **ghi** chỉ vào đúng bảng cần thiết bằng user có quyền tối thiểu, hoặc phát event Kafka để chính service đó ghi — mỗi service vẫn là chủ dữ liệu của mình.
+
+#### Tạo database `fem_batch` (một lần trên VPS)
+Thêm `FEM_BATCH_DB_USER` / `FEM_BATCH_DB_PASSWORD` vào `infra/.env.prod` (xem `.env.prod.example`), rồi tạo database và user:
+```bash
+ssh fem
+docker exec -it fem-mysql-db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD"'
+```
+```sql
+CREATE DATABASE IF NOT EXISTS fem_batch;
+CREATE USER IF NOT EXISTS 'fem_batch'@'%' IDENTIFIED BY '<FEM_BATCH_DB_PASSWORD>';
+GRANT ALL PRIVILEGES ON fem_batch.* TO 'fem_batch'@'%';
+FLUSH PRIVILEGES;
+```
+Flyway tạo các bảng `BATCH_*` ở lần chạy job đầu tiên.
+
+### Cấu trúc batch shell
+
+```
+infra/batch/
+├── bin/                     # ★ mỗi file là một tác vụ, cron gọi trực tiếp
+│   ├── run-java-job.sh      # chạy một job Spring Batch: run-java-job.sh <job> [key=value ...]
+│   └── example-task.sh      # MẪU tác vụ shell (cảnh báo dung lượng đĩa) — sao chép rồi xoá
+├── lib/                     # các script trong bin/ source vào
+│   ├── common.sh            # strict mode, log(), die(), require_cmd(), load_env(), acquire_lock() (flock), bẫy lỗi → notify
+│   └── notify.sh            # notify "<tin nhắn>": ghi log + gửi Telegram nếu có cấu hình
+├── conf/
+│   └── batch.env.template   # LOCK_DIR, TELEGRAM_*, ... (bản thật conf/batch.env không commit)
+└── cron/
+    └── fem-batch.cron       # toàn bộ lịch chạy, cài vào crontab của user deploy
+```
+Trên VPS (không nằm trong Git): log ở `/var/log/fem-batch/<tác vụ>.log`, file khoá ở `$LOCK_DIR` (mặc định `/tmp`).
+
+Quy ước cho mọi script trong `bin/`:
+- Bắt đầu bằng `source "$(dirname "$0")/../lib/common.sh"` (đã gồm `set -Eeuo pipefail`), gọi `load_env` và `acquire_lock`.
+- **Idempotent**: chạy lại nhiều lần không gây hại. **Exit code khác 0 khi lỗi** — bẫy `ERR` trong `common.sh` sẽ ghi dòng lỗi và gửi cảnh báo.
+- Cron gọi qua `bash <script>`, nên script chạy được kể cả khi chưa có quyền thực thi (`chmod +x`). `.gitattributes` ép `*.sh` dùng xuống dòng LF.
+
+#### Thêm một tác vụ shell
+1. Sao chép `bin/example-task.sh` thành `bin/<tên>.sh`, viết phần nằm giữa hai dòng `# ---`.
+2. Biến cấu hình mới: thêm vào `conf/batch.env.template` (và `conf/batch.env` trên VPS).
+3. Thêm lịch vào `cron/fem-batch.cron`, rồi cài lại bằng `crontab infra/batch/cron/fem-batch.cron` (lệnh này **thay toàn bộ** crontab của user deploy — kiểm tra `crontab -l` trước).
+
+#### Cài đặt lần đầu trên VPS
+```bash
+ssh fem
+cd /opt/family-expense-manager
+cp infra/batch/conf/batch.env.template infra/batch/conf/batch.env   # điền TELEGRAM_* nếu muốn nhận cảnh báo
+sudo mkdir -p /var/log/fem-batch && sudo chown deploy: /var/log/fem-batch
+bash infra/batch/bin/run-java-job.sh exampleJob                     # chạy thử: phải kết thúc với "done"
+crontab -l                                                          # xem crontab hiện có trước khi cài
+crontab infra/batch/cron/fem-batch.cron
+```
+
+`infra/backup-mysql.sh` được **giữ nguyên chỗ cũ** vì `deploy.sh`, `DEPLOY.md` và crontab của root trên VPS đều đang gọi đường dẫn đó. Nếu muốn chuyển nó vào `infra/batch/bin/`, phải sửa cả ba nơi cùng lúc.
 
 ## API Docs (Swagger)
 

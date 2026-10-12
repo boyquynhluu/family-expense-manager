@@ -1,0 +1,17 @@
+# Tests: in-memory H2 for the Spring Batch metadata (Boot creates the BATCH_* tables from Spring Batch's H2
+# script), no Flyway (its V1 is MySQL-only), and no job launched at startup — each test launches its own job.
+spring:
+  main:
+    web-application-type: none
+  datasource:
+    url: jdbc:h2:mem:batch;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  flyway:
+    enabled: false
+  batch:
+    jdbc:
+      initialize-schema: embedded
+    job:
+      enabled: false

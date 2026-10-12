@@ -1,0 +1,18 @@
+# Schedules for infra/batch (README "Batch"). Times are the VPS's local time.
+#
+# Install for the deploy user (REPLACES that user's whole crontab — check `crontab -l` first and merge):
+#   crontab /opt/family-expense-manager/infra/batch/cron/fem-batch.cron
+# The nightly MySQL backup stays in root's crontab (infra/backup-mysql.sh, see infra/DEPLOY.md).
+#
+# Scripts are called through bash, so they work without the executable bit. Output goes to one log per task;
+# create the directory once:  sudo mkdir -p /var/log/fem-batch && sudo chown deploy: /var/log/fem-batch
+#
+# m  h  dom mon dow  command
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# Spring Batch job — template, remove once real jobs exist:
+# 0  2  *   *   *    bash /opt/family-expense-manager/infra/batch/bin/run-java-job.sh exampleJob >> /var/log/fem-batch/example-job.log 2>&1
+
+# Shell task — template (disk usage warning every hour):
+# 0  *  *   *   *    bash /opt/family-expense-manager/infra/batch/bin/example-task.sh >> /var/log/fem-batch/example-task.log 2>&1
