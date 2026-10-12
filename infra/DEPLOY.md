@@ -138,7 +138,7 @@ crontab -e
 0 3 * * * /opt/family-expense-manager/infra/backup-mysql.sh >> /var/log/fem-backup.log 2>&1
 ```
 
-Giữ 14 ngày gần nhất (`KEEP_DAYS`). **Chép backup ra khỏi VPS** (rclone lên Google Drive/S3, hoặc rsync về máy khác).
+Giữ 14 ngày gần nhất (`KEEP_DAYS`). **Chép backup ra khỏi VPS:** đã cài sẵn AWS S3 + rclone (mã hóa phía VPS) — xem [BACKUP-S3.md](BACKUP-S3.md).
 
 Khôi phục:
 

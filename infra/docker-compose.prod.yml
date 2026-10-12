@@ -319,6 +319,29 @@ services:
     networks:
       - fem-network
 
+  # Spring Batch jobs (backend/batch, README "Batch"). Run-once, never started by `up`: profile "batch" is not in
+  # COMPOSE_PROFILES, and infra/batch/bin/run-java-job.sh starts it explicitly —
+  #   docker compose ... run --rm --build batch --spring.batch.job.name=<job> [key=value ...]
+  # — so no restart policy: the container exits with the job's status as its exit code.
+  batch:
+    build:
+      context: ../backend
+      dockerfile: batch/Dockerfile
+    profiles: [batch]
+    <<: *logging
+    mem_limit: 512m
+    environment:
+      MYSQL_HOST: mysql-db
+      MYSQL_PORT: 3306
+      FEM_BATCH_DB_USER: ${FEM_BATCH_DB_USER:-fem_batch}
+      FEM_BATCH_DB_PASSWORD: ${FEM_BATCH_DB_PASSWORD:-}
+      JAVA_TOOL_OPTIONS: *java-opts
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+    networks:
+      - fem-network
+
   # --- Monitoring (optional): COMPOSE_PROFILES=monitoring in .env.prod (then every `up`, incl. deploy.sh, runs it),
   # or once by hand: docker compose -f docker-compose.prod.yml --profile monitoring up -d
   # No public port: Grafana listens on the VPS's 127.0.0.1 only — open it through an SSH tunnel

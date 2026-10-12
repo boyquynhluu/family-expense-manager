@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: batch
+  main:
+    # A run-once process, not a server: no embedded Tomcat, exits when the job is done.
+    web-application-type: none
+  datasource:
+    # FEM_BATCH holds the Spring Batch metadata (job/step history, parameters, restart state). Business data
+    # stays in each service's own schema — README "Batch" → "Đọc/ghi dữ liệu nghiệp vụ".
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/fem_batch?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${FEM_BATCH_DB_USER:fem_batch}
+    password: ${FEM_BATCH_DB_PASSWORD:change-me}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  flyway:
+    # V1 creates the BATCH_* tables; Flyway (not spring.batch.jdbc.initialize-schema) so later Spring Batch
+    # upgrades are migrations like everywhere else in the project.
+    locations: classpath:db/migration
+  batch:
+    jdbc:
+      initialize-schema: never
+    job:
+      # Which job to run comes from the command line: --spring.batch.job.name=<jobBeanName>
+      # (infra/batch/bin/run-java-job.sh). Required, since there is more than one Job bean.
+      enabled: true
+
+logging:
+  level:
+    root: INFO
