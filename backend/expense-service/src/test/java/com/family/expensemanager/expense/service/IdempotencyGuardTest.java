@@ -113,6 +113,14 @@ class IdempotencyGuardTest {
     }
 
     @Test
+    void purgeCreatedBefore_deletesOldKeys_andReportsHowMany() {
+        LocalDateTime cutoff = LocalDateTime.of(2026, 10, 11, 3, 45);
+        when(dao.deleteCreatedBefore(cutoff)).thenReturn(7);
+
+        assertThat(guard.purgeCreatedBefore(cutoff)).isEqualTo(7);
+    }
+
+    @Test
     void keyLongerThanTheColumn_isA400_notADatabaseError() {
         assertThatThrownBy(() -> guard.runOnce(1L, SCOPE, "k".repeat(256), new Body("a", 1), Result.class, this::action))
                 .isInstanceOf(BadRequestException.class);

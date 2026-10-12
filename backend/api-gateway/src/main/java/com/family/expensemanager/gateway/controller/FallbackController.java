@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.family.expensemanager.common.dto.ErrorResponse;
@@ -31,7 +32,9 @@ public class FallbackController {
     private static final String MESSAGE = "Dịch vụ tạm thời không khả dụng, vui lòng thử lại sau ít phút";
     private static final String RETRY_AFTER_SECONDS = "10";
 
-    @RequestMapping("/fallback/{service}")
+    // Every method a proxied API call can have — the forwarded request keeps the original one.
+    @RequestMapping(value = "/fallback/{service}", method = {RequestMethod.GET, RequestMethod.HEAD,
+            RequestMethod.POST, RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.DELETE})
     public ResponseEntity<ErrorResponse> fallback(@PathVariable String service, HttpServletRequest request) {
         Object originalUri = request.getAttribute(RequestDispatcher.FORWARD_REQUEST_URI);
         String path = originalUri != null ? originalUri.toString() : request.getRequestURI();

@@ -2,6 +2,7 @@ package com.family.expensemanager.batch.common.listener;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 import org.springframework.batch.core.JobExecution;
 import org.springframework.batch.core.JobExecutionListener;
@@ -41,7 +42,13 @@ public class JobLoggingListener implements JobExecutionListener {
                 .forEach(e -> log.error("Job {} failure", job, e));
     }
 
+    // Spring Batch records local date-times; compare them in the JVM's zone so a DST change in between cannot
+    // skew the duration.
     private static Duration duration(LocalDateTime start, LocalDateTime end) {
-        return start == null || end == null ? Duration.ZERO : Duration.between(start, end);
+        if (start == null || end == null) {
+            return Duration.ZERO;
+        }
+        ZoneId zone = ZoneId.systemDefault();
+        return Duration.between(start.atZone(zone), end.atZone(zone));
     }
 }

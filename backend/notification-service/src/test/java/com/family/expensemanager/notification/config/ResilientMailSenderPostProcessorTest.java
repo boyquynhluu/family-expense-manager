@@ -7,12 +7,15 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.io.ByteArrayInputStream;
 import java.time.Duration;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mail.MailSendException;
+import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessagePreparator;
 
 import com.family.expensemanager.notification.config.ResilientMailSenderPostProcessor.CircuitBreakingMailSender;
 
@@ -74,6 +77,33 @@ class ResilientMailSenderPostProcessorTest {
         for (int i = 0; i < 6; i++) {
             assertThatThrownBy(() -> sender.send(message)).isInstanceOf(MailSendException.class);
         }
+        assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+    }
+
+    @Test
+    void everySendVariant_goesThroughTheBreakerToTheRealSender_creationIsPassedStraightThrough() {
+        MimeMessagePreparator preparator = mimeMessage -> { };
+        SimpleMailMessage simple = new SimpleMailMessage();
+        ByteArrayInputStream raw = new ByteArrayInputStream(new byte[0]);
+        org.mockito.Mockito.when(delegate.createMimeMessage()).thenReturn(message);
+        org.mockito.Mockito.when(delegate.createMimeMessage(raw)).thenReturn(message);
+
+        assertThat(sender.createMimeMessage()).isSameAs(message);
+        assertThat(sender.createMimeMessage(raw)).isSameAs(message);
+        sender.send(message, message);
+        sender.send(preparator);
+        sender.send(preparator, preparator);
+        sender.send(simple);
+        sender.send(simple, simple);
+
+        verify(delegate).send(message, message);
+        verify(delegate).send(preparator);
+        verify(delegate).send(preparator, preparator);
+        verify(delegate).send(simple);
+        verify(delegate).send(simple, simple);
+        // Every send was recorded by the breaker as a success (its 4-call window keeps only the latest ones).
+        assertThat(breaker.getMetrics().getNumberOfFailedCalls()).isZero();
+        assertThat(breaker.getMetrics().getNumberOfSuccessfulCalls()).isEqualTo(4);
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
     }
 

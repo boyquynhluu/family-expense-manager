@@ -13,6 +13,7 @@ import com.family.expensemanager.expense.domain.entity.FamilySetting;
 import com.family.expensemanager.expense.domain.entity.MemberSpendingLimit;
 import com.family.expensemanager.expense.domain.entity.TransactionApproval;
 import com.family.expensemanager.expense.domain.entity.Wallet;
+import com.family.expensemanager.expense.dto.TransactionApprovalResponse;
 import com.family.expensemanager.expense.dto.TransactionRequest;
 import com.family.expensemanager.expense.dto.TransactionResponse;
 import org.junit.jupiter.api.Nested;
@@ -165,6 +166,16 @@ class FamilyControlServicesTest {
             assertThat(service().requiresApproval(1L, "MEMBER", small)).isFalse();
             assertThat(service().requiresApproval(1L, "MEMBER", income)).isFalse();
             assertThat(service().requiresApproval(1L, "OWNER", big)).isFalse();
+        }
+
+        @Test
+        void submit_withIdempotencyKey_runsOnceThroughTheGuard_underItsOwnScope() {
+            TransactionRequest request = new TransactionRequest(5L, 7L, "EXPENSE", new BigDecimal("2000000"), AT, "Xe đạp");
+            TransactionApprovalResponse replayed = org.mockito.Mockito.mock(TransactionApprovalResponse.class);
+            when(idempotencyGuard.runOnce(eq(1L), eq("SUBMIT_TRANSACTION_APPROVAL"), eq("key-1"), eq(request),
+                    eq(TransactionApprovalResponse.class), any())).thenReturn(replayed);
+
+            assertThat(service().submit(1L, 7L, "be@b.com", "Bé Na", request, "key-1")).isSameAs(replayed);
         }
 
         @Test
