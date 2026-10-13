@@ -1,3 +1,4 @@
-# Shell scripts run on Linux (VPS, CI): always LF, whatever core.autocrlf is set to on the machine committing them —
+# Shell scripts and crontab files run on Linux (VPS, CI): always LF, whatever core.autocrlf is set to on the machine committing them —
 # a CRLF script fails with "/usr/bin/env: 'bash\r': No such file or directory".
 *.sh text eol=lf
+*.cron text eol=lf
