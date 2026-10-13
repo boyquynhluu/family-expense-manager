@@ -320,7 +320,7 @@ Quy ước cho mọi script trong `bin/`:
 #### Thêm một tác vụ shell
 1. Sao chép `bin/example-task.sh` thành `bin/<tên>.sh`, viết phần nằm giữa hai dòng `# ---`.
 2. Biến cấu hình mới: thêm vào `conf/batch.env.template` (và `conf/batch.env` trên VPS).
-3. Thêm lịch vào `cron/fem-batch.cron`, rồi cài lại bằng `crontab infra/batch/cron/fem-batch.cron` (lệnh này **thay toàn bộ** crontab của user deploy — kiểm tra `crontab -l` trước).
+3. Thêm lịch vào `cron/fem-batch.cron`. Khi deploy, `deploy.sh` thấy file khác crontab hiện tại sẽ tự cài lại (`crontab infra/batch/cron/fem-batch.cron`). File này là **toàn bộ** crontab của user deploy: dòng nào thêm bằng `crontab -e` mà không có trong file sẽ mất ở lần deploy sau.
 
 #### Cài đặt lần đầu trên VPS
 ```bash
@@ -330,7 +330,7 @@ cp infra/batch/conf/batch.env.template infra/batch/conf/batch.env   # điền TE
 sudo mkdir -p /var/log/fem-batch && sudo chown deploy: /var/log/fem-batch
 bash infra/batch/bin/run-java-job.sh exampleJob                     # chạy thử: phải kết thúc với "done"
 crontab -l                                                          # xem crontab hiện có trước khi cài
-crontab infra/batch/cron/fem-batch.cron
+crontab infra/batch/cron/fem-batch.cron                             # các lần sau deploy.sh tự cài lại khi file đổi
 ```
 
 `infra/backup-mysql.sh` được **giữ nguyên chỗ cũ** vì `deploy.sh`, `DEPLOY.md` và crontab của root trên VPS đều đang gọi đường dẫn đó. Nếu muốn chuyển nó vào `infra/batch/bin/`, phải sửa cả ba nơi cùng lúc.
@@ -1508,20 +1508,22 @@ flowchart LR
     A["push feature/dev"] --> CI1["Backend CI / Frontend CI<br/>(chỉ test, không deploy)"]
     A --> PR["PR vào main"] --> M["merge vào main"]
     M --> CI2["Backend CI / Frontend CI<br/>trên main"]
-    CI2 -- "xanh" --> D["Deploy to VPS<br/>runner tự cài trên VPS (nhãn fem-vps)"]
+    CI2 -- "xanh" --> D["Deploy to VPS (nhãn fem-vps)<br/>hoặc Deploy to EC2 (nhãn fem-ec2)<br/>tuỳ biến DEPLOY_TARGET"]
     CI2 -- "đỏ" --> X["Không deploy, site giữ bản cũ"]
     D --> S["git pull main → backup MySQL<br/>→ docker compose up -d --build<br/>→ chờ https://DOMAIN/ trả lời (tối đa 5 phút)"]
-    MAN["Actions → Deploy to VPS → Run workflow"] --> D
+    MAN["Actions → Deploy to VPS / EC2 → Run workflow"] --> D
 ```
 
 | Workflow | Chạy khi | Làm gì |
 |---|---|---|
 | `backend-ci.yml` | push/PR có thay đổi `backend/**` | `mvn verify`: build, unit test, integration test với MySQL thật (Testcontainers) |
 | `frontend-ci.yml` | push/PR có thay đổi `frontend/**` | `npm ci`, lint, build |
-| `deploy.yml` | một trong hai CI trên **xanh trên `main`**, hoặc bấm tay | Chạy `infra/deploy.sh` trên VPS |
+| `deploy.yml` | một trong hai CI trên **xanh trên `main`**, hoặc bấm tay; bỏ qua khi `DEPLOY_TARGET=ec2` | Chạy `infra/deploy.sh` trên VPS (runner nhãn `fem-vps`) |
+| `deploy-ec2.yml` | như trên, nhưng **chỉ khi `DEPLOY_TARGET=ec2`** | Chạy `infra/deploy.sh` trên AWS EC2 (runner nhãn `fem-ec2`) |
 
 - **Vì sao dùng self-hosted runner:** runner của GitHub không có IPv6 nên không SSH vào được VPS chỉ có IPv6. Runner cài trên VPS (`~/actions-runner`, service systemd, user `deploy`, nhãn `fem-vps`) tự kết nối ra GitHub để nhận job, nên không cần mở thêm cổng.
-- **Commit chỉ sửa `infra/`, README hoặc `deploy.yml`** không chạy CI nên không tự deploy; deploy tay bằng nút **Run workflow** (TODO V6).
+- **Chọn máy deploy:** biến repository `DEPLOY_TARGET` (GitHub → Settings → Secrets and variables → Actions → tab Variables). `ec2` thì `deploy-ec2.yml` chạy và `deploy.yml` bị bỏ qua; xoá biến hoặc đặt giá trị khác thì ngược lại. Hai workflow dùng chung `infra/deploy.sh` vì EC2 có cùng cấu trúc với VPS (user `deploy`, `/opt/family-expense-manager`). Khi chuyển máy, đổi biến **trước** rồi mới đổi DNS, và dừng runner của máy cũ (`sudo ./svc.sh stop` trong `~/actions-runner`) để không có job nào lọt vào máy cũ.
+- **Commit chỉ sửa `infra/`, README hoặc workflow deploy** không chạy CI nên không tự deploy; deploy tay bằng nút **Run workflow** (TODO V6).
 - Hai lần deploy không bao giờ chạy song song (`concurrency: deploy-prod`).
 - `deploy.sh` backup MySQL vào `~/fem-backups` (giữ 7 ngày) trước khi khởi động lại service, vì migration Flyway chạy lúc service khởi động. Backup hằng đêm vẫn chạy bằng cron vào `/var/backups/fem` (giữ 14 ngày).
 

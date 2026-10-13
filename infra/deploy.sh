@@ -51,6 +51,14 @@ main() {
     echo "$NGINX_HASH" > "$NGINX_HASH_FILE"
   fi
 
+  # The deploy user's whole crontab is infra/batch/cron/fem-batch.cron (README "Batch") — reinstall it when the
+  # file in the repo differs, so schedule changes take effect on deploy. Root's crontab (backup-mysql.sh) is separate.
+  BATCH_CRON="$SCRIPT_DIR/batch/cron/fem-batch.cron"
+  if [[ -f "$BATCH_CRON" ]] && ! diff -q <(crontab -l 2>/dev/null) "$BATCH_CRON" >/dev/null; then
+    echo "fem-batch.cron changed — reinstalling the crontab of $(id -un)"
+    crontab "$BATCH_CRON"
+  fi
+
   # The JVM services take a while to register with Eureka — poll the site through nginx for up to 5 minutes.
   for _ in $(seq 1 30); do
     if curl -fsS -o /dev/null "https://$DOMAIN/"; then

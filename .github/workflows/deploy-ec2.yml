@@ -1,0 +1,41 @@
+name: Deploy to EC2
+
+# Runs on the self-hosted runner installed on the AWS EC2 instance (label fem-ec2) — same layout as the VPS
+# (user deploy, /opt/family-expense-manager), so it runs the same infra/deploy.sh as deploy.yml.
+# Only one target is live at a time: this workflow deploys only while the repository variable DEPLOY_TARGET is
+# "ec2"; deploy.yml (VPS, label fem-vps) deploys otherwise. Switching hosts = change the variable (README "CI/CD").
+on:
+  # After a CI run on main finishes (deploy only if it passed — see the job's `if`).
+  workflow_run:
+    workflows: ["Backend CI", "Frontend CI"]
+    types: [completed]
+    branches: [main]
+  # Manual redeploy from the Actions tab.
+  workflow_dispatch:
+
+# Same group as deploy.yml: never two deploys at once, whichever host they target.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: >-
+      vars.DEPLOY_TARGET == 'ec2' &&
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    runs-on: [self-hosted, fem-ec2]
+    timeout-minutes: 30
+    steps:
+      # Pull before running the script, so EC2 always runs the deploy.sh from this commit (even the first time).
+      - name: Update code on EC2
+        working-directory: /opt/family-expense-manager
+        run: |
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+
+      - name: Deploy
+        run: /opt/family-expense-manager/infra/deploy.sh

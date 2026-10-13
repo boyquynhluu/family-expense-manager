@@ -21,7 +21,10 @@ permissions:
 
 jobs:
   deploy:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # Skipped while production runs on EC2 (repository variable DEPLOY_TARGET=ec2 — see deploy-ec2.yml).
+    if: >-
+      vars.DEPLOY_TARGET != 'ec2' &&
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
     runs-on: [self-hosted, fem-vps]
     timeout-minutes: 30
     steps:

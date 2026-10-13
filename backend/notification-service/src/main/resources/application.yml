@@ -120,6 +120,12 @@ management:
     web:
       exposure:
         include: health,prometheus
+  # No SMTP health check: ResilientMailSenderPostProcessor replaces the JavaMailSenderImpl bean with its wrapper,
+  # and the mail health contributor (which looks up JavaMailSenderImpl beans) then fails startup with "Beans must
+  # not be empty". SMTP outages are the "smtp" circuit breaker's job anyway — they must not mark the service DOWN.
+  health:
+    mail:
+      enabled: false
   metrics:
     tags:
       application: ${spring.application.name}
