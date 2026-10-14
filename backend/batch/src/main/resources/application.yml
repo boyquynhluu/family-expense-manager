@@ -23,6 +23,16 @@ spring:
       # (infra/batch/bin/run-java-job.sh). Required, since there is more than one Job bean.
       enabled: true
 
+fem:
+  expense:
+    # Business data, READ-ONLY user (README "Batch" → "Đọc/ghi dữ liệu nghiệp vụ"). Same serverTimezone as
+    # expense-service, so DATETIME values compare exactly as the app stores them.
+    datasource:
+      url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/fem_expense?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      username: ${FEM_BATCH_EXPENSE_DB_USER:fem_batch_ro}
+      password: ${FEM_BATCH_EXPENSE_DB_PASSWORD:change-me}
+      driver-class-name: com.mysql.cj.jdbc.Driver
+
 logging:
   level:
     root: INFO

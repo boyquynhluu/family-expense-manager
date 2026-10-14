@@ -250,31 +250,46 @@ backend/batch/
     │   ├── BatchApplication.java   # chạy đúng job được chọn rồi System.exit(mã kết quả)
     │   ├── common/                 # dùng chung cho mọi job
     │   │   └── listener/JobLoggingListener.java   # log bắt đầu/kết thúc, số dòng đọc/ghi/lọc/bỏ qua
-    │   ├── job/                    # ★ mỗi job một package
-    │   │   └── example/            # MẪU — sao chép khi tạo job mới, rồi xoá
-    │   │       ├── ExampleJobConfig.java   # khai báo Job + Step (chunk)
-    │   │       ├── ExampleItem.java        # dữ liệu đi qua reader → processor → writer
-    │   │       ├── ExampleReader.java      # ItemReader (@StepScope)
-    │   │       ├── ExampleProcessor.java   # ItemProcessor (trả null = lọc bỏ)
-    │   │       └── ExampleWriter.java      # ItemWriter (nhận cả chunk)
-    │   └── dao/                    # Doma DAO của batch (SQL ở META-INF/.../batch/dao/<Dao>/<method>.sql)
+    │   ├── config/                 # DataSourceConfig (fem_batch @Primary + fem_expense chỉ đọc), Doma Config + DAO bean
+    │   ├── dao/                    # Doma DAO của batch (SQL ở META-INF/.../batch/dao/<Dao>/<method>.sql)
+    │   └── job/                    # ★ mỗi job một package
+    │       └── walletsnapshot/     # walletMonthlySnapshotJob — chốt số dư ví cuối tháng (xem bên dưới)
+    │           ├── WalletSnapshotJobConfig.java   # Job + 3 Step + reader/writer
+    │           ├── tasklet/        # PrepareWalletSnapshotTasklet, VerifyWalletSnapshotTasklet
+    │           ├── WalletSnapshotProcessor.java   # ItemProcessor (@StepScope)
+    │           ├── WalletRow / WalletSnapshot     # dữ liệu vào / ra của chunk
+    │           ├── WalletSnapshotPeriod.java      # yearMonth → mốc thời gian, dùng chung cho mọi step
+    │           └── YearMonthParameterValidator.java
     ├── main/resources/
-    │   ├── application.yml         # datasource fem_batch, web-application-type: none
-    │   └── db/migration/V1__spring_batch_metadata.sql   # bảng BATCH_* của Spring Batch 5.1.2
-    └── test/java/.../batch/job/example/ExampleJobTest.java   # MẪU test: JobLauncherTestUtils + H2
+    │   ├── application.yml         # datasource fem_batch + fem.expense.datasource, web-application-type: none
+    │   └── db/migration/           # V1 bảng BATCH_* (Spring Batch 5.1.2), V2 WALLET_MONTHLY_SNAPSHOTS
+    └── test/java/.../batch/job/walletsnapshot/   # unit test, test wiring (H2), *IT chạy job trên MySQL thật (Testcontainers)
 ```
 
 - **Chọn job và tham số qua dòng lệnh** (Spring Boot tự xử lý, không cần code launcher): `--spring.batch.job.name=<tên bean Job>` và các tham số dạng `key=value`, ví dụ `yearMonth=2026-09`.
 - **Exit code:** `0` = COMPLETED, `5` = FAILED, `1` = không khởi động được (ví dụ job cùng tham số đã COMPLETED trước đó).
-- **Tham số định danh lần chạy.** Job nghiệp vụ không dùng `RunIdIncrementer`: cùng `yearMonth` thì không chạy trùng, còn lần chạy FAILED sẽ được **chạy tiếp từ chunk cuối cùng đã commit**. `exampleJob` có incrementer chỉ để chạy thử được nhiều lần.
+- **Tham số định danh lần chạy.** Job nghiệp vụ không dùng `RunIdIncrementer`: cùng `yearMonth` thì không chạy trùng, còn lần chạy FAILED sẽ được **chạy tiếp từ chunk cuối cùng đã commit**.
 - **Chunk-oriented:** đọc theo keyset (`WHERE id > :lastId`, không dùng OFFSET); writer ghi theo lô và **idempotent** (upsert hoặc điều kiện "chưa xử lý"), vì chunk chạy lại sẽ được ghi lại; khai báo rõ `skip`/`retry`.
 
+#### Job đang có: `walletMonthlySnapshotJob` (chốt số dư ví cuối tháng)
+Số dư ví không được lưu mà tính lại mỗi lần (`WalletService.currentBalanceOf`). Job này chụp số dư cuối mỗi tháng của mọi ví vào `fem_batch.WALLET_MONTHLY_SNAPSHOTS`, kèm từng thành phần của công thức (thu, chi, chuyển vào/ra, điều chỉnh, khoản vay) để lần ra chỗ lệch. Job chỉ **đọc** `fem_expense` (user chỉ có quyền `SELECT`) và chỉ **ghi** vào `fem_batch`.
+
+| Step | Loại | Việc |
+|---|---|---|
+| `walletSnapshotPrepareStep` | Tasklet | Xoá dòng cũ của tháng đó (nếu có) để kết quả đúng bằng tập ví hiện tại |
+| `walletSnapshotStep` | Chunk (100) | `WALLETS` (đọc theo keyset) → tính số dư tới hết tháng → upsert |
+| `walletSnapshotVerifyStep` | Tasklet | **Lỗi** nếu `closing_balance` khác tổng các thành phần; **cảnh báo** nếu số dòng khác số ví; ghi `walletCount`, `totalClosingBalance` vào ExecutionContext |
+
+- Tham số `yearMonth=yyyy-MM`, phải là tháng **đã kết thúc** theo giờ Việt Nam (container chạy UTC). Không có incrementer: cùng tháng không chạy lại được (exit 1); lần chạy FAILED chạy lại cùng lệnh sẽ bỏ qua step đã xong và chạy tiếp từ chunk cuối đã commit. Muốn làm lại tháng đã xong: thêm tham số, ví dụ `yearMonth=2026-09 rerun=2`.
+- Chạy bằng `infra/batch/bin/wallet-snapshot.sh [yyyy-MM]` (cron 02:00 ngày 1, mặc định tháng trước): kiểm tra tháng đã chốt chưa, chạy job, xử lý exit code, xuất báo cáo `$REPORT_DIR/wallet-snapshot-<tháng>.tsv` và gửi tóm tắt.
+- Cần một lần trên server: user `fem_batch_ro` (`GRANT SELECT ON fem_expense.*`) và `FEM_BATCH_EXPENSE_DB_USER` / `FEM_BATCH_EXPENSE_DB_PASSWORD` trong `infra/.env.prod` (xem mục tạo database bên dưới).
+- Giới hạn: `WALLETS` không có `created_at`, nên ví tạo sau tháng đó vẫn có một dòng (số dư ban đầu, không phát sinh).
+
 #### Thêm một job mới
-1. Sao chép `job/example/` thành `job/<tên>/`, đổi tên class, đặt tên bean `<tên>Job` và step `<tên>Step`.
-2. Viết reader/processor/writer; gắn `JobLoggingListener` vào job.
-3. Sao chép `ExampleJobTest`; khi job đọc/ghi bảng thật thì chuyển sang Testcontainers MySQL (như các `*IT` của service).
-4. Chạy thử trên VPS: `bash infra/batch/bin/run-java-job.sh <tên>Job key=value`, rồi thêm lịch vào `infra/batch/cron/fem-batch.cron`.
-5. Khi đã có job thật, xoá package `example/`, `ExampleJobTest` và dòng mẫu trong file cron.
+1. Tạo package `job/<tên>/` theo cấu trúc `walletsnapshot/`: `<Tên>JobConfig` khai báo Job và các Step, reader/processor/writer và tasklet là class riêng; đặt tên bean `<tên>Job`, các step `<tên>…Step`.
+2. Gắn `JobLoggingListener` vào job; job nghiệp vụ dùng validator cho tham số thay vì incrementer.
+3. Test: unit test cho processor/validator, test wiring với H2 (`mvn test`), và `*IT` chạy job trên Testcontainers MySQL (`mvn verify`).
+4. Chạy thử trên server: `bash infra/batch/bin/run-java-job.sh <tên>Job key=value` (hoặc một script riêng như `wallet-snapshot.sh`), rồi thêm lịch vào `infra/batch/cron/fem-batch.cron`.
 
 #### Đọc/ghi dữ liệu nghiệp vụ
 `fem_batch` chỉ chứa metadata của Spring Batch. Khi job cần dữ liệu của một service:
@@ -291,6 +306,9 @@ docker exec -it fem-mysql-db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD"'
 CREATE DATABASE IF NOT EXISTS fem_batch;
 CREATE USER IF NOT EXISTS 'fem_batch'@'%' IDENTIFIED BY '<FEM_BATCH_DB_PASSWORD>';
 GRANT ALL PRIVILEGES ON fem_batch.* TO 'fem_batch'@'%';
+-- đọc dữ liệu nghiệp vụ cho job (chỉ SELECT)
+CREATE USER IF NOT EXISTS 'fem_batch_ro'@'%' IDENTIFIED BY '<FEM_BATCH_EXPENSE_DB_PASSWORD>';
+GRANT SELECT ON fem_expense.* TO 'fem_batch_ro'@'%';
 FLUSH PRIVILEGES;
 ```
 Flyway tạo các bảng `BATCH_*` ở lần chạy job đầu tiên.
@@ -301,6 +319,7 @@ Flyway tạo các bảng `BATCH_*` ở lần chạy job đầu tiên.
 infra/batch/
 ├── bin/                     # ★ mỗi file là một tác vụ, cron gọi trực tiếp
 │   ├── run-java-job.sh      # chạy một job Spring Batch: run-java-job.sh <job> [key=value ...]
+│   ├── wallet-snapshot.sh   # chốt số dư ví tháng trước (walletMonthlySnapshotJob) + báo cáo TSV
 │   └── example-task.sh      # MẪU tác vụ shell (cảnh báo dung lượng đĩa) — sao chép rồi xoá
 ├── lib/                     # các script trong bin/ source vào
 │   ├── common.sh            # strict mode, log(), die(), require_cmd(), load_env(), acquire_lock() (flock), bẫy lỗi → notify
@@ -328,7 +347,7 @@ ssh fem
 cd /opt/family-expense-manager
 cp infra/batch/conf/batch.env.template infra/batch/conf/batch.env   # điền TELEGRAM_* nếu muốn nhận cảnh báo
 sudo mkdir -p /var/log/fem-batch && sudo chown deploy: /var/log/fem-batch
-bash infra/batch/bin/run-java-job.sh exampleJob                     # chạy thử: phải kết thúc với "done"
+bash infra/batch/bin/wallet-snapshot.sh                             # chạy thử job chốt số dư tháng trước: phải kết thúc với "done"
 crontab -l                                                          # xem crontab hiện có trước khi cài
 crontab infra/batch/cron/fem-batch.cron                             # các lần sau deploy.sh tự cài lại khi file đổi
 ```

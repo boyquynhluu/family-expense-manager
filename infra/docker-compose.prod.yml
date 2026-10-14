@@ -335,6 +335,9 @@ services:
       MYSQL_PORT: 3306
       FEM_BATCH_DB_USER: ${FEM_BATCH_DB_USER:-fem_batch}
       FEM_BATCH_DB_PASSWORD: ${FEM_BATCH_DB_PASSWORD:-}
+      # Business data for the jobs, read-only (README "Batch" → "Đọc/ghi dữ liệu nghiệp vụ")
+      FEM_BATCH_EXPENSE_DB_USER: ${FEM_BATCH_EXPENSE_DB_USER:-fem_batch_ro}
+      FEM_BATCH_EXPENSE_DB_PASSWORD: ${FEM_BATCH_EXPENSE_DB_PASSWORD:-}
       JAVA_TOOL_OPTIONS: *java-opts
     depends_on:
       mysql-db:

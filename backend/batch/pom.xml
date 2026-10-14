@@ -65,11 +65,22 @@
             <artifactId>spring-batch-test</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- Job tests run against an in-memory H2 metadata store (src/test/resources/application.yml); use
-             Testcontainers MySQL (like the services' *IT tests) once a job reads/writes real tables. -->
+        <!-- Fast context tests run against in-memory H2 (src/test/resources/application.yml); jobs that touch
+             real tables are tested by *IT classes against Testcontainers MySQL, like the services. -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- *IT.java, run by maven-failsafe-plugin (`mvn verify`, needs Docker), not by `mvn test`. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mysql</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -98,6 +109,18 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

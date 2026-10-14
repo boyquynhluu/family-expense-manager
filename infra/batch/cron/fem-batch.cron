@@ -11,8 +11,8 @@
 SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin
 
-# Spring Batch job — template, remove once real jobs exist:
-# 0  2  *   *   *    bash /opt/family-expense-manager/infra/batch/bin/run-java-job.sh exampleJob >> /var/log/fem-batch/example-job.log 2>&1
+# Wallet balance snapshot of last month (Spring Batch walletMonthlySnapshotJob), 02:00 on the 1st
+0    2  1   *   *    bash /opt/family-expense-manager/infra/batch/bin/wallet-snapshot.sh >> /var/log/fem-batch/wallet-snapshot.log 2>&1
 
 # Shell task — template (disk usage warning every hour):
 # 0  *  *   *   *    bash /opt/family-expense-manager/infra/batch/bin/example-task.sh >> /var/log/fem-batch/example-task.log 2>&1
